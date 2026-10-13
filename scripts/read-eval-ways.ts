@@ -7,10 +7,10 @@
 // shape, limits, price) comes from where `checked` says, at the addresses
 // given beside it. The requests were tried against stand-ins only
 // (scripts/read-eval-stand-in.ts), never the real services.
-import { JEV_ENDPOINT, jevReadFrom } from '@/server/jev-read'
-import type { JevRead, ReadField, TitleRead } from '@/lib/read'
-import type { Household } from '@/server/jev-read'
-import type { Answer, Answers, Column } from './read-eval-verify'
+import { JEV_VERSION, answersIn as wellFormed } from '@/lib/verify'
+import { JEV_ENDPOINT } from '@/server/jev-read'
+import type { ReadContext as Household, TitleRead } from '@/lib/read'
+import type { Answers, Column } from './read-eval-verify'
 
 // ── Providers ───────────────────────────────────────────────────────────────
 
@@ -33,13 +33,13 @@ export interface Provider {
 export const PROVIDERS = {
   jev: {
     name: 'TypeSafe Jev',
-    model: 'jev-latest',
+    model: JEV_VERSION,
     endpoint: JEV_ENDPOINT,
     env: ['TYPESAFE_API_KEY'],
     usdPerMInput: 0.042,
     usdPerMOutput: 0,
     notes:
-      'A decision model: typed questions in, a probability per option out. At most 255 options a choice. Output is not charged. Jev first asks `jev-latest`, as the app does; the documented usage names the version, `jev-1.13.0`, so that its cut-offs stay those of one model.',
+      'A decision model: typed questions in, a probability per option out. At most 255 options a choice. Output is not charged. The version is named, as the app names it, so that its cut-offs stay those of one model.',
     checked:
       'As src/server/jev-read.ts already had them, and as the first runs of this test were charged; not read again.',
     sources: [
@@ -140,13 +140,12 @@ export interface Way {
   id: string
   name: string
   /**
-   * `rules`: nothing is sent. `first`: Jev as the app asks it today, for
-   * every field and every word. `tag`, `verify` and `parts`: a decision
-   * model asked the documented way (scripts/read-eval-verify.ts), three
-   * readings of one reply. `model`: one call to a general model for all of
-   * it.
+   * `rules`: nothing is sent. `tag`, `verify` and `parts`: a decision model
+   * asked the documented way (scripts/read-eval-verify.ts), three readings
+   * of one reply; `verify` with Jev is what the app does. `model`: one call
+   * to a general model for all of it.
    */
-  kind: 'rules' | 'first' | Column | 'model'
+  kind: 'rules' | Column | 'model'
   provider?: ProviderId
   about: string
 }
@@ -190,14 +189,6 @@ export const WAYS: Array<Way> = [
     name: 'Rules alone',
     kind: 'rules',
     about: 'the rules in the page, and nothing sent',
-  },
-  {
-    id: 'first',
-    name: 'Jev first, the old usage',
-    kind: 'first',
-    provider: 'jev',
-    about:
-      'what the app does today, kept as the baseline: Jev is asked for the day among 120, the time among 96, every other field and what each word of the title is for; what it is sure of fills the field and tidies the title, and the rules read the rest',
   },
   ...DECISION_PROVIDERS.flatMap((provider) =>
     COLUMNS.map((column): Way => ({
@@ -387,27 +378,6 @@ function answersIn(provider: DecisionProvider, reply: unknown) {
 }
 
 /**
- * A decision provider's reply as the reading the app makes of Jev's: only
- * what was asked, is one of ours, and is sure enough.
- */
-export function decisionReply(
-  provider: DecisionProvider,
-  reply: unknown,
-  title: string,
-  household: Household,
-  ask?: ReadonlyArray<ReadField>,
-): Reply<JevRead> {
-  const { answers, ...rest } = answersIn(provider, reply)
-  return {
-    read: answers ? jevReadFrom({ answers }, title, household, ask) : null,
-    ...rest,
-  }
-}
-
-const odds = (value: unknown): value is number =>
-  typeof value === 'number' && value >= 0 && value <= 1
-
-/**
  * A decision provider's reply as raw answers: each pick with the odds of
  * every option, each yes or no as the odds of a yes. An answer that is not
  * well formed is left out, which every column reads as no answer.
@@ -417,25 +387,7 @@ export function decisionAnswers(
   reply: unknown,
 ): Reply<Answers> {
   const { answers, ...rest } = answersIn(provider, reply)
-  if (!answers) return { read: null, ...rest }
-  const read: Answers = {}
-  for (const [id, given] of Object.entries(answers)) {
-    const answer = object(given)
-    const probabilities = object(answer.probabilities)
-    let one: Answer | undefined
-    if (odds(answer.noul)) one = { noul: answer.noul }
-    else if (
-      typeof answer.choice === 'string' &&
-      odds(probabilities[answer.choice]) &&
-      Object.values(probabilities).every(odds)
-    )
-      one = {
-        choice: answer.choice,
-        probabilities: probabilities as Record<string, number>,
-      }
-    if (one) read[id] = one
-  }
-  return { read, ...rest }
+  return { read: answers && wellFormed({ answers }), ...rest }
 }
 
 // ── Fast general models: Haiku 4.5, Gemini 3.1 Flash Lite ───────────────────

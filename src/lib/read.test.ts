@@ -4,7 +4,7 @@
 import * as chrono from 'chrono-node'
 import { describe, expect, it } from 'vitest'
 import { readTitle } from './read'
-import type { JevRead, ReadContext, ReadField } from './read'
+import type { ReadContext, ReadField } from './read'
 
 const HOUSE = 1
 const KIDS = 2
@@ -86,6 +86,18 @@ describe('the tag', () => {
     })
   })
 
+  it.each([
+    ['(house) regrout the shower', 'regrout the shower', HOUSE],
+    ['[kids] order the yearbook', 'order the yearbook', KIDS],
+    ['sort the mail (paperwork)', 'sort the mail', PAPERWORK],
+  ])('is read from its name in brackets in %j', (text, title, tagId) => {
+    expect(read(text)).toMatchObject({ title, fields: { tagId } })
+  })
+
+  it('is not named by brackets in the run of the sentence', () => {
+    expect(read('Clean (house) windows').title).toBe('Clean (house) windows')
+  })
+
   it('is read from its own name in passing, which stays in the title', () => {
     expect(read('Flu shots for the kids')).toMatchObject({
       title: 'Flu shots for the kids',
@@ -130,6 +142,8 @@ describe('the tag', () => {
     // Two tags as strongly as each other: neither.
     'Pay the daycare invoice',
     'Take the kids and the dog to the park',
+    // A word that is as often nobody's.
+    'Set up the art walk carpool',
   ])('is left empty for %j', (text) => {
     expect(read(text).fields.tagId).toBeUndefined()
   })
@@ -186,6 +200,22 @@ describe('the heads-up', () => {
       title: 'Send the rent check',
       fields: { headsUpDays: [] },
     })
+  })
+
+  it('opens the title, and its "to" goes with it', () => {
+    expect(
+      read('Remind me a week before to buy the wedding gift nov 7'),
+    ).toMatchObject({
+      title: 'buy the wedding gift',
+      fields: { headsUpDays: [7], assignee: 'alex', dueDate: '2026-11-07' },
+    })
+    // Asked for everyone: nobody's in particular.
+    const ours = read('Remind us the day before to pack the cooler saturday')
+    expect(ours).toMatchObject({
+      title: 'pack the cooler',
+      fields: { headsUpDays: [1] },
+    })
+    expect(ours.fields.assignee).toBeUndefined()
   })
 
   it('is not read from how far ahead of something else', () => {
@@ -288,133 +318,17 @@ describe('a whole title', () => {
     })
   })
 
+  it('reads a date that opens it as a heading', () => {
+    expect(read('day after tomorrow: return the drill')).toMatchObject({
+      title: 'return the drill',
+      fields: { dueDate: '2026-10-15' },
+    })
+  })
+
   it('still reads the rest before the date parser has loaded', () => {
     expect(readTitle(null, 'Sam: dentist fri', context)).toMatchObject({
       title: 'dentist fri',
       fields: { assignee: 'sam' },
     })
-  })
-})
-
-// With a key, Jev's reading comes first (src/server/jev-read.ts). It fills
-// buttons too, so the same guards hold: nothing set by hand or taken back is
-// overwritten, and what Jev did not answer is read by the rules as before.
-describe("Jev's reading", () => {
-  const text = "Sam visit garden center at 9pm on saturday don't forget"
-  //            0   1     2      3      4  5   6  7        8     9
-  const jev: JevRead = {
-    when: { dueDate: '2026-10-17', dueTime: '21:00' },
-    who: 'sam',
-    tag: HOUSE,
-    flag: true,
-    drops: [
-      { index: 0, field: 'who' },
-      { index: 4, field: 'when' },
-      { index: 5, field: 'when' },
-      { index: 6, field: 'when' },
-      { index: 7, field: 'when' },
-      { index: 8, field: 'flag' },
-      { index: 9, field: 'flag' },
-    ],
-  }
-  const withJev = (
-    typed: string,
-    answer: JevRead | null,
-    more: Partial<ReadContext> = {},
-  ) => readTitle(chrono, typed, { ...context, ...more, jev: answer })
-
-  it('fills the fields and takes their words out of the title', () => {
-    expect(withJev(text, jev)).toEqual({
-      title: 'visit garden center',
-      fields: {
-        dueDate: '2026-10-17',
-        dueTime: '21:00',
-        assignee: 'sam',
-        tagId: HOUSE,
-        mustNotMiss: true,
-      },
-      phrases: {},
-      guessed: {
-        when: 'at 9pm on saturday',
-        who: 'Sam',
-        tag: '',
-        flag: "don't forget",
-      },
-    })
-  })
-
-  it('is the rules alone when there is no answer', () => {
-    expect(withJev(text, null)).toEqual(read(text))
-  })
-
-  it('leaves to the rules each field it did not answer', () => {
-    // Only the tag came back: who, when and the flag are read as before,
-    // and the tag the rules would have hinted at is not.
-    const { tag: _hinted, ...phrases } = read(text).phrases
-    expect(withJev(text, { tag: HOUSE, drops: [] })).toEqual({
-      ...read(text),
-      fields: { ...read(text).fields, tagId: HOUSE },
-      phrases,
-      guessed: { tag: '' },
-    })
-    // The day came back and the rest did not.
-    expect(
-      withJev('Sam: dentist fri !', {
-        when: { dueDate: '2026-10-16', dueTime: null },
-        drops: [{ index: 2, field: 'when' }],
-      }),
-    ).toMatchObject({
-      title: 'dentist',
-      fields: { dueDate: '2026-10-16', assignee: 'sam', mustNotMiss: true },
-      phrases: { who: 'Sam:', flag: '!' },
-      guessed: { when: 'fri' },
-    })
-  })
-
-  it('never fills a field set by hand, and keeps its words', () => {
-    const byHand = withJev(text, jev, { skip: new Set(['when', 'who']) })
-    expect(byHand.fields).toEqual({ tagId: HOUSE, mustNotMiss: true })
-    expect(byHand.title).toBe('Sam visit garden center at 9pm on saturday')
-  })
-
-  it('never fills a field whose reading was taken back', () => {
-    // "Sam" was read by the rules and taken back: not Jev's to fill either.
-    const takenBack = withJev(text, jev, {
-      skip: new Set(['who']),
-      notJevs: new Set(['who']),
-    })
-    expect(takenBack.fields.assignee).toBeUndefined()
-    expect(takenBack.title).toBe('Sam visit garden center')
-    // And with only Jev kept off it, the rules still read it.
-    expect(withJev(text, jev, { notJevs: new Set(['when']) })).toMatchObject({
-      title: 'visit garden center',
-      fields: { dueDate: '2026-10-17', dueTime: '21:00' },
-      phrases: { when: 'at 9pm on saturday' },
-    })
-  })
-
-  it('drops no word for a field it did not fill', () => {
-    const { when: _when, ...rest } = jev
-    const kept = withJev(text, rest, { skip: new Set(['when']) })
-    expect(kept.title).toBe('visit garden center at 9pm on saturday')
-    expect(kept.fields.dueDate).toBeUndefined()
-  })
-
-  it('is set aside when it would leave no title', () => {
-    expect(
-      withJev('Saturday', {
-        when: { dueDate: '2026-10-17', dueTime: null },
-        drops: [{ index: 0, field: 'when' }],
-      }),
-    ).toEqual(read('Saturday'))
-  })
-
-  it('ignores a word that is not there', () => {
-    expect(
-      withJev('Mow the lawn', {
-        flag: true,
-        drops: [{ index: 7, field: 'flag' }],
-      }).title,
-    ).toBe('Mow the lawn')
   })
 })

@@ -2,6 +2,7 @@
 // a pill, and reading a date out of a typed title.
 import {
   addDays,
+  diffDays,
   formatDay,
   formatMonthDay,
   formatTime,
@@ -129,6 +130,30 @@ const PART_OF_DAY = /^(the\s+)?(night|morning|afternoon|evening)s?$/i
 // is left alone.
 const DAY_OF_MONTH =
   /\b(?:(?:due|by|on|for|before|until)\s+)?the\s+(\d{1,2})(?:st|nd|rd|th)(?=\s*$|\s*[,;.!]|\s+at\b|\s+\d)/i
+// "the first of the month", "the 15th of next month": a day of a month that
+// is not named. The parser reads only "the month" there, as a month from now.
+const ORDINAL: Partial<Record<string, number>> = {
+  first: 1,
+  second: 2,
+  third: 3,
+  fourth: 4,
+  fifth: 5,
+  sixth: 6,
+  seventh: 7,
+  eighth: 8,
+  ninth: 9,
+  tenth: 10,
+  fifteenth: 15,
+  twentieth: 20,
+  thirtieth: 30,
+}
+const OF_MONTH = new RegExp(
+  String.raw`\b(?:(?:due|by|on|for|before|until)\s+)?(?:the\s+)?(?:(\d{1,2})(?:st|nd|rd|th)|(${Object.keys(ORDINAL).join('|')}))\s+of\s+(the|this|next)\s+month\b`,
+  'i',
+)
+// A part of the day in front of a date. The parser runs the two together
+// and loses the date: "Parent teacher night 10/22", "date night saturday".
+const PART_THEN = /^(?:the\s+)?(?:night|morning|afternoon|evening)s?\s+(?=\S)/i
 // "next week" names no day; it is read as the week's Monday.
 const NEXT_WEEK = /\bnext\s+week\b/i
 // A weekday said as the one this week, which on that weekday is today.
@@ -168,9 +193,14 @@ for (const [word, typed] of Object.entries({
 }))
   for (const one of typed.split(' ')) RESPELL[one] = word
 
+// Shorthand the parser does not read as typed: "@ 2" is "at 2", and "day
+// after tomorrow" wants its "the".
+const SHORTHAND =
+  /(?<=^|\s)@(?=\s*\d)|(?<!\bthe\s+)\bday\s+after\s+tomorrow\b|[\p{L}\d]+/giu
+
 /**
- * `text` with the mistyped day words spelled out, and where each character
- * of it sits in what was typed.
+ * `text` with the mistyped day words and the shorthand spelled out, and
+ * where each character of it sits in what was typed.
  */
 function respelled(text: string): { text: string; typedAt: Array<number> } {
   let spelled = ''
@@ -181,11 +211,15 @@ function respelled(text: string): { text: string; typedAt: Array<number> } {
     spelled += text.slice(from, to)
     from = to
   }
-  for (const found of text.matchAll(/[\p{L}\d]+/gu)) {
-    const word = RESPELL[found[0].toLowerCase()]
+  for (const found of text.matchAll(SHORTHAND)) {
+    const typed = found[0].toLowerCase()
+    const end = found.index + typed.length
+    let word = RESPELL[typed]
+    if (typed === '@') word = /\d/.test(text[end] ?? '') ? 'at ' : 'at'
+    else if (typed.startsWith('day ')) word = 'the day after tomorrow'
     if (!word) continue
     copy(found.index)
-    from = found.index + found[0].length
+    from = end
     // The word's first letter is where the typed one starts; the rest of it
     // is where the typed one ends.
     typedAt.push(found.index, ...Array<number>(word.length - 1).fill(from))
@@ -194,6 +228,63 @@ function respelled(text: string): { text: string; typedAt: Array<number> } {
   copy(text.length)
   typedAt.push(text.length)
   return { text: spelled, typedAt }
+}
+
+type Found = ReturnType<DateParser['parse']>[number]
+const saysDay = (one: Found) =>
+  one.start.isCertain('day') ||
+  one.start.isCertain('weekday') ||
+  one.start.isCertain('month')
+
+/**
+ * What the parser finds in `text`, put right where it reads two things as
+ * one or one thing as two.
+ */
+function datesIn(
+  parser: DateParser,
+  text: string,
+  reference: Date,
+  today: LocalDate,
+): Array<Found> {
+  const parse = (part: string) =>
+    parser.parse(part, reference, { forwardDate: true })
+  const dates: Array<Found> = []
+  for (const one of parse(text).flatMap((found) => {
+    const part = saysDay(found) ? null : PART_THEN.exec(found.text)
+    if (!part) return [found]
+    // The date after the part of the day, read on its own.
+    const at = found.index + part[0].length
+    return parse(text.slice(at)).map((later): Found => ({
+      index: later.index + at,
+      text: later.text,
+      start: later.start,
+    }))
+  })) {
+    const last = dates.at(-1)
+    const between = last
+      ? text.slice(last.index + last.text.length, one.index)
+      : ''
+    // "a week from today", "2 weeks from friday": the length of time counts
+    // from the day after it, not from now.
+    if (last && SPAN_ALONE.test(last.text) && /^\s+from\s+$/i.test(between)) {
+      const date = one.start.date()
+      date.setDate(
+        date.getDate() + diffDays(fromPickerDate(last.start.date()), today),
+      )
+      dates[dates.length - 1] = {
+        index: last.index,
+        text: text.slice(last.index, one.index + one.text.length),
+        start: {
+          date: () => date,
+          isCertain: (part) =>
+            part === 'day' ||
+            ((part === 'hour' || part === 'meridiem') &&
+              one.start.isCertain(part)),
+        },
+      }
+    } else dates.push(one)
+  }
+  return dates
 }
 
 /**
@@ -224,6 +315,14 @@ function nextDayOfMonth(today: LocalDate, day: number): LocalDate | null {
     }
   }
   return null
+}
+
+/** The first day of the month after `today`'s. */
+function nextMonth(today: LocalDate): LocalDate {
+  const [year, month] = today.split('-').map(Number)
+  return month === 12
+    ? `${year + 1}-01-01`
+    : `${year}-${String(month + 1).padStart(2, '0')}-01`
 }
 
 /** `text` without the given stretches, tidied into a title. */
@@ -263,11 +362,17 @@ export function parseWhen(
   // A word in a run of capitalised ones is part of a name ("Friday Night
   // Lights"), unless the whole title is typed that way.
   const plainWords = /(?<=\S\s+)\p{Ll}/u.test(text)
-  const found = parser
-    .parse(text, reference, { forwardDate: true })
+  // A day of an unnamed month is read here, and hidden from the parser.
+  const ofMonth = OF_MONTH.exec(text)
+  const shown = ofMonth
+    ? text.slice(0, ofMonth.index) +
+      ' '.repeat(ofMonth[0].length) +
+      text.slice(ofMonth.index + ofMonth[0].length)
+    : text
+  const last = datesIn(parser, shown, reference, today)
     .filter((one) => {
-      const before = text.slice(0, one.index)
-      const after = text.slice(one.index + one.text.length)
+      const before = shown.slice(0, one.index)
+      const after = shown.slice(one.index + one.text.length)
       if (SPAN_ALONE.test(one.text) || PART_OF_DAY.test(one.text)) return false
       // "Friday's field trip", "Tuesdays with Morrie": about the day, not due
       // on it.
@@ -286,14 +391,15 @@ export function parseWhen(
       return DUE.test(before)
     })
     .at(-1)
+  // Beside a day of an unnamed month, only a time is the parser's to add.
+  const found =
+    ofMonth && last && (saysDay(last) || !last.start.isCertain('hour'))
+      ? undefined
+      : last
 
   const at = found?.start.date()
   const hasTime = found?.start.isCertain('hour') ?? false
-  const hasDay =
-    (found?.start.isCertain('day') ||
-      found?.start.isCertain('weekday') ||
-      found?.start.isCertain('month')) ??
-    false
+  const hasDay = found ? saysDay(found) : false
   const timeOnly = hasTime && !hasDay
   let dueTime: LocalTime | null = null
   if (found && at && hasTime) {
@@ -304,8 +410,19 @@ export function parseWhen(
 
   // "on the 1st at 9am": the day of the month, with the parser's time if
   // that is all the parser found.
-  const dayOfMonth = !found || timeOnly ? DAY_OF_MONTH.exec(text) : null
-  const onDay = dayOfMonth && nextDayOfMonth(today, Number(dayOfMonth[1]))
+  const dayOfMonth =
+    ofMonth ?? (!found || timeOnly ? DAY_OF_MONTH.exec(text) : null)
+  // In figures, or else in a word.
+  const figures = dayOfMonth?.at(1)
+  const day = figures
+    ? Number(figures)
+    : (ORDINAL[dayOfMonth?.at(2)?.toLowerCase() ?? ''] ?? 0)
+  const onDay =
+    dayOfMonth &&
+    nextDayOfMonth(
+      ofMonth?.[3].toLowerCase() === 'next' ? nextMonth(today) : today,
+      day,
+    )
   if (dayOfMonth && onDay) {
     const cuts = [
       cut(dayOfMonth.index, dayOfMonth.index + dayOfMonth[0].length),

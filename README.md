@@ -71,11 +71,12 @@ database, make a Google sign-in client, set the settings, deploy.
 | `src/server/identity.ts` | "Who is asking": the session's Google account, looked up        |
 | `src/server/env.ts`      | Every setting, validated at boot                                |
 | `src/server/board.ts`    | Every read and write the screens make                           |
-| `src/server/jev-read.ts` | The optional reading of a new to-do's title by TypeSafe's Jev   |
 | `src/db/schema.ts`       | The tables. Migrations under `drizzle/` are applied by wrangler |
 | `src/lib/dates.ts`       | Dates as household-local strings, never UTC instants            |
 | `src/lib/when.ts`        | Date shortcuts, and reading a date out of a title. With tests   |
 | `src/lib/read.ts`        | Reading who, tag, heads-up and flag out of a title. With tests  |
+| `src/lib/verify.ts`      | What a decision model is asked about that reading, and no more  |
+| `src/server/jev-read.ts` | The optional check of that reading by TypeSafe's Jev            |
 | `scripts/read-eval.ts`   | `bun run eval:read`: scores the ways to read 200 test sentences |
 | `src/alerts/rules.ts`    | Which alerts exist and when. Pure, with tests                   |
 | `src/alerts/tick.ts`     | One scheduler pass: send what fell due since the last pass      |

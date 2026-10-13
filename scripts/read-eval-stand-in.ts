@@ -2,28 +2,26 @@
 // test without a key or a bill: `bun run eval:read --stand-in`. Each takes
 // the request the test would send, refuses one that is not in the shape its
 // provider documents, and answers in the shape that provider documents. The
-// answers are crude: Jev's stand-in for the decision models, and the rules'
-// own reading for the general ones. They say nothing about how well any
+// answers are crude: the dullest there is for the decision models, and the
+// rules' own reading for the general ones. They say nothing about how well any
 // service reads; they show that the requests are well formed, that the
 // replies are understood, and what the report looks like.
 import * as chrono from 'chrono-node'
 import { readTitle } from '@/lib/read'
-import { standInReply } from '@/server/jev-stand-in'
 import { PROVIDERS } from './read-eval-ways'
-import type { Household, jevRequest } from '@/server/jev-read'
+import type { ReadContext as Household } from '@/lib/read'
+import type { VerifyRequest } from '@/lib/verify'
 
 type Body = Record<string, unknown>
-type Questions = ReturnType<typeof jevRequest>
+type Questions = VerifyRequest
 
 /**
- * A reply to any System One request. The app's own request (it says who is
- * typing) gets Jev's stand-in. Any other gets the dullest answer there is:
- * `none` where it is offered and the first option where it is not, a yes to
- * every yes or no, all of it sure. So a stand-in run of the documented usage
- * reads as the rules alone.
+ * A reply to any System One request, the dullest there is: `none` where it
+ * is offered and the first option where it is not, a yes to every yes or no,
+ * all of it sure. So a stand-in run of the documented usage reads as the
+ * rules alone.
  */
 function reply(request: Questions) {
-  if ('typed_by' in (request.state as object)) return standInReply(request)
   const questions = request.questions as Record<
     string,
     { type: string; criteria?: Record<string, unknown> }

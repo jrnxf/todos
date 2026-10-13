@@ -2,9 +2,10 @@
 // is set, then it shows its value. Sending clears the bar and leaves it open,
 // so several to-dos go in one after another. What is said in the title is
 // read out of it and fills the pills ("Sam: dentist fri 5pm !"); each reading
-// can be taken back with one tap. With a TypeSafe key the server also asks
-// Jev once typing pauses (src/server/jev-read.ts); what it is sure of comes
-// first, and can be taken back the same way.
+// can be taken back with one tap. With a TypeSafe key the server also has
+// Jev check that reading once typing pauses (src/server/jev-read.ts): it may
+// pick a tag where none was read, which can be taken back the same way, and
+// take back a date read from words that are part of a name.
 //
 // On a phone the bar is a sheet from the top of the screen, where neither the
 // keyboard nor the browser's own bars can cover it, and a pill opens its
@@ -47,16 +48,18 @@ import {
 } from '@/components/ui/drawer'
 import { Input } from '@/components/ui/input'
 import { useAddItem, useBoard } from '@/lib/queries'
-import { JEV_USE, gapsIn, readTitle } from '@/lib/read'
+import { readTitle } from '@/lib/read'
+import { verifiedRead, verifyRequest } from '@/lib/verify'
 import { shortWhenLabel } from '@/lib/when'
-import { readTitleWithJev } from '@/server/board'
+import { checkTitleWithJev } from '@/server/board'
 import { TagDot } from './tag'
 import { Picker, useIsDesktop } from './picker'
 import { TagFields, HeadsUpFields, WhoFields } from './small-pickers'
 import { WhenFields } from './when-picker'
 import type { LucideIcon } from 'lucide-react'
 import type { TagColor } from '@/db/schema'
-import type { JevRead, ReadField } from '@/lib/read'
+import type { ReadField } from '@/lib/read'
+import type { Verdict } from '@/lib/verify'
 import type { DateParser, When } from '@/lib/when'
 import type { ItemFields } from '@/server/board'
 
@@ -132,38 +135,39 @@ function keepCursor(event: React.MouseEvent) {
 const ASK_AFTER_MS = 600
 
 /**
- * Jev's reading of `title`, asked for once typing has paused; null until it
- * answers and whenever there is no answer. Nothing is asked without `ask`,
- * the fields still open. While more is typed onto a title that was answered,
- * that answer holds, so a filled pill does not blink out on every key.
+ * Jev's verdict on the reading of `title`, asked for once typing has paused;
+ * null until it answers and whenever there is no answer. Nothing is asked
+ * unless `wanted`: there is something for it to judge. `skip` is the fields
+ * that are not its to judge. While more is typed onto a title that was
+ * answered, that answer holds, so a filled pill does not blink out on every
+ * key.
  */
-function useJevRead(
+function useJevVerdict(
   title: string,
-  ask: Array<ReadField>,
-  enabled: boolean,
-): JevRead | null {
+  skip: Array<ReadField>,
+  wanted: boolean,
+): Verdict | null {
   const [answer, setAnswer] = useState<{
     title: string
-    read: JevRead | null
+    verdict: Verdict | null
   } | null>(null)
-  const wanted = enabled && ask.length > 0 && title.length >= 3
   // Which fields are open is read when the pause ends. A pill set by hand
   // meanwhile is not a reason to ask again: its answer is simply not used.
-  const asking = useRef(ask)
+  const skipping = useRef(skip)
   useEffect(() => {
-    asking.current = ask
+    skipping.current = skip
   })
   useEffect(() => {
     if (!wanted) return
     let live = true
     const timer = setTimeout(() => {
-      readTitleWithJev({ data: { title, ask: asking.current } }).then(
-        (read) => {
-          if (live) setAnswer({ title, read })
+      checkTitleWithJev({ data: { title, skip: skipping.current } }).then(
+        (verdict) => {
+          if (live) setAnswer({ title, verdict })
         },
         // Offline or signed out: no answer, and nothing to say about it.
         () => {
-          if (live) setAnswer({ title, read: null })
+          if (live) setAnswer({ title, verdict: null })
         },
       )
     }, ASK_AFTER_MS)
@@ -172,7 +176,9 @@ function useJevRead(
       clearTimeout(timer)
     }
   }, [title, wanted])
-  return wanted && answer && title.startsWith(answer.title) ? answer.read : null
+  return wanted && answer && title.startsWith(answer.title)
+    ? answer.verdict
+    : null
 }
 
 export function AddProvider({ children }: { children: React.ReactNode }) {
@@ -347,7 +353,7 @@ function CaptureBar({
   const [takenBack, setTakenBack] = useState<
     Partial<Record<ReadField, string>>
   >({})
-  // A field whose reading was taken back is not Jev's to fill either.
+  // A field whose reading was taken back is not Jev's to judge either.
   const [notJevs, setNotJevs] = useState<ReadonlySet<ReadField>>(new Set())
   const [added, setAdded] = useState<string | null>(null)
   const [open, setOpen] = useState<Open>(null)
@@ -359,28 +365,38 @@ function CaptureBar({
     people: board.people,
     tags: board.tags,
   }
-  // Asked about only what is still open. With every pill set by hand or
-  // taken back there is nothing to ask, and nothing is sent. Where Jev only
-  // fills the gaps, what the rules read is not asked about either.
-  const jev = useJevRead(
-    typed,
-    JEV_USE === 'gaps'
-      ? gapsIn(parser, typed, { ...household, skip: byHand, notJevs })
-      : READ_FIELDS.map((one) => one.field).filter(
-          (field) => !byHand.has(field) && !notJevs.has(field),
-        ),
-    board.jev,
-  )
   const readWith = (skip: ReadonlySet<ReadField>) =>
-    readTitle(parser, typed, { ...household, skip, jev, notJevs })
+    readTitle(parser, typed, { ...household, skip })
   const first = readWith(byHand)
   const refused = READ_FIELDS.map((one) => one.field).filter(
     (field) =>
       first.phrases[field] !== undefined &&
       first.phrases[field] === takenBack[field],
   )
-  const read =
-    refused.length > 0 ? readWith(new Set([...byHand, ...refused])) : first
+  const skip = new Set([...byHand, ...refused])
+  const rules = refused.length > 0 ? readWith(skip) : first
+  // Jev checks that reading, and is asked only where there is something for
+  // it to judge: no tag was read, or a date was. A pill set by hand or taken
+  // back is not asked about, and with nothing to ask nothing is sent.
+  const notAsked = [...new Set([...skip, ...notJevs])]
+  const verdict = useJevVerdict(
+    typed,
+    notAsked,
+    board.jev &&
+      typed.length >= 3 &&
+      verifyRequest(parser, typed, { ...household, skip: new Set(notAsked) })
+        .request !== null,
+  )
+  const read = verifiedRead(
+    parser,
+    typed,
+    { ...household, skip },
+    rules,
+    verdict && {
+      ...verdict,
+      tag: notJevs.has('tag') ? undefined : verdict.tag,
+    },
+  )
   // What will be sent: the pills set by hand, under what the title says.
   const now: ItemFields = { ...fields, ...read.fields }
   const title = read.title
@@ -484,7 +500,8 @@ function CaptureBar({
     const phrase = read.phrases[one.field]?.replace(/^[\s,;]+/, '')
     return phrase ? [{ ...one, phrase }] : []
   })
-  // And what Jev filled in: the words it took for it, or else the value.
+  // And what Jev filled in, by its value. A date it took back fills
+  // nothing: its words are in the title again and the pill is empty.
   const guessedValue: Record<ReadField, string> = {
     when: shortWhenLabel(when, board.today),
     tag: tag?.name ?? '',
@@ -493,10 +510,8 @@ function CaptureBar({
     flag: 'Must not miss',
   }
   const wasGuessed = READ_FIELDS.flatMap((one) => {
-    const words = read.guessed[one.field]
-    return words === undefined
-      ? []
-      : [{ ...one, words, value: guessedValue[one.field] }]
+    const filled = read.guessed[one.field] !== undefined && one.field !== 'when'
+    return filled ? [{ ...one, value: guessedValue[one.field] }] : []
   })
 
   const submit = () => {
@@ -575,19 +590,19 @@ function CaptureBar({
             </Button>
           ))}
           {wasGuessed.length > 0 && 'Guessed'}
-          {wasGuessed.map(({ field, name, words, value }) => (
+          {wasGuessed.map(({ field, name, value }) => (
             <Button
               key={field}
               variant="outline"
               size={desktop ? 'xs' : 'sm'}
               className="max-w-full rounded-full font-normal"
-              aria-label={`${words ? `"${words}"` : value} is a guess, and not ${name}`}
+              aria-label={`${value} is a guess, and not ${name}`}
               // Taken back, the pill is the person's: empty until they set
               // it, with its words back in the title.
               onClick={() => setByHand((before) => new Set([...before, field]))}
             >
               <SparklesIcon data-icon="inline-start" />
-              <span className="truncate">{words || value}</span>
+              <span className="truncate">{value}</span>
               <XIcon data-icon="inline-end" />
             </Button>
           ))}

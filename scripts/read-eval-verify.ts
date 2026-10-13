@@ -1,121 +1,41 @@
-// A decision model asked the way its makers document, for `bun run
-// eval:read`. The app's own request (src/server/jev-read.ts) asks the model
-// to find the day among 120, the time among 96, and what each word of the
-// title is for. TypeSafe's notes on Jev say it reads dates as text and not as
-// days in order, does not count, and should pick among candidates that code
-// found (docs.typesafe.ai/model-jaggedness/jev-1.13, and the cookbooks on
-// value and date extraction). So here the rules read first and write the
-// title, and the model is asked only what takes judgment:
+// The test's side of the documented usage of a decision model, for `bun run
+// eval:read`. The usage itself is the app's (src/lib/verify.ts): the rules
+// read first and write the title, the model picks the tag where the rules
+// found none and can take back a date that is part of a name. The test asks
+// the app's request and reads the reply with the app's code, so it measures
+// what the add bar does.
 //
-//   tag    which tag, from options that are named and described, when the
-//           rules found none
-//   when    is the phrase the rules read a date from really when the to-do is
-//           due, or part of a name ("the Sunday paper")? A no takes the date
-//           away again
-//   date_*  test only: the parts of a date the rules did not find (how it is
-//           written, the month, the day, the weekday), put together in code
+// Added here, for the test alone:
+//
+//   date_*  the parts of a date the rules did not find (how it is written,
+//           the month, the day, the weekday), put together in code
 //
 // One request carries all of it, and three columns are read out of the one
-// reply: the tag alone, the tag and the veto, and those with the date in
-// parts. Nothing here sends anything, and nothing here is used by the app.
+// reply: the tag alone, the tag and the veto (the app's way), and those with
+// the date in parts. Nothing here sends anything.
 import * as chrono from 'chrono-node'
 import { addDays, weekday } from '@/lib/dates'
-import { gapsIn, readTitle } from '@/lib/read'
+import {
+  QUESTIONS as ASKED,
+  JEV_VERSION,
+  WEEKDAYS,
+  verifyRequest as appRequest,
+  verdictFrom,
+  verifiedRead,
+} from '@/lib/verify'
 import type { LocalDate } from '@/lib/dates'
-import type { TitleRead } from '@/lib/read'
-import type { Household } from '@/server/jev-read'
+import type { ReadContext as Household, TitleRead } from '@/lib/read'
+import type {
+  Answer,
+  Answers,
+  Cutoffs as AppCutoffs,
+  Asked,
+} from '@/lib/verify'
 
-/**
- * The version asked, not an alias that moves: a cut-off chosen against one
- * model says nothing about the next (docs.typesafe.ai/models). Clef and
- * OpenAI's Decisions API name no versions to pin; the model each reply names
- * is written into the results instead.
- */
-export const JEV_VERSION = 'jev-1.13.0'
+export { JEV_VERSION, tagFrom, vetoed } from '@/lib/verify'
+export type { Answer, Answers, Asked } from '@/lib/verify'
 
 const NONE = 'none'
-
-// What each tag is for, by the names households give them. A tag with
-// another name is offered by its name alone. The examples are not, and must
-// never be, sentences of the test (scripts/read-eval-verify.test.ts).
-interface About {
-  what: string
-  not_for: string
-  examples: Array<string>
-}
-const ABOUT: Partial<Record<string, About>> = {
-  house: {
-    what: 'The building and what is in it: repairs, cleaning, appliances, furniture, utilities, tradespeople.',
-    not_for:
-      'Plants, lawn and anything growing outside (Yard). Bills and forms (Paperwork).',
-    examples: [
-      'Fix the squeaky stair',
-      'Descale the kettle',
-      'Book the chimney sweep',
-    ],
-  },
-  yard: {
-    what: 'Outdoor ground and plants: lawn, garden, trees, leaves, snow, the garden center.',
-    not_for:
-      'The roof, gutters, walls and other parts of the building (House).',
-    examples: [
-      'Prune the roses',
-      'Edge the flower beds',
-      'Shovel the driveway',
-    ],
-  },
-  kids: {
-    what: "The children's own things: school, classes, practices, lessons, playdates, their forms and their gear.",
-    not_for: 'A task that only happens with or near the kids.',
-    examples: [
-      'Label the lunch boxes',
-      'Buy a recorder for music class',
-      'Buy shin guards',
-    ],
-  },
-  paperwork: {
-    what: 'Money and documents: bills, taxes, insurance, banking, renewals, forms to file.',
-    not_for:
-      "A form that is for school (Kids) or for a doctor's visit (Health).",
-    examples: [
-      'Set up autopay for the water bill',
-      'Scan the birth certificates',
-      'Update the will',
-    ],
-  },
-  car: {
-    what: 'The vehicles: service, repairs, tires, registration, washing.',
-    not_for: 'An errand that is only driven to.',
-    examples: [
-      'Top up the washer fluid',
-      'Fix the windshield chip',
-      'Vacuum the back seat',
-    ],
-  },
-  health: {
-    what: "People's health: doctor, dentist, pharmacy, prescriptions, clinics, check-ups.",
-    not_for: "An animal's health (Pets).",
-    examples: [
-      'Book a dermatologist visit',
-      'Pick up allergy pills',
-      'Schedule a hearing test',
-    ],
-  },
-  pets: {
-    what: 'The animals: food, vet, grooming, walks, tanks and cages.',
-    not_for: 'Wild animals and pests (House).',
-    examples: [
-      "Trim the cat's claws",
-      'Buy litter',
-      'Book the kennel for the trip',
-    ],
-  },
-}
-const NO_TAG: About = {
-  what: 'It does not clearly belong in one of the areas, or it could sit in two.',
-  not_for: 'A to-do that plainly fits one area.',
-  examples: ['Wrap the wedding gift', 'Charge the camera'],
-}
 
 const MONTHS = [
   'January',
@@ -131,21 +51,10 @@ const MONTHS = [
   'November',
   'December',
 ]
-const WEEKDAYS = [
-  'Sunday',
-  'Monday',
-  'Tuesday',
-  'Wednesday',
-  'Thursday',
-  'Friday',
-  'Saturday',
-]
 
 /** The questions a request can hold, by id. */
 export const QUESTIONS = {
-  tag: 'area',
-  tagReversed: 'area_reversed',
-  when: 'when',
+  ...ASKED,
   mode: 'date_mode',
   month: 'date_month',
   day: 'date_day',
@@ -171,74 +80,18 @@ export function columnAsks(column: Column, id: string): boolean {
   return true
 }
 
-export interface Asked {
-  /** The rules' own reading: the title, and every field they found. */
-  rules: TitleRead
-  /** Null when the rules left nothing to ask about. */
-  request: {
-    model: string
-    state: { todo: string; today: string }
-    questions: Record<string, unknown>
-  } | null
-}
-
-const tagOption = (name: string) => name
-function tagOptions(household: Household): Array<[string, About | null]> {
-  return household.tags.map((tag) => [
-    tagOption(tag.name),
-    ABOUT[tag.name.toLowerCase()] ?? null,
-  ])
-}
-
-/** The rules' reading of `title`, and the request it leaves to be asked. */
+/**
+ * The rules' reading of `title`, and the request it leaves to be asked: the
+ * app's, and after it the test's own questions.
+ */
 export function verifyRequest(title: string, household: Household): Asked {
-  const rules = readTitle(chrono, title, household)
-  const questions: Record<string, unknown> = {}
-
-  // The tag, only where the rules found none: what they read is theirs.
-  if (
-    rules.fields.tagId === undefined &&
-    gapsIn(chrono, title, household).includes('tag') &&
-    household.tags.length > 0
-  ) {
-    const instructions = {
-      question: 'Which one area of this household list does `todo` belong in?',
-      focus: `Judge what the task is about, not words it happens to contain. Pick \`${NONE}\` unless one area plainly fits.`,
-    }
-    const options = tagOptions(household)
-    // `none` first: Jev leans to the option that comes first, and an empty
-    // button is the safe answer.
-    questions[QUESTIONS.tag] = {
-      type: 'choice',
-      instructions,
-      criteria: Object.fromEntries([[NONE, NO_TAG], ...options]),
-    }
-    // And once more the other way round. The two must agree: it is the
-    // check TypeSafe gives for that lean.
-    questions[QUESTIONS.tagReversed] = {
-      type: 'choice',
-      instructions,
-      criteria: Object.fromEntries([...options.reverse(), [NONE, NO_TAG]]),
-    }
+  const asked = appRequest(chrono, title, household)
+  const questions: Record<string, unknown> = {
+    ...asked.request?.questions,
   }
 
-  if (rules.fields.dueDate !== undefined && rules.phrases.when)
-    questions[QUESTIONS.when] = {
-      type: 'noul',
-      instructions: {
-        phrase: rules.phrases.when,
-        question:
-          'In `todo`, does `phrase` say when this to-do is due or takes place?',
-      },
-      criteria: {
-        true: '`phrase` is the deadline, or the day or time the task happens: "haircut on the 3rd at 2pm", "cancel the trial by friday", "call the landlord tomorrow".',
-        false:
-          '`phrase` is part of a name, or describes a thing in the task: "watch the 5 o\'clock news", "buy the Sunday paper", "start the 30 day trial", "eat Friday\'s leftovers".',
-      },
-    }
-
   // Test only: the date in parts, where the rules read none.
-  if (rules.fields.dueDate === undefined) {
+  if (asked.rules.fields.dueDate === undefined) {
     const absent = 'It states no such thing, or it is not this kind of date.'
     const names = (list: ReadonlyArray<string>) =>
       Object.fromEntries([[NONE, absent], ...list.map((name) => [name, null])])
@@ -296,7 +149,7 @@ export function verifyRequest(title: string, household: Household): Asked {
   }
 
   return {
-    rules,
+    rules: asked.rules,
     request:
       Object.keys(questions).length === 0
         ? null
@@ -313,17 +166,8 @@ export function verifyRequest(title: string, household: Household): Asked {
 
 // ── Reading the reply ───────────────────────────────────────────────────────
 
-/** One answer, whoever gave it: a pick with its odds, or the odds of a yes. */
-export type Answer =
-  { choice: string; probabilities: Record<string, number> } | { noul: number }
-export type Answers = Partial<Record<string, Answer>>
-
 /** How sure an answer has to be before a column acts on it. */
-export interface Cutoffs {
-  /** The tag fills at this probability or more, both ways round. */
-  tag: number
-  /** The date is taken away at this probability of a yes or less. */
-  veto: number
+export interface Cutoffs extends AppCutoffs {
   /** A date in parts is used when its least sure part is this sure. */
   parts: number
 }
@@ -350,29 +194,6 @@ export function confidence(answer: Answer | undefined): number {
   const options = Object.keys(pick.probabilities).length
   const top = pick.probabilities[pick.choice] ?? 0
   return options < 2 ? 0 : (top - 1 / options) / (1 - 1 / options)
-}
-
-/** The tag both orders agree on, surely enough; else none. */
-export function tagFrom(
-  answers: Answers,
-  household: Household,
-  cutoff: number,
-): number | undefined {
-  const one = picked(answers[QUESTIONS.tag])
-  const other = picked(answers[QUESTIONS.tagReversed])
-  if (!one || !other || one.choice !== other.choice) return undefined
-  const sure = Math.min(
-    one.probabilities[one.choice] ?? 0,
-    other.probabilities[other.choice] ?? 0,
-  )
-  if (sure < cutoff) return undefined
-  return household.tags.find((tag) => tagOption(tag.name) === one.choice)?.id
-}
-
-/** Whether the model says the phrase the rules read is not a deadline. */
-export function vetoed(answers: Answers, cutoff: number): boolean {
-  const answer = answers[QUESTIONS.when]
-  return answer !== undefined && 'noul' in answer && answer.noul <= cutoff
 }
 
 /**
@@ -437,11 +258,10 @@ export function dateFromParts(
 }
 
 /**
- * What a column makes of a reply. The title and every field the rules read
- * stay the rules': the tag is filled only where they left it empty, the
- * veto can only take their date away (and puts its words back in the title),
- * and a date in parts is used only where they read none. With no answer it is
- * the rules' reading.
+ * What a column makes of a reply. `verify` is the app's own reading
+ * (src/lib/verify.ts), acted on by the app's code. `tag` is that with the
+ * veto left unread, and `parts` adds a date in parts where the rules read
+ * none. With no answer it is the rules' reading.
  */
 export function columnRead(
   column: Column,
@@ -452,46 +272,20 @@ export function columnRead(
   cutoffs: Cutoffs,
 ): TitleRead {
   if (!answers) return rules
-  let title = rules.title
-  const fields = { ...rules.fields }
-  const phrases = { ...rules.phrases }
-  const guessed = { ...rules.guessed }
-
-  if (
-    column !== 'tag' &&
-    rules.fields.dueDate !== undefined &&
-    vetoed(answers, cutoffs.veto)
-  ) {
-    // The rules again, told to leave the day alone, for a title with its
-    // words back in. Everything else they read the first time stands.
-    title = readTitle(chrono, typed, {
-      ...household,
-      skip: new Set(['when']),
-    }).title
-    delete fields.dueDate
-    delete fields.dueTime
-    delete phrases.when
-    guessed.when = rules.phrases.when ?? ''
-  }
-
-  if (fields.tagId === undefined) {
-    const tag = tagFrom(answers, household, cutoffs.tag)
-    if (tag !== undefined) {
-      fields.tagId = tag
-      guessed.tag = ''
-    }
-  }
+  const verdict = verdictFrom(answers, rules, household, cutoffs)
+  if (column === 'tag') delete verdict.notWhen
+  const read = verifiedRead(chrono, typed, household, rules, verdict)
 
   if (column === 'parts' && rules.fields.dueDate === undefined) {
     const date = dateFromParts(answers, household.today, cutoffs.parts)
     if (date) {
-      fields.dueDate = date
-      fields.dueTime = null
-      guessed.when = ''
+      read.fields.dueDate = date
+      read.fields.dueTime = null
+      read.guessed.when = ''
     }
   }
 
-  return { title, fields, phrases, guessed }
+  return read
 }
 
 /**

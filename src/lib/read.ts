@@ -9,45 +9,17 @@
 // may be read from the words of the task and gives way when they point two
 // ways.
 //
-// With a TypeSafe key the server also asks Jev (src/server/jev-read.ts), in
-// one of two ways (`JEV_USE`). Jev first: what Jev is sure of comes first and
-// these rules read the rest. Jev fills the gaps: these rules read first, and
-// Jev is asked only about what they left empty. Either way the rules read all
-// of it when there is no answer.
+// With a TypeSafe key the server then has Jev check this reading
+// (lib/verify.ts): it may pick a tag where none was read here, and take back
+// a date read from words that are part of a name. The title and every other
+// field are always these rules' own.
 import { hintedTag } from './tag-hints'
 import { parseWhen } from './when'
 import type { LocalDate, LocalTime } from './dates'
 import type { DateParser } from './when'
 
-export type ReadField = 'when' | 'who' | 'tag' | 'headsUp' | 'flag'
-
-const FIELDS: ReadonlyArray<ReadField> = [
-  'when',
-  'who',
-  'tag',
-  'headsUp',
-  'flag',
-]
-
-/**
- * How Jev's answer is used.
- *
- * `first`: Jev is asked about every open field and about each word of the
- * title; what it is sure of fills the field and tidies the title, and the
- * rules read the rest.
- *
- * `gaps`: the rules read first and write the title alone. Jev is asked only
- * about a field they left empty, and about the tag unless it was named
- * outright ("#kids", "House: ..."). It never touches a field the rules read.
- */
-export type JevUse = 'first' | 'gaps'
-
-/**
- * Which of the two the running app uses. `bun run eval:read` scores this
- * one, the rules alone and the ways that are not in the app, on the same
- * sentences.
- */
-export const JEV_USE: JevUse = 'first'
+export const READ_FIELDS = ['when', 'who', 'tag', 'headsUp', 'flag'] as const
+export type ReadField = (typeof READ_FIELDS)[number]
 
 export interface ReadContext {
   today: LocalDate
@@ -57,37 +29,6 @@ export interface ReadContext {
   tags: Array<{ id: number; name: string }>
   /** Fields to leave alone: set by hand, or read and then taken back. */
   skip?: ReadonlySet<ReadField>
-  /** What Jev was sure of for this very text, if it was asked and answered. */
-  jev?: JevRead | null
-  /** How that answer is used; `JEV_USE` unless the eval says otherwise. */
-  jevUse?: JevUse
-  /** Fields Jev may not fill, though the rules still read them. */
-  notJevs?: ReadonlySet<ReadField>
-}
-
-/**
- * Jev's reading of a title: only the fields it was sure of. A field that is
- * absent is one the rules read instead.
- */
-export interface JevRead {
-  when?: { dueDate: LocalDate; dueTime: LocalTime | null }
-  who?: string
-  tag?: number
-  headsUp?: Array<number>
-  flag?: true
-  /**
-   * The words that only say one of those fields and so leave the title, by
-   * their place in `titleWords`. Never a word of the task itself.
-   */
-  drops: Array<{ index: number; field: ReadField }>
-}
-
-/** A title's words, in order: what Jev is asked about one by one. */
-export function titleWords(text: string): Array<{ text: string; at: number }> {
-  return [...text.matchAll(/\S+/g)].map((found) => ({
-    text: found[0],
-    at: found.index,
-  }))
 }
 
 export interface TitleRead {
@@ -105,8 +46,9 @@ export interface TitleRead {
   /** The words each field was read from, as typed. */
   phrases: Partial<Record<ReadField, string>>
   /**
-   * The fields Jev filled rather than the rules, each with the words that
-   * left the title for it; empty when none did.
+   * The fields a model had the say in rather than the rules (lib/verify.ts):
+   * a tag it picked, as '', and a date it took back, as the words the rules
+   * had read it from.
    */
   guessed: Partial<Record<ReadField, string>>
 }
@@ -143,6 +85,12 @@ const ASK = String.raw`(?:(?:give|send)\s+(?:me|us)\s+an?\s+)?(?:(?:remind(?:er)
 // that is ahead of something else, not of the deadline.
 const HEADS_UP = new RegExp(
   String.raw`[,;]?\s*\b(?:and\s+)?${ASK}\s+((?:${SPAN}(?:\s+${AHEAD})?\s*(?:,\s*and|,|and|&)\s*)*${SPAN}\s+${AHEAD})\b(?!\s+(?:the|my|our|his|her|their|its|that|this|we|i|he|she|they|it)\b)`,
+  'i',
+)
+// The same, opening the title and joined to the task by "to": "Remind me the
+// day before to pack lunches". Its first group is the asking.
+const HEADS_UP_OPENS = new RegExp(
+  String.raw`^\s*(${ASK})\s+(?:${SPAN}(?:\s+${AHEAD})?\s*(?:,\s*and|,|and|&)\s*)*${SPAN}\s+${AHEAD}\s+to\s+`,
   'i',
 )
 const NO_HEADS_UP =
@@ -217,27 +165,6 @@ export function readTitle(
   text: string,
   context: ReadContext,
 ): TitleRead {
-  return reading(parser, text, context).read
-}
-
-/**
- * The fields to ask Jev about when it fills the gaps: those the rules left
- * empty in `text`, and the tag unless it was named outright. Never one set
- * by hand or taken back.
- */
-export function gapsIn(
-  parser: DateParser | null,
-  text: string,
-  context: ReadContext,
-): Array<ReadField> {
-  return reading(parser, text, { ...context, jev: null }).gaps
-}
-
-function reading(
-  parser: DateParser | null,
-  text: string,
-  context: ReadContext,
-): { read: TitleRead; gaps: Array<ReadField> } {
   const unread: TitleRead = {
     title: text.trim(),
     fields: {},
@@ -246,55 +173,8 @@ function reading(
   }
   const fields: TitleRead['fields'] = {}
   const phrases: TitleRead['phrases'] = {}
-  const guessed: TitleRead['guessed'] = {}
-  const use = context.jevUse ?? JEV_USE
-  // Jev's answer where it comes first; where it fills the gaps it waits for
-  // the rules to have read.
-  const jev = use === 'first' ? context.jev : null
-  const open = (field: ReadField) =>
-    !context.skip?.has(field) && !context.notJevs?.has(field)
+  const reads = (field: ReadField) => !context.skip?.has(field)
   let rest = text
-
-  // Jev first: what it was sure of fills the field, and the words that only
-  // said it leave the title. A field set by hand or taken back is not its to
-  // fill.
-  if (jev) {
-    if (jev.when && open('when')) {
-      fields.dueDate = jev.when.dueDate
-      fields.dueTime = jev.when.dueTime
-      guessed.when = ''
-    }
-    if (jev.who !== undefined && open('who')) {
-      fields.assignee = jev.who
-      guessed.who = ''
-    }
-    if (jev.tag !== undefined && open('tag')) {
-      fields.tagId = jev.tag
-      guessed.tag = ''
-    }
-    if (jev.headsUp && open('headsUp')) {
-      fields.headsUpDays = jev.headsUp
-      guessed.headsUp = ''
-    }
-    if (jev.flag && open('flag')) {
-      fields.mustNotMiss = true
-      guessed.flag = ''
-    }
-    const words = titleWords(text)
-    const drops = jev.drops.filter(
-      (drop) => guessed[drop.field] !== undefined && drop.index < words.length,
-    )
-    const gone = new Set(drops.map((drop) => drop.index))
-    for (const drop of drops)
-      guessed[drop.field] =
-        `${guessed[drop.field]} ${words[drop.index].text}`.trim()
-    rest = words
-      .filter((_word, index) => !gone.has(index))
-      .map((word) => word.text)
-      .join(' ')
-  }
-  const reads = (field: ReadField) =>
-    !context.skip?.has(field) && guessed[field] === undefined
 
   /** Takes the first match out of what is left and notes it against `field`. */
   const take = (field: ReadField, pattern: RegExp): RegExpExecArray | null => {
@@ -314,6 +194,9 @@ function reading(
   const marked = reads('flag') && take('flag', FLAG_MARK) !== null
   if (marked) fields.mustNotMiss = true
 
+  // "Remind me the day before to pack lunches": the asking opened the title,
+  // so it is the typist's, and the "to" that joined it to the task goes too.
+  let askedByMe: string | null = null
   if (reads('headsUp')) {
     if (take('headsUp', NO_HEADS_UP)) fields.headsUpDays = []
     else {
@@ -333,7 +216,9 @@ function reading(
         each.length <= MOST_HEADS_UPS &&
         each.every((n) => n >= 1 && n <= MOST_DAYS)
       ) {
-        take('headsUp', HEADS_UP)
+        const opened = take('headsUp', HEADS_UP_OPENS)
+        if (opened) askedByMe = /\bme\b/i.test(opened[1]) ? opened[1] : null
+        else take('headsUp', HEADS_UP)
         fields.headsUpDays = each
       }
     }
@@ -353,22 +238,30 @@ function reading(
     if (person) fields.assignee = person.id
     else if (take('who', MINE) ?? take('who', /\s*[-–(]\s*me\)?\s*$/i))
       fields.assignee = context.me
+    else if (askedByMe) {
+      fields.assignee = context.me
+      phrases.who = askedByMe
+    }
   }
 
-  // A tag named as a hashtag or a heading: "#kids", "House: ...", "Car - ...".
-  let named = false
+  // A tag named as a hashtag, a heading or in brackets: "#kids", "House:
+  // ...", "Car - ...", "(house) ...".
   if (reads('tag')) {
     const tag = context.tags.find((one) => {
       const n = escaped(one.name)
       return (
         take('tag', new RegExp(String.raw`(^|\s)#${n}\b`, 'i')) ??
-        take('tag', new RegExp(String.raw`^\s*${n}(?:\s*:|\s+[-–])\s+`, 'i'))
+        take('tag', new RegExp(String.raw`^\s*${n}(?:\s*:|\s+[-–])\s+`, 'i')) ??
+        take(
+          'tag',
+          new RegExp(
+            String.raw`^\s*[([]\s*${n}\s*[)\]]\s*[:–-]?\s+|\s+[([]\s*${n}\s*[)\]]\s*$`,
+            'i',
+          ),
+        )
       )
     })
-    if (tag) {
-      fields.tagId = tag.id
-      named = true
-    }
+    if (tag) fields.tagId = tag.id
   }
 
   const when =
@@ -389,11 +282,7 @@ function reading(
   }
   const title = tidy(rest)
   // Nothing but things to read is not a to-do: "Tomorrow" stays "Tomorrow".
-  // Jev's reading is the first to go: the rules alone may leave a title.
-  if (!title)
-    return jev
-      ? reading(parser, text, { ...context, jev: null })
-      : { read: unread, gaps: [] }
+  if (!title) return unread
 
   // Or a tag the title only points to, in words that stay in it: "Flu
   // shots for the kids" is in Kids, "Mow the lawn" in Yard.
@@ -405,44 +294,5 @@ function reading(
     }
   }
 
-  // What the rules left empty. The tag is one of them unless it was named
-  // outright: one the title only points to is a hint, and Jev may know better.
-  const left: Record<ReadField, boolean> = {
-    when: fields.dueDate === undefined,
-    who: fields.assignee === undefined,
-    tag: !named,
-    headsUp: fields.headsUpDays === undefined,
-    flag: fields.mustNotMiss === undefined,
-  }
-  const gaps = FIELDS.filter((field) => open(field) && left[field])
-
-  // Jev fills the gaps: only those, and never a word of the title.
-  const filler = use === 'gaps' ? context.jev : null
-  if (filler) {
-    const fills = (field: ReadField) => gaps.includes(field)
-    if (filler.when && fills('when')) {
-      fields.dueDate = filler.when.dueDate
-      fields.dueTime = filler.when.dueTime
-      guessed.when = ''
-    }
-    if (filler.who !== undefined && fills('who')) {
-      fields.assignee = filler.who
-      guessed.who = ''
-    }
-    if (filler.tag !== undefined && fills('tag')) {
-      fields.tagId = filler.tag
-      delete phrases.tag
-      guessed.tag = ''
-    }
-    if (filler.headsUp && fills('headsUp')) {
-      fields.headsUpDays = filler.headsUp
-      guessed.headsUp = ''
-    }
-    if (filler.flag && fills('flag')) {
-      fields.mustNotMiss = true
-      guessed.flag = ''
-    }
-  }
-
-  return { read: { title, fields, phrases, guessed }, gaps }
+  return { title, fields, phrases, guessed: {} }
 }

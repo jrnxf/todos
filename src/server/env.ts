@@ -85,10 +85,10 @@ const _env = createEnv({
     // Dev server only, ignored once built: be this person without signing in.
     DEV_SIGNED_IN_AS: z.string().default(''),
 
-    // Optional, a secret: a TypeSafe AI key. With it, the add bar asks their
-    // Jev model to read a new to-do's title (src/server/jev-read.ts), which
-    // sends them the title, the first names in PEOPLE and the tag names.
-    // Without it nothing is sent.
+    // Optional, a secret: a TypeSafe AI key. With it, the add bar has their
+    // Jev model check its reading of a new to-do's title
+    // (src/server/jev-read.ts), which sends them the title, today's date and
+    // the tag names. Without it nothing is sent.
     TYPESAFE_API_KEY: z.string().default(''),
     // Where Jev is asked. Only ever changed to point a dev server at a
     // stand-in, so that trying the add bar spends nothing.

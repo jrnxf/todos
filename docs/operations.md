@@ -116,25 +116,35 @@ instead of sent.
 ## Reading titles with Jev (optional)
 
 The add bar fills its buttons from what is typed: "Sam: dentist fri 5pm !" is
-Sam's, on Friday at five, and must not be missed. On its own it does that
-with rules in the page, which read only what is said outright.
+Sam's, on Friday at five, and must not be missed. It does that with rules in
+the page, which read only what is said outright and write the tidied title.
 
-Given a key, it first asks [Jev](https://docs.typesafe.ai), TypeSafe AI's
-decision model, once typing pauses. One request asks for all of it: the day,
-the time, whose it is, the tag, the heads-up, the flag, and for each word of
-the title whether it is part of the task. Jev can only pick from options it
-is handed or answer yes or no, so it never writes a date or a title of its
-own.
+Given a key, the rules' reading is then checked by
+[Jev](https://docs.typesafe.ai), TypeSafe AI's decision model, once typing
+pauses. It is asked only the two things that take judgment, in one request
+(`src/lib/verify.ts`):
 
-- A button is filled from Jev's answer only when Jev is at least 80% sure.
-  A word leaves the title only when Jev is at least 90% sure it is not part
-  of the task, and only for a button it filled.
-- Anything short of that falls back to the rules, field by field: an unsure
-  answer, a "none", a reply slower than a second and a half, an error, or no
-  connection. So does a date more than 120 days out, and a time that is not
-  on a quarter hour.
-- What Jev filled shows under the title as "Guessed", and one tap takes it
-  back. A button you set yourself, or took back, is never filled again.
+- **Which tag**, where the rules found none: "Split the hostas" names no tag
+  and has no word the rules know. Jev picks from your tags, each described,
+  or picks none. It is asked twice, with the options in either order, and
+  fills the tag only when both answers agree and are at least 60% sure.
+- **Whether a date is one**, where the rules read a date: in "Order Taco
+  Tuesday supplies" the rules read Tuesday. Jev is asked whether those words
+  say when the to-do is due, and when it is 40% sure or less that they do,
+  the date is taken away and the words go back in the title.
+
+Jev never writes a date, a time, a person or a title, and never touches
+anything else the rules read. A tag it picked shows under the title as
+"Guessed", and one tap takes it back. A button you set yourself, or took
+back, is not asked about and is never filled again. Anything short of a sure
+answer leaves the rules' reading as it was: an unsure answer, a reply slower
+than a second and a half, an error, or no connection.
+
+The request names the model version (`jev-1.13.0`), not `jev-latest`: the
+two cut-offs above were chosen against that version by the test below, and
+say nothing about the next. To move to a newer version, change `JEV_VERSION`
+in `src/lib/verify.ts`, run the test, and put the cut-offs it chooses in
+`CUTOFFS` beside it.
 
 It is off until you give the Worker a key:
 
@@ -143,18 +153,18 @@ bunx wrangler secret put TYPESAFE_API_KEY
 ```
 
 With the key set, this is sent to TypeSafe AI, a company outside the
-household, each time typing pauses on a new to-do: the title as typed so far,
-the first names in `PEOPLE` and which of them is typing, your tag names, and
-today's date. Nothing else is: no notes, no other to-dos, no addresses.
-Nothing is sent for a to-do whose every button you set by hand, and a button
-you set by hand is not asked about. Delete the secret
+household, when typing pauses on a new to-do that leaves one of those two
+things to judge: the title as typed so far, today's date, and your tag
+names. Nothing else is: no names of the household but one typed into the
+title, no notes, no other to-dos, no addresses. Nothing is sent for a to-do
+whose tag the rules read and that has no date. Delete the secret
 (`bunx wrangler secret delete TYPESAFE_API_KEY`) and deploy to turn it off
 again: nothing is sent, and the add bar reads titles with its rules alone, as
 it does without a key.
 
-Jev is charged by what is sent: roughly 5,000 tokens a request for a
-ten-word title, which at the listed $0.042 per million is about $0.0002 for
-each pause in typing.
+Jev is charged by what is sent: roughly 2,800 tokens for a request that asks
+both, which at the listed $0.042 per million is about $0.0001 for each pause
+in typing.
 
 ### Checking how well it reads
 
@@ -163,17 +173,10 @@ household sentences, each with the fill a person would expect, several ways
 on the same inputs:
 
 - **Rules alone**: the rules in the page, and nothing sent.
-- **Jev first, the old usage**: what the add bar does today, as described
-  above. It is the baseline of how Jev was first asked.
 - **Verify**, for each decision model there is a key for (Jev, Cloudflare
-  Clef, Clef Flash, OpenAI's Decisions API): the model asked the way its
-  makers document (`scripts/read-eval-verify.ts`). The rules read first and
-  write the title. The model is asked only what takes judgment: which tag,
-  from options that are named and described, where the rules found none; and
-  whether the words the rules read a date from are really when the to-do is
-  due, or part of a name ("the Sunday paper"). A no takes that date away
-  again. The model never writes a date, a time or a title, and never
-  touches a field the rules read but that one date.
+  Clef, Clef Flash, OpenAI's Decisions API): the check described above. With
+  Jev it is what the add bar does, asked and read by the add bar's own code
+  (`src/lib/verify.ts`), so the test measures what the app runs.
 - **Tag only** and **Verify + date parts**: test only, read out of the same
   reply, to show each part's worth on its own. The first reads the tag and
   nothing else. The second also asks, where the rules read no date, for the
@@ -183,11 +186,11 @@ on the same inputs:
   3.1 Flash Lite) returns every field and the tidied title as structured
   output, and the rules read the sentence alone on a late or a bad reply.
 
-Only the first two are in the app. The rest exist in the test alone, to be
-chosen between. Two ways the test used to score, Jev filling the gaps and a
-hybrid in which the model's date replaced the rules', are gone from it: both
-asked Jev to find a day among 120 and a time among 96, which its makers say
-it does badly, and the columns above replace them.
+Only the rules and Verify with Jev are in the app. The rest exist in the test
+alone. The way the app first asked Jev, for the day among 120 options, the
+time among 96 and what each word of the title is for, is gone from both: its
+makers say Jev does that badly, and on these sentences it missed more than
+twice what the rules alone did.
 
 It writes `data/read-eval/report.md`: the answer first, in plain words (which
 way missed fewest on the fresh sentences, and by how many); the hit rate per
@@ -212,7 +215,7 @@ key is not set is skipped, and the report says so:
 
 | Variable                                        | Runs                                |
 | ----------------------------------------------- | ----------------------------------- |
-| `TYPESAFE_API_KEY`                              | Jev first, and Jev's three columns  |
+| `TYPESAFE_API_KEY`                              | Jev's three columns                 |
 | `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | Clef and Clef Flash, three columns  |
 | `OPENAI_API_KEY`                                | OpenAI Decisions, its three columns |
 | `ANTHROPIC_API_KEY`                             | Claude Haiku 4.5                    |
@@ -240,9 +243,9 @@ How sure a decision model has to be before its answer is acted on is a
 cut-off, one for each question. The run chooses each on the first 100
 sentences alone: the least careful one that does no more harm there than the
 best, then one step more careful. The report shows what every cut-off tried
-would have done on every set. The documented requests name Jev's version
-(`jev-1.13.0`) and not `jev-latest`, since a cut-off chosen against one model
-says nothing about the next; Clef and OpenAI's Decisions API have no versions
+would have done on every set. The app does not choose them as it runs: it
+acts on the two in `CUTOFFS` (`src/lib/verify.ts`), which are the ones a run
+against the real Jev chose. Clef and OpenAI's Decisions API have no versions
 to name, so the model each reply names is in the report.
 
 The delays are measured from the machine that runs the test, one request at
@@ -251,11 +254,6 @@ is not what the app would see: a Worker reaches them through an AI binding
 inside Cloudflare's network. `scripts/clef-speed/README.md` has an optional
 Worker of its own, put up and taken down in three commands, that times them
 from inside.
-
-How the add bar uses Jev is one constant, `JEV_USE` in `src/lib/read.ts`:
-`'first'` today, `'gaps'` for the rules first and Jev only for what they left
-empty. Neither is the documented usage; that is in the test alone until it
-has been run and chosen.
 
 ## Each phone
 

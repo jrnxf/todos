@@ -52,7 +52,7 @@ const way = (id: string) => {
   if (!found) throw new Error(`no way called ${id}`)
   return found
 }
-const ways = [way('rules'), way('first'), way('verify:jev'), way('haiku')]
+const ways = [way('rules'), way('tag:jev'), way('verify:jev'), way('haiku')]
 
 const mow: Expected = {
   title: 'Mow the lawn',
@@ -68,7 +68,7 @@ const outcomes: Array<Outcome> = [
       // The date and the title, not the tag.
       rules: read('Mow the lawn', { dueDate: '2026-10-18', dueTime: null }),
       // The tag, but a scrap left in the title.
-      first: read(
+      'tag:jev': read(
         'Mow the',
         { dueDate: '2026-10-18', dueTime: null, tagId: 2 },
         { when: 'sunday', tag: '' },
@@ -88,7 +88,7 @@ const outcomes: Array<Outcome> = [
     },
     sent: {
       rules: null,
-      first: sent(300, 10_000),
+      'tag:jev': sent(300, 10_000),
       'verify:jev': sent(100, 2_000),
       haiku: wrote(400, 1_000, 50),
     },
@@ -101,13 +101,13 @@ const outcomes: Array<Outcome> = [
     set: 'New',
     reads: {
       rules: read('Dinner with the Hendersons'),
-      first: read('Dinner with the Hendersons', { tagId: 1 }, { tag: '' }),
+      'tag:jev': read('Dinner with the Hendersons', { tagId: 1 }, { tag: '' }),
       'verify:jev': read('Dinner with the Hendersons'),
       haiku: read('Dinner with the Hendersons'),
     },
     sent: {
       rules: null,
-      first: sent(2_000, 12_000, false),
+      'tag:jev': sent(2_000, 12_000, false),
       'verify:jev': null,
       haiku: wrote(600, 1_000, 30),
     },
@@ -137,13 +137,13 @@ describe('scoring a reading', () => {
   it('counts hits only over the sentences a field is scored on', () => {
     expect(rate(tally(outcomes, 'rules', 'tag', tags))).toBe('0/1 (0%)')
     expect(rate(tally(outcomes, 'verify:jev', 'tag', tags))).toBe('1/1 (100%)')
-    expect(rate(tally(outcomes, 'first', 'title', tags))).toBe('1/2 (50%)')
+    expect(rate(tally(outcomes, 'tag:jev', 'title', tags))).toBe('1/2 (50%)')
     expect(rate(tally(outcomes, 'rules', 'date', tags))).toBe('2/2 (100%)')
     expect(rate(tally([], 'rules', 'date', tags))).toBe('n/a')
   })
 
   it('lists each miss with what was wanted, what was read and who filled it', () => {
-    expect(tally(outcomes, 'first', 'title', tags).misses).toEqual([
+    expect(tally(outcomes, 'tag:jev', 'title', tags).misses).toEqual([
       {
         sentence: 'Mow the lawn sunday',
         set: 'First',
@@ -208,7 +208,7 @@ describe('delay and cost', () => {
   })
 
   it('spreads what a way spent over every to-do, asked about or not', () => {
-    expect(spend(outcomes, 'first', 1500)).toMatchObject({
+    expect(spend(outcomes, 'tag:jev', 1500)).toMatchObject({
       requests: 2,
       delays: { median: 2000, nineInTen: 2000, slowest: 2000 },
       late: 1,
@@ -217,7 +217,7 @@ describe('delay and cost', () => {
       inputPerTodo: 11_000,
       outputPerTodo: 0,
     })
-    expect(usd(spend(outcomes, 'first', 1500).usdPerTodo)).toBe('$0.0005')
+    expect(usd(spend(outcomes, 'tag:jev', 1500).usdPerTodo)).toBe('$0.0005')
     expect(spend(outcomes, 'verify:jev', 1500)).toMatchObject({
       requests: 1,
       late: 0,
@@ -277,11 +277,11 @@ describe('the report', () => {
 
   it('names the winner of each field, or calls it level', () => {
     expect(winners(outcomes, ways, tags)).toEqual([
-      'Title: Rules alone, Verify, Jev and Fast model, Haiku 4.5 at 2 of 2 (Jev first, the old usage 1).',
-      'Date: Rules alone, Jev first, the old usage and Verify, Jev at 2 of 2 (Fast model, Haiku 4.5 1).',
+      'Title: Rules alone, Verify, Jev and Fast model, Haiku 4.5 at 2 of 2 (Tag only, Jev 1).',
+      'Date: Rules alone, Tag only, Jev and Verify, Jev at 2 of 2 (Fast model, Haiku 4.5 1).',
       'Time: level, every way at 2 of 2.',
       'Who: level, every way at 2 of 2.',
-      'Tag: Jev first, the old usage, Verify, Jev and Fast model, Haiku 4.5 at 1 of 1 (Rules alone 0).',
+      'Tag: Tag only, Jev, Verify, Jev and Fast model, Haiku 4.5 at 1 of 1 (Rules alone 0).',
       'Heads-up: level, every way at 2 of 2.',
       'Flag: level, every way at 2 of 2.',
     ])
@@ -291,7 +291,7 @@ describe('the report', () => {
     const said = verdict(outcomes, ways, tags, 1500)
     expect(said).not.toContain('\n')
     expect(said).toContain(
-      'fewest misses in total: Verify, Jev with 0 (Rules alone 1, Jev first, the old usage 1, Verify, Jev 0, Fast model, Haiku 4.5 1).',
+      'fewest misses in total: Verify, Jev with 0 (Rules alone 1, Tag only, Jev 1, Verify, Jev 0, Fast model, Haiku 4.5 1).',
     )
     expect(said).toContain(
       'Verify, Jev answered quickest (median 100 ms) and Verify, Jev cost least ($0.0000 a to-do).',
@@ -299,12 +299,12 @@ describe('the report', () => {
     expect(section('Which won')).toContain(said)
   })
 
-  it('answers first, on the fresh sentences, against the rules and the old usage', () => {
+  it('answers first, on the fresh sentences, against the rules', () => {
     expect(headline(outcomes.slice(1), ways, tags, 'the fresh ones')).toBe(
       'On the fresh ones, every way missed the same: 0 of 6 fields. Asking a model won nothing and lost nothing.',
     )
     expect(headline(outcomes, ways, tags, 'all of them')).toBe(
-      'On all of them, Verify, Jev missed fewest: 0 of 13 fields. The rules alone missed 1, so asking a model won by 1 (Verify, Jev). Jev first, the old usage missed 1.',
+      'On all of them, Verify, Jev missed fewest: 0 of 13 fields. The rules alone missed 1, so asking a model won by 1 (Verify, Jev).',
     )
     // A model that wins nothing is said to win nothing.
     expect(
@@ -353,7 +353,7 @@ describe('the report', () => {
     expect(section('Rules alone: 1')).toContain(
       '| First | Mow the lawn sunday | tag | Yard | none | rules |',
     )
-    expect(section('Jev first, the old usage: 1')).toContain(
+    expect(section('Tag only, Jev: 1')).toContain(
       '| First | Mow the lawn sunday | title | mow the lawn | mow the | model |',
     )
     expect(section('Verify, Jev: 0')).toContain('None.')
@@ -365,7 +365,7 @@ describe('the report', () => {
       '| Rules alone | 0 | n/a | n/a | n/a | 0 | 0 | 0 | 0 | $0.0000 | $0.0000 |',
     )
     expect(table).toContain(
-      '| Jev first, the old usage | 2 | 2000 ms | 2000 ms | 2000 ms | 1 | 1 | 11000 | 0 | $0.0005 | $0.0009 |',
+      '| Tag only, Jev | 2 | 2000 ms | 2000 ms | 2000 ms | 1 | 1 | 11000 | 0 | $0.0005 | $0.0009 |',
     )
     expect(table).toContain(
       '| Verify, Jev | 1 | 100 ms | 100 ms | 100 ms | 0 | 0 | 1000 | 0 | $0.0000 | $0.0001 |',
@@ -376,9 +376,7 @@ describe('the report', () => {
     expect(table).toContain(
       'The whole run, every request counted once: $0.0034.',
     )
-    expect(table).toContain(
-      '- Jev first, the old usage, 500: Dinner with the Hendersons',
-    )
+    expect(table).toContain('- Tag only, Jev, 500: Dinner with the Hendersons')
   })
 
   it('names a way that was skipped, and why, without scoring it', () => {
@@ -390,7 +388,7 @@ describe('the report', () => {
 
   it('says where each provider fact came from', () => {
     const notes = section('Notes')
-    expect(notes).toContain('**TypeSafe Jev**: `jev-latest`')
+    expect(notes).toContain('**TypeSafe Jev**: `jev-1.13.0`')
     expect(notes).toContain('key from `ANTHROPIC_API_KEY`')
     expect(notes).toContain('https://ai.google.dev/gemini-api/docs/pricing')
     // A provider no way in the run or skipped uses is left out.

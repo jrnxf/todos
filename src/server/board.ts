@@ -9,16 +9,16 @@ import { getDb, schema } from '@/db/client'
 import { TAG_COLORS } from '@/db/schema'
 import { addDays, localNow } from '@/lib/dates'
 import { withPictures } from '@/lib/people'
-import { JEV_USE } from '@/lib/read'
+import { READ_FIELDS } from '@/lib/read'
 import { SIGNED_OUT } from '@/lib/signed-out'
 import { env } from './env'
-import { READ_FIELDS, readWithJev } from './jev-read'
+import { checkWithJev } from './jev-read'
 import type { Channel } from '@/alerts/notify'
 import type { AlertConfig } from '@/alerts/rules'
 import type { Tag, Todo } from '@/db/schema'
 import type { LocalDate, Stamp } from '@/lib/dates'
 import type { PersonView } from '@/lib/people'
-import type { JevRead } from '@/lib/read'
+import type { Verdict } from '@/lib/verify'
 
 /** How long a finished to-do stays on the board. */
 const DONE_VISIBLE_DAYS = 7
@@ -41,7 +41,7 @@ export interface Board {
   alertConfig: AlertConfig
   /** How alerts reach `me`: 'log' means none are really sent. */
   channel: Channel
-  /** Whether the add bar may ask Jev to read a title (TYPESAFE_API_KEY is set). */
+  /** Whether the add bar may have Jev check a title (TYPESAFE_API_KEY is set). */
   jev: boolean
 }
 
@@ -180,31 +180,33 @@ export const setDeleted = createServerFn({ method: 'POST' })
   })
 
 /**
- * What Jev is sure of in a new to-do's title, for the fields still open, or
- * null: switched off, or the service could not be reached in time. The add
- * bar reads the rest, or all of it, with its own rules.
+ * What Jev makes of the rules' reading of a new to-do's title: a tag where
+ * they read none, and whether the date they read is one. Null: switched off,
+ * nothing to ask, or the service could not be reached in time, and the add
+ * bar's own reading stands. `skip` is the fields set by hand or taken back.
  */
-export const readTitleWithJev = createServerFn({ method: 'POST' })
+export const checkTitleWithJev = createServerFn({ method: 'POST' })
   .validator(
     z.object({
       title: z.string().trim().min(1).max(200),
-      ask: z.array(z.enum(READ_FIELDS)).min(1).max(READ_FIELDS.length),
+      skip: z.array(z.enum(READ_FIELDS)).max(READ_FIELDS.length),
     }),
   )
-  .handler(async ({ data, context }): Promise<JevRead | null> => {
+  .handler(async ({ data, context }): Promise<Verdict | null> => {
     const me = signedIn(context)
     const apiKey = env.typesafe.apiKey
     if (!apiKey) return null
     const tags = await getDb().select().from(schema.tags)
-    return readWithJev(
+    return checkWithJev(
       data.title,
-      { today: localNow(env.timeZone).date, me, people: env.people, tags },
       {
-        apiKey,
-        ask: data.ask,
-        words: JEV_USE === 'first',
-        endpoint: env.typesafe.url,
+        today: localNow(env.timeZone).date,
+        me,
+        people: env.people,
+        tags,
+        skip: new Set(data.skip),
       },
+      { apiKey, endpoint: env.typesafe.url },
     )
   })
 

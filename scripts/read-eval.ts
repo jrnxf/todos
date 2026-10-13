@@ -5,13 +5,12 @@
 // side:
 //
 //   - the rules alone;
-//   - Jev first, what the app does today, as the baseline of the old usage;
 //   - each decision model (Jev, Cloudflare Clef, Clef Flash, OpenAI
-//     Decisions) asked the documented way (scripts/read-eval-verify.ts): the
-//     rules read first, and the model picks the tag and can take back a
-//     date that is part of a name. One request a sentence, read three ways:
-//     that, the tag alone, and with the date in parts where the rules read
-//     none;
+//     Decisions) asked the documented way (src/lib/verify.ts): the rules
+//     read first, and the model picks the tag and can take back a date that
+//     is part of a name. With Jev that is what the app does, by the app's
+//     own code. One request a sentence, read three ways: that, the tag
+//     alone, and with the date in parts where the rules read none;
 //   - one call to a fast general model (Claude Haiku 4.5, Gemini 3.1 Flash
 //     Lite) for all of it.
 //
@@ -48,15 +47,12 @@ import {
   writeFileSync,
 } from 'node:fs'
 import Anthropic from '@anthropic-ai/sdk'
-import * as chrono from 'chrono-node'
-import { readTitle } from '@/lib/read'
-import { TIME_LIMIT_MS, jevRequest } from '@/server/jev-read'
+import { TIME_LIMIT_MS } from '@/server/jev-read'
 import { CASES, HOUSEHOLD, SETS } from './read-eval-cases'
 import { cost, misses, report, usd } from './read-eval-score'
 import { STAND_IN_ENV, standInFetch } from './read-eval-stand-in'
 import {
   GRIDS,
-  JEV_VERSION,
   STARTING_CUTOFFS,
   tagFrom,
   chooseCutoff,
@@ -74,7 +70,6 @@ import {
   columnWay,
   decisionAnswers,
   decisionCall,
-  decisionReply,
   fastInstructions,
   fastRead,
   fastSchema,
@@ -82,7 +77,7 @@ import {
   geminiReply,
   missing,
 } from './read-eval-ways'
-import type { JevRead, TitleRead } from '@/lib/read'
+import type { TitleRead } from '@/lib/read'
 import type { CutoffTable, Outcome, Sent } from './read-eval-score'
 import type { Answers, Cutoffs } from './read-eval-verify'
 import type { Call, DecisionProvider } from './read-eval-ways'
@@ -127,7 +122,7 @@ const skipped = WAYS.filter((way) => !ways.includes(way)).map((way) => ({
  * delay is the service's and not this script's.
  */
 interface Plan {
-  kind: 'first' | 'verify' | 'model'
+  kind: 'verify' | 'model'
   /** The request, but for Haiku, which goes through Anthropic's SDK. */
   call: Call | null
   /** Its size in characters, to guess its tokens from. */
@@ -146,16 +141,6 @@ interface Sender {
 const keyed = (provider: keyof typeof PROVIDERS) =>
   missing(provider, env).length === 0
 const senders: Array<Sender> = [
-  ...(keyed('jev')
-    ? [
-        {
-          id: 'first',
-          name: 'Jev first, the old usage',
-          provider: 'jev',
-          kind: 'first',
-        } as const,
-      ]
-    : []),
   ...DECISION_PROVIDERS.filter(keyed).map((provider): Sender => ({
     id: `verify:${provider}`,
     name: `${PROVIDERS[provider].name}, the documented way`,
@@ -186,10 +171,6 @@ const sentences = CASES.map(([sentence]) => {
         size: (instructions + JSON.stringify(schema) + sentence).length,
       }
     const provider = sender.provider as DecisionProvider
-    if (sender.kind === 'first') {
-      const call = decisionCall(provider, jevRequest(sentence, HOUSEHOLD), env)
-      return { kind: 'first', call, size: call.body.length }
-    }
     // Nothing left to ask: the rules read every field.
     if (!asked.request) return null
     const call = decisionCall(provider, asked.request, env)
@@ -232,7 +213,7 @@ console.log(`  ${'Rules alone'.padEnd(42)} nothing sent`)
 for (const sender of senders) {
   const provider = PROVIDERS[sender.provider]
   console.log(
-    `  ${sender.name.padEnd(42)} ${sender.kind === 'verify' && sender.provider === 'jev' ? JEV_VERSION : provider.model}, key from ${provider.env.join(' + ')}: ${planned(sender).length} requests, about ${usd(guessed(sender))}`,
+    `  ${sender.name.padEnd(42)} ${provider.model}, key from ${provider.env.join(' + ')}: ${planned(sender).length} requests, about ${usd(guessed(sender))}`,
   )
 }
 for (const { way, why } of skipped)
@@ -272,11 +253,11 @@ async function ask(
   sender: Sender,
   sentence: string,
   plan: Plan,
-): Promise<{ sent: Sent; answer: JevRead | TitleRead | Answers | null }> {
+): Promise<{ sent: Sent; answer: TitleRead | Answers | null }> {
   const provider = sender.provider
   const started = performance.now()
   let status: number | string = 'no reply'
-  let answer: JevRead | TitleRead | Answers | null = null
+  let answer: TitleRead | Answers | null = null
   let inputTokens: number | null = null
   let outputTokens: number | null = null
   try {
@@ -319,10 +300,7 @@ async function ask(
           outputTokens = read.outputTokens
           if (read.model) models[provider] = read.model
         } else {
-          const read =
-            plan.kind === 'first'
-              ? decisionReply(provider, reply, sentence, HOUSEHOLD)
-              : decisionAnswers(provider, reply)
+          const read = decisionAnswers(provider, reply)
           answer = read.read
           inputTokens = read.inputTokens
           outputTokens = read.outputTokens
@@ -405,13 +383,6 @@ run: for (const [index, [sentence, expected]] of CASES.entries()) {
       sent[sender.id] = one?.sent ?? null
       reads[sender.id] = (answer as TitleRead | null) ?? rules
       if (answer) whole.push(sender.id)
-    } else if (sender.kind === 'first') {
-      sent[sender.id] = one?.sent ?? null
-      reads[sender.id] = readTitle(chrono, sentence, {
-        ...HOUSEHOLD,
-        jev: answer as JevRead | null,
-        jevUse: 'first',
-      })
     } else if (one)
       // Its columns are read once every cut-off is chosen, below.
       answered[sender.provider as DecisionProvider] = {

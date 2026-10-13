@@ -4,7 +4,9 @@
 // Tags are made by each household, so this only knows the common ones, by
 // the names people give them, and says nothing about any other. It is a hint
 // and never more: the words stay in the title, a to-do that points two ways
-// gets no tag, and Jev, when it is asked, may know better.
+// gets no tag, and a word that is as often another tag's or nobody's
+// ("carpool") is no hint at all: where nothing is read here Jev, when it is
+// asked, picks one.
 
 interface Kind {
   /** What a household might call the tag. */
@@ -165,7 +167,6 @@ const KINDS: Array<Kind> = [
       'babysitter',
       'sitter',
       'nanny',
-      'carpool',
       'lunchbox',
       'playdate',
       'summer camp',

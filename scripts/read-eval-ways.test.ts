@@ -4,14 +4,14 @@
 // anything else, as the service would), and the replies are the documented
 // ones.
 import { describe, expect, it } from 'vitest'
-import { jevRequest } from '@/server/jev-read'
 import { HOUSEHOLD } from './read-eval-cases'
 import { STAND_IN_ENV, standInFetch } from './read-eval-stand-in'
+import { verifyRequest } from './read-eval-verify'
 import {
   PROVIDERS,
   WAYS,
   decisionCall,
-  decisionReply,
+  decisionAnswers,
   fastInstructions,
   fastRead,
   fastSchema,
@@ -21,8 +21,10 @@ import {
 } from './read-eval-ways'
 
 const TITLE = 'Sam: dentist fri 5pm'
-const ASK = ['when', 'tag', 'headsUp', 'flag'] as const
-const questions = jevRequest(TITLE, HOUSEHOLD, ASK, false)
+const { request: questions } = verifyRequest(TITLE, HOUSEHOLD)
+if (!questions) throw new Error('nothing to ask')
+/** What the stand-in says of the date the rules read: surely one. */
+const answered = { when: { noul: 0.9 } }
 const send = standInFetch(HOUSEHOLD)
 const post = async (call: { url: string; headers: object; body: string }) => {
   const response = await send(call.url, {
@@ -36,10 +38,9 @@ const post = async (call: { url: string; headers: object; body: string }) => {
 const HEALTH = HOUSEHOLD.tags.find((one) => one.name === 'Health')?.id
 
 describe('the ways', () => {
-  it('are the rules, the old usage, three columns a decision model and two general models', () => {
+  it('are the rules, three columns a decision model and two general models', () => {
     expect(WAYS.map((way) => [way.id, way.kind, way.provider])).toEqual([
       ['rules', 'rules', undefined],
-      ['first', 'first', 'jev'],
       ['verify:jev', 'verify', 'jev'],
       ['tag:jev', 'tag', 'jev'],
       ['parts:jev', 'parts', 'jev'],
@@ -86,9 +87,9 @@ describe('a decision model', () => {
     expect(JSON.parse(call.body)).toEqual(questions)
     const { status, reply } = await post(call)
     expect(status).toBe(200)
-    expect(decisionReply('jev', reply, TITLE, HOUSEHOLD, ASK)).toMatchObject({
-      read: { when: { dueDate: '2026-10-16', dueTime: '17:00' } },
-      model: 'jev-stand-in',
+    expect(decisionAnswers('jev', reply)).toMatchObject({
+      read: answered,
+      model: 'stand-in',
     })
   })
 
@@ -109,9 +110,9 @@ describe('a decision model', () => {
       expect(JSON.parse(call.body)).toEqual({ ...questions, model })
       const { status, reply } = await post(call)
       expect(status).toBe(200)
-      const read = decisionReply(provider, reply, TITLE, HOUSEHOLD, ASK)
+      const read = decisionAnswers(provider, reply)
       expect(read).toMatchObject({
-        read: { when: { dueDate: '2026-10-16', dueTime: '17:00' } },
+        read: answered,
         model: id,
         outputTokens: 0,
       })
@@ -123,13 +124,15 @@ describe('a decision model', () => {
     const env = { CLOUDFLARE_API_TOKEN: 'k', CLOUDFLARE_ACCOUNT_ID: 'a' }
     const { reply } = await post(decisionCall('clef', questions, env))
     const bare = (reply as { result: unknown }).result
-    expect(decisionReply('clef', bare, TITLE, HOUSEHOLD, ASK)).toEqual(
-      decisionReply('clef', reply, TITLE, HOUSEHOLD, ASK),
+    expect(decisionAnswers('clef', bare)).toEqual(
+      decisionAnswers('clef', reply),
     )
   })
 
   it('OpenAI is sent them as predicates and choices of values', async () => {
-    const call = decisionCall('openai', questions, { OPENAI_API_KEY: 'k' })
+    const asked = verifyRequest('Call mom saturday', HOUSEHOLD).request
+    if (!asked) throw new Error('nothing to ask')
+    const call = decisionCall('openai', asked, { OPENAI_API_KEY: 'k' })
     expect(call.url).toBe('https://api.openai.com/v1/decisions')
     expect(call.headers.Authorization).toBe('Bearer k')
     const body = JSON.parse(call.body) as {
@@ -143,19 +146,14 @@ describe('a decision model', () => {
       }>
     }
     expect(body.model).toBe('gpt-6-luna')
-    expect(JSON.parse(body.input)).toEqual(questions.state)
+    expect(JSON.parse(body.input)).toEqual(asked.state)
     expect(body.questions.map((one) => [one.name, one.type])).toEqual([
-      ['date', 'choice'],
-      ['time', 'choice'],
       ['area', 'choice'],
-      ['alert', 'choice'],
-      ['flag', 'predicate'],
+      ['area_reversed', 'choice'],
+      ['when', 'predicate'],
     ])
     const tag = body.questions.find((one) => one.name === 'area')
-    expect(tag?.choices).toContainEqual({
-      value: `area_${HEALTH}`,
-      description: 'Health',
-    })
+    expect(tag?.choices?.map((one) => one.value)).toContain('Health')
     // Every choice within the documented 2 to 255.
     for (const one of body.questions.filter((q) => q.type === 'choice')) {
       expect(one.choices?.length).toBeGreaterThanOrEqual(2)
@@ -165,13 +163,11 @@ describe('a decision model', () => {
 
     const { status, reply } = await post(call)
     expect(status).toBe(200)
-    expect(decisionReply('openai', reply, TITLE, HOUSEHOLD, ASK)).toMatchObject(
-      {
-        read: { when: { dueDate: '2026-10-16', dueTime: '17:00' } },
-        model: 'gpt-6-luna',
-        outputTokens: 0,
-      },
-    )
+    expect(decisionAnswers('openai', reply)).toMatchObject({
+      read: answered,
+      model: 'gpt-6-luna',
+      outputTokens: 0,
+    })
   })
 
   it('reads OpenAI’s documented reply, and a refusal as no answer', () => {
@@ -181,20 +177,26 @@ describe('a decision model', () => {
         {
           type: 'choice',
           name: 'area',
-          choice: `area_${HEALTH}`,
+          choice: 'Health',
           probabilities: [
-            { value: `area_${HEALTH}`, probability: 0.95 },
+            { value: 'Health', probability: 0.95 },
             { value: 'none', probability: 0.05 },
           ],
           confidence: 0.93,
         },
-        { type: 'predicate', name: 'flag', probability: 0.92 },
-        { type: 'refusal', name: 'date' },
+        { type: 'predicate', name: 'when', probability: 0.92 },
+        { type: 'refusal', name: 'area_reversed' },
       ],
       usage: { input_tokens: 42, output_tokens: 0, total_tokens: 42 },
     }
-    expect(decisionReply('openai', reply, TITLE, HOUSEHOLD, ASK)).toEqual({
-      read: { tag: HEALTH, flag: true, drops: [] },
+    expect(decisionAnswers('openai', reply)).toEqual({
+      read: {
+        area: {
+          choice: 'Health',
+          probabilities: { Health: 0.95, none: 0.05 },
+        },
+        when: { noul: 0.92 },
+      },
       inputTokens: 42,
       outputTokens: 0,
       model: 'gpt-6-luna',
@@ -203,10 +205,8 @@ describe('a decision model', () => {
 
   it('makes nothing of a reply that is not one', () => {
     for (const reply of [null, 'oops', { error: 'x' }, { answers: 3 }])
-      expect(decisionReply('openai', reply, TITLE, HOUSEHOLD, ASK).read).toBe(
-        null,
-      )
-    expect(decisionReply('clef', {}, TITLE, HOUSEHOLD, ASK)).toEqual({
+      expect(decisionAnswers('openai', reply).read).toBe(null)
+    expect(decisionAnswers('clef', {})).toEqual({
       read: null,
       inputTokens: null,
       outputTokens: null,

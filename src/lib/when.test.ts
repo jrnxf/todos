@@ -196,6 +196,54 @@ describe('a date typed into a title', () => {
     })
   })
 
+  it.each([
+    ['call the bank day after tomorrow', 'call the bank', '2026-10-14', null],
+    // A part of the day that belongs to the task, in front of the date.
+    ['Movie night 11/6 at 7', 'Movie night', '2026-11-06', '19:00'],
+    ['date night saturday', 'date night', '2026-10-17', null],
+    ['coffee with Dana sat @ 10', 'coffee with Dana', '2026-10-17', '10:00'],
+    ['gym @6pm tomorrow', 'gym', '2026-10-13', '18:00'],
+    // A day of a month that is not named.
+    ['Pay rent on the 1st of the month', 'Pay rent', '2026-11-01', null],
+    [
+      'Staff meeting first of the month at 9am',
+      'Staff meeting',
+      '2026-11-01',
+      '09:00',
+    ],
+    ['Water bill due the 20th of this month', 'Water bill', '2026-10-20', null],
+    [
+      'Pay the sitter the fifteenth of next month',
+      'Pay the sitter',
+      '2026-11-15',
+      null,
+    ],
+    // A length of time counted from a day.
+    [
+      'Return the modem 2 weeks from today',
+      'Return the modem',
+      '2026-10-26',
+      null,
+    ],
+    ['Send it 3 days from tomorrow', 'Send it', '2026-10-16', null],
+    ['Follow up a week from friday at 2pm', 'Follow up', '2026-10-23', '14:00'],
+  ])('reads %j', (typed, title, dueDate, dueTime) => {
+    expect(parseWhen(chrono, typed, today)).toMatchObject({
+      title,
+      dueDate,
+      dueTime,
+    })
+  })
+
+  it('does not take a part of the day or a count for a date', () => {
+    for (const title of [
+      'plan a date night',
+      'Fix the light on the first floor',
+      'email dana@example.com about the invoice',
+    ])
+      expect(parseWhen(chrono, title, today), title).toBeNull()
+  })
+
   it('leaves a title alone when there is no date, or nothing but a date', () => {
     expect(parseWhen(chrono, 'Fix closet door', today)).toBeNull()
     expect(parseWhen(chrono, 'Tomorrow', today)).toBeNull()

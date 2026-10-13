@@ -283,7 +283,7 @@ export function verdict(
 
 /**
  * The answer, in plain words: which way missed fewest fields on one set of
- * sentences, and how far that is from the rules alone and from the old usage.
+ * sentences, and how far that is from the rules alone.
  */
 export function headline(
   outcomes: ReadonlyArray<Outcome>,
@@ -304,7 +304,6 @@ export function headline(
   const fewest = Math.min(...totals.map((one) => one.misses))
   const leaders = totals.filter((one) => one.misses === fewest)
   const rules = totals.find((one) => one.way.kind === 'rules')
-  const old = totals.find((one) => one.way.kind === 'first')
   const asking = totals.filter((one) => one.way.kind !== 'rules')
   if (leaders.length === totals.length)
     return `On ${what}, every way missed the same: ${fewest} of ${scored} fields. Asking a model won nothing and lost nothing.`
@@ -324,7 +323,6 @@ export function headline(
           : `The rules alone missed ${rules.misses}: no way that asks a model beat them, and the closest (${named}) missed ${best - rules.misses} more.`,
     )
   }
-  if (old) parts.push(`${old.way.name} missed ${old.misses}.`)
   return parts.join(' ')
 }
 
