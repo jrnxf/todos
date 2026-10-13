@@ -1,9 +1,8 @@
 // The laptop's left sidebar: where you are, how much is in each place, the
-// areas in their colours, the month at a glance, and who is signed in. Built
-// from shadcn's stock sidebar (the "sidebar with a calendar" block). Phones
-// never see it; they have the tab bar.
+// areas in their colours, and who is signed in. Built from shadcn's stock
+// sidebar. Phones never see it; they have the tab bar.
 import { useState } from 'react'
-import { Link, useNavigate, useRouterState } from '@tanstack/react-router'
+import { Link, useRouterState } from '@tanstack/react-router'
 import {
   CalendarIcon,
   CheckIcon,
@@ -25,7 +24,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Calendar } from '@/components/ui/calendar'
 import {
   Dialog,
   DialogContent,
@@ -56,7 +54,6 @@ import {
   SidebarSeparator,
 } from '@/components/ui/sidebar'
 import { isOpen, upNext } from '@/lib/board'
-import { fromPickerDate, toPickerDate } from '@/lib/dates'
 import {
   useAddArea,
   useBoard,
@@ -64,7 +61,6 @@ import {
   useUpdateArea,
 } from '@/lib/queries'
 import { AreaDot, AreaForm } from './area'
-import { DAY_DOT } from './calendar-views'
 import { useAdd } from './capture'
 import { NavUser } from './nav-user'
 import type { Area } from '@/db/schema'
@@ -73,7 +69,6 @@ import type { ItemFields } from '@/server/board'
 export function AppSidebar({ addPreset }: { addPreset?: Partial<ItemFields> }) {
   const board = useBoard()
   const add = useAdd()
-  const navigate = useNavigate()
   const location = useRouterState({ select: (state) => state.location })
   const { pathname, search } = location
 
@@ -88,11 +83,6 @@ export function AppSidebar({ addPreset }: { addPreset?: Partial<ItemFields> }) {
   const done = board.items.length - open.length
   const groups = upNext(board.items, board.today)
   const soon = groups.overdue.length + groups.today.length + groups.week.length
-  const dueDays = [
-    ...new Set(open.flatMap((todo) => (todo.dueDate ? [todo.dueDate] : []))),
-  ]
-  const shownDay =
-    pathname === '/calendar' && search.day ? search.day : board.today
 
   return (
     <Sidebar
@@ -250,34 +240,6 @@ export function AppSidebar({ addPreset }: { addPreset?: Partial<ItemFields> }) {
 
       <SidebarSeparator className="mx-0" />
       <SidebarFooter className="p-0">
-        <Calendar
-          mode="single"
-          required
-          selected={toPickerDate(shownDay)}
-          // Follow along when the Calendar page moves to another month.
-          key={shownDay.slice(0, 7)}
-          defaultMonth={toPickerDate(shownDay)}
-          onSelect={(picked) =>
-            navigate({
-              to: '/calendar',
-              search: { day: fromPickerDate(picked) },
-            })
-          }
-          modifiers={{
-            due: dueDays
-              .filter((date) => date >= board.today)
-              .map(toPickerDate),
-            late: dueDays
-              .filter((date) => date < board.today)
-              .map(toPickerDate),
-          }}
-          modifiersClassNames={{
-            due: `${DAY_DOT} after:bg-muted-foreground has-data-[selected-single=true]:after:bg-primary-foreground`,
-            late: `${DAY_DOT} after:bg-destructive`,
-          }}
-          className="bg-transparent [--cell-size:2.1rem]"
-        />
-        <SidebarSeparator className="mx-0" />
         <NavUser />
       </SidebarFooter>
 

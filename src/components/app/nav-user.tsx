@@ -1,10 +1,9 @@
 // The signed-in person at the foot of the laptop sidebar: shadcn's NavUser
-// (sidebar-12) with this app's items, a way to the Account page, the theme
-// choice, and the way out.
+// (sidebar-12) with this app's items: a way to the Account page, where signing
+// out lives, and the theme choice.
 import { Link } from '@tanstack/react-router'
 import {
   ChevronsUpDownIcon,
-  LogOutIcon,
   MonitorIcon,
   MoonIcon,
   SunIcon,
@@ -30,7 +29,6 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from '@/components/ui/sidebar'
-import { useSignOut } from '@/lib/auth-client'
 import { useBoard } from '@/lib/queries'
 import { parseTheme, setTheme, useTheme } from '@/lib/theme'
 import { PersonAvatar } from './todo-row'
@@ -39,7 +37,6 @@ export function NavUser() {
   const board = useBoard()
   const me = board.people.find((person) => person.id === board.me)
   const theme = useTheme()
-  const signOut = useSignOut()
 
   const who = (
     <>
@@ -116,14 +113,6 @@ export function NavUser() {
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
             </DropdownMenuGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              disabled={signOut.isPending}
-              onClick={() => signOut.mutate()}
-            >
-              <LogOutIcon />
-              Sign out
-            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarMenuItem>
