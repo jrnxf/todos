@@ -9,6 +9,7 @@ import { getDb, schema } from '@/db/client'
 import { AREA_COLORS } from '@/db/schema'
 import { addDays, localNow } from '@/lib/dates'
 import { SIGNED_OUT } from '@/lib/signed-out'
+import { guessArea } from './area-guess'
 import { env } from './env'
 import type { Channel } from '@/alerts/notify'
 import type { AlertConfig } from '@/alerts/rules'
@@ -36,6 +37,8 @@ export interface Board {
   alertConfig: AlertConfig
   /** How alerts reach `me`: 'log' means none are really sent. */
   channel: Channel
+  /** Whether the add bar may ask for an area guess (TYPESAFE_API_KEY is set). */
+  areaGuess: boolean
 }
 
 /**
@@ -84,6 +87,7 @@ export const getBoard = createServerFn({ method: 'GET' }).handler(
       items,
       alertConfig: { ...env.alerts },
       channel: channelFor(me),
+      areaGuess: env.typesafeApiKey !== '',
     }
   },
 )
@@ -163,6 +167,19 @@ export const setDeleted = createServerFn({ method: 'POST' })
       .update(schema.items)
       .set({ deletedAt: data.deleted ? new Date().toISOString() : null })
       .where(eq(schema.items.id, data.id))
+  })
+
+/**
+ * The area a new to-do's title suggests, or null: not sure enough, switched
+ * off, or the service could not be reached in time.
+ */
+export const suggestArea = createServerFn({ method: 'POST' })
+  .validator(z.object({ title: z.string().trim().min(1).max(200) }))
+  .handler(async ({ data }): Promise<number | null> => {
+    const apiKey = env.typesafeApiKey
+    if (!apiKey) return null
+    const areas = await getDb().select().from(schema.areas)
+    return guessArea(data.title, { people: env.people, areas }, { apiKey })
   })
 
 const areaFields = z.object({

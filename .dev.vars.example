@@ -29,6 +29,11 @@ PUSHOVER_APP_TOKEN=
 # id:userkey pairs, ids as in PEOPLE.
 PUSHOVER_USER_KEYS=
 
+# Optional. A TypeSafe AI key: the add bar then asks their Jev model which
+# area a new to-do belongs in when the title does not say. That sends them
+# the title, the first names in PEOPLE and the area names. Empty: off.
+TYPESAFE_API_KEY=
+
 # In dev, links and Google's reply should point at the laptop, not the
 # deployed app.
 APP_URL=http://localhost:3001

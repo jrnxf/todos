@@ -85,6 +85,12 @@ const _env = createEnv({
     // Dev server only, ignored once built: be this person without signing in.
     DEV_SIGNED_IN_AS: z.string().default(''),
 
+    // Optional, a secret: a TypeSafe AI key. With it, the add bar asks their
+    // Jev model which area a new to-do belongs in when the title does not
+    // say (src/server/area-guess.ts), which sends them the title, the first
+    // names in PEOPLE and the area names. Without it nothing is sent.
+    TYPESAFE_API_KEY: z.string().default(''),
+
     // Optional dead-man switch: a URL fetched after every scheduler pass
     // that completes (healthchecks.io or the like). If the passes stop, the
     // pings stop, and that service raises the alarm this app no longer can.
@@ -158,6 +164,9 @@ export const env = {
     get devSignedInAs() {
       return knownPerson(_env.DEV_SIGNED_IN_AS)
     },
+  },
+  get typesafeApiKey() {
+    return _env.TYPESAFE_API_KEY
   },
   get heartbeatUrl() {
     return _env.HEARTBEAT_URL

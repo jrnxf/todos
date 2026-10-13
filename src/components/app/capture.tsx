@@ -23,6 +23,7 @@ import {
   CheckIcon,
   FlagIcon,
   PlusIcon,
+  SparklesIcon,
   TagIcon,
   UserIcon,
   XIcon,
@@ -46,6 +47,7 @@ import { Input } from '@/components/ui/input'
 import { useAddItem, useBoard } from '@/lib/queries'
 import { readTitle } from '@/lib/read'
 import { shortWhenLabel } from '@/lib/when'
+import { suggestArea } from '@/server/board'
 import { AreaDot } from './area'
 import { Picker, useIsDesktop } from './picker'
 import { AreaFields, HeadsUpFields, WhoFields } from './small-pickers'
@@ -122,6 +124,38 @@ function useVisibleHeight(): number | null {
 function keepCursor(event: React.MouseEvent) {
   if (!(event.target as HTMLElement).closest('input, textarea, select'))
     event.preventDefault()
+}
+
+// How long typing has to pause before an area guess is asked for.
+const GUESS_AFTER_MS = 600
+
+/**
+ * The area the server guesses for `title` once typing has paused; null until
+ * it answers and whenever it has no guess. Asks nothing unless `wanted`.
+ */
+function useAreaGuess(title: string, wanted: boolean): number | null {
+  const [guess, setGuess] = useState<{
+    title: string
+    areaId: number | null
+  } | null>(null)
+  useEffect(() => {
+    if (!wanted || title.length < 3) return
+    let live = true
+    const timer = setTimeout(() => {
+      suggestArea({ data: { title } }).then(
+        (areaId) => {
+          if (live) setGuess({ title, areaId })
+        },
+        // Offline or signed out: no guess, and nothing to say about it.
+        () => {},
+      )
+    }, GUESS_AFTER_MS)
+    return () => {
+      live = false
+      clearTimeout(timer)
+    }
+  }, [title, wanted])
+  return wanted && guess?.title === title ? guess.areaId : null
 }
 
 export function AddProvider({ children }: { children: React.ReactNode }) {
@@ -296,6 +330,7 @@ function CaptureBar({
   const [takenBack, setTakenBack] = useState<
     Partial<Record<ReadField, string>>
   >({})
+  const [noGuess, setNoGuess] = useState(false)
   const [added, setAdded] = useState<string | null>(null)
   const [open, setOpen] = useState<Open>(null)
 
@@ -316,9 +351,18 @@ function CaptureBar({
   const read =
     refused.length > 0 ? readWith(new Set([...byHand, ...refused])) : first
   // What will be sent: the pills set by hand, under what the title says.
-  const now: ItemFields = { ...fields, ...read.fields }
-  const when: When = { dueDate: now.dueDate, dueTime: now.dueTime }
+  const said: ItemFields = { ...fields, ...read.fields }
   const title = read.title
+  // With no area said or set, one may be guessed (src/server/area-guess.ts).
+  const guessed = useAreaGuess(
+    title,
+    board.areaGuess && said.areaId === null && !byHand.has('area') && !noGuess,
+  )
+  const guessedArea = board.areas.find((one) => one.id === guessed)
+  const now: ItemFields = guessedArea
+    ? { ...said, areaId: guessedArea.id }
+    : said
+  const when: When = { dueDate: now.dueDate, dueTime: now.dueTime }
   const area = board.areas.find((one) => one.id === now.areaId)
 
   const patch = (change: Partial<ItemFields>) =>
@@ -426,6 +470,7 @@ function CaptureBar({
     setFields(blank)
     setByHand(new Set())
     setTakenBack({})
+    setNoGuess(false)
     titleRef.current?.focus()
   }
 
@@ -470,9 +515,9 @@ function CaptureBar({
         className="h-9 border-0 bg-transparent px-0 text-base font-medium shadow-none focus-visible:ring-0 md:text-base dark:bg-transparent"
       />
 
-      {wasRead.length > 0 && (
+      {(wasRead.length > 0 || guessedArea) && (
         <div className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
-          Read from the title
+          {wasRead.length > 0 && 'Read from the title'}
           {wasRead.map(({ field, icon: Icon, name, phrase }) => (
             <Button
               key={field}
@@ -492,6 +537,19 @@ function CaptureBar({
               <XIcon data-icon="inline-end" />
             </Button>
           ))}
+          {guessedArea && (
+            <Button
+              variant="outline"
+              size={desktop ? 'xs' : 'sm'}
+              className="max-w-full rounded-full font-normal"
+              aria-label={`${guessedArea.name} is a guess, and not the area`}
+              onClick={() => setNoGuess(true)}
+            >
+              <SparklesIcon data-icon="inline-start" />
+              <span className="truncate">Guessed {guessedArea.name}</span>
+              <XIcon data-icon="inline-end" />
+            </Button>
+          )}
         </div>
       )}
 

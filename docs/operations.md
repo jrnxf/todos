@@ -113,6 +113,27 @@ instead of sent.
    Pushover app, turn on Critical Alerts for high priority if a must-not-miss
    to-do should sound through silent.
 
+## Area guesses (optional)
+
+When a new to-do's title does not say which area it belongs in, the add bar
+can ask [Jev](https://docs.typesafe.ai), TypeSafe AI's decision model, to pick
+one of your areas. It fills the area only when the answer is at least 80%
+sure and arrives within a second and a half; otherwise the area stays empty,
+as it does when the service is down or the phone is offline. A guess shows
+under the title and one tap takes it back.
+
+It is off until you give the Worker a key:
+
+```bash
+bunx wrangler secret put TYPESAFE_API_KEY
+```
+
+With the key set, each new to-do's title, the first names in `PEOPLE` and
+your area names are sent to TypeSafe AI, a company outside the household.
+Nothing else is, and nothing is sent for a to-do whose area you said or
+picked. Delete the secret (`bunx wrangler secret delete TYPESAFE_API_KEY`) to
+turn it off again.
+
 ## Each phone
 
 Open the address in Safari, sign in with Google, then Share, Add to Home
