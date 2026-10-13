@@ -46,6 +46,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@anthropic-ai/sdk": "^0.133.0",
     "@cloudflare/vite-plugin": "^1.63.1",
     "@tanstack/eslint-config": "^0.4.0",
     "@types/node": "^22.10.2",

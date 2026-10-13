@@ -158,9 +158,9 @@ each pause in typing.
 
 ### Checking how well it reads
 
-Before trusting it with dates, measure it. `bun run eval:read` reads 100
-household sentences, each with the fill a person would expect, three ways on
-the same inputs:
+Before trusting it with dates, measure it. `bun run eval:read` reads 150
+household sentences, each with the fill a person would expect, several ways
+on the same inputs:
 
 - **Rules alone**: the rules in the page, and nothing sent.
 - **Jev first**: what the add bar does today, as described above.
@@ -169,22 +169,51 @@ the same inputs:
   was named outright ("#kids", "House: ..."). No word of the title is asked
   about, so the request is smaller, and a button the rules filled is never
   asked about or overwritten.
+- **Hybrid**: the rules write the title; the day and time are the model's
+  when it is sure and the rules' when it is not; the area is the model's
+  unless it was named outright; the person, the heads-up and the flag are the
+  rules', and the model fills the ones they left empty. Scored with Jev, and
+  with Cloudflare Clef, Clef Flash and OpenAI's Decisions API in its place.
+- **Fast model**: one call to a small general model (Claude Haiku 4.5, Gemini
+  3.1 Flash Lite) returns every field and the tidied title as structured
+  output, and the rules read the sentence alone on a late or a bad reply.
 
-It writes `data/read-eval/report.md`: the hit rate per field for each of the
-three side by side, for all the sentences and for each set of them, every
-miss, the delay and the cost of each, and which won each field. A report
-already there is kept beside it under the time it was written.
+Only the first three are in the app. The hybrid and the fast model exist in
+the test alone, to be chosen between.
+
+It writes `data/read-eval/report.md`: the hit rate per field and the total
+misses for each way side by side, for all the sentences and for each set of
+them; one table of the speed (median, 9 in 10, slowest, and how many answers
+came later than the add bar waits), the tokens and the cost a to-do of every
+way; which won what; every miss; and where each provider's endpoint, limits
+and price were read. A report already there is kept beside it under the time
+it was written.
 
 ```bash
-bun run eval:read          # the plan and the estimated cost; sends nothing
-TYPESAFE_API_KEY=... bun run eval:read --yes
+bun run eval:read             # the plan and the estimated cost; sends nothing
+bun run eval:read --stand-in  # the whole run against stand-ins: no key, no bill
+TYPESAFE_API_KEY=... ANTHROPIC_API_KEY=... bun run eval:read --yes
 ```
 
-It stops before the request that would take it past its spending cap, fifty
-cents unless `--cap-usd` says otherwise. The sentences and the made-up
-household they are read for are in `scripts/read-eval-cases.ts`: the 30 the
-test began with, written by the author of the rules, and 70 written before
-the rules were opened.
+Keys come from the environment and are never printed or written. A way whose
+key is not set is skipped, and the report says so:
+
+| Variable                                        | Runs                  |
+| ----------------------------------------------- | --------------------- |
+| `TYPESAFE_API_KEY`                              | The three Jev ways    |
+| `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | Clef and Clef Flash   |
+| `OPENAI_API_KEY`                                | OpenAI Decisions      |
+| `ANTHROPIC_API_KEY`                             | Claude Haiku 4.5      |
+| `GEMINI_API_KEY`                                | Gemini 3.1 Flash Lite |
+
+It stops before the request that would take it past its spending cap, two
+dollars for the whole run unless `--cap-usd` says otherwise. The sentences
+and the made-up household they are read for are in
+`scripts/read-eval-cases.ts`: the 30 the test began with, written by the
+author of the rules; 70 written before the rules were opened; and 50 held
+out, written before the rules were tuned against the first 100 and never
+tuned against. The held-out set is the honest number for the rules: do not
+fix a rule because of a miss in it.
 
 Which of the two ways the add bar uses is one constant, `JEV_USE` in
 `src/lib/read.ts`: `'first'` today, `'gaps'` for the other.

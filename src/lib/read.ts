@@ -4,8 +4,10 @@
 // and must not be missed.
 //
 // A guess that fills a button wrongly is worse than a button left empty, so
-// nothing here guesses: each thing is read only where it is said outright,
-// and whatever was read can be taken back (`skip`).
+// each thing is read only where it is said, and whatever was read can be
+// taken back (`skip`). The one hint is the area (lib/area-hints.ts), which
+// may be read from the words of the task and gives way when they point two
+// ways.
 //
 // With a TypeSafe key the server also asks Jev (src/server/jev-read.ts), in
 // one of two ways (`JEV_USE`). Jev first: what Jev is sure of comes first and
@@ -41,8 +43,8 @@ const FIELDS: ReadonlyArray<ReadField> = [
 export type JevUse = 'first' | 'gaps'
 
 /**
- * Which of the two the running app uses. `bun run eval:read` scores both, and
- * the rules alone, on the same sentences.
+ * Which of the two the running app uses. `bun run eval:read` scores both, the
+ * rules alone and the ways that are not in the app, on the same sentences.
  */
 export const JEV_USE: JevUse = 'first'
 
