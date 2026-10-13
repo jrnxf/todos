@@ -16,7 +16,7 @@ function build() {
   if (!secret || !google.clientId || !google.clientSecret) return null
 
   return betterAuth({
-    appName: 'Home',
+    appName: 'todos',
     // Fixed, never taken from the request, so a forged Host header cannot
     // point Google's reply somewhere else.
     baseURL: env.appUrl,

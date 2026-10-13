@@ -50,7 +50,7 @@ function SignInScreen() {
         </span>
         <div>
           <h1 className="text-[1.75rem] leading-tight font-semibold tracking-tight">
-            Home
+            todos
           </h1>
           <p className="text-muted-foreground">
             The household list. Sign in to open it.

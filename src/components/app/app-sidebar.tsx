@@ -104,7 +104,7 @@ export function AppSidebar({ addPreset }: { addPreset?: Partial<ItemFields> }) {
           <span className="flex size-6 items-center justify-center rounded-md bg-primary text-primary-foreground">
             <CheckIcon className="size-3.5" strokeWidth={3} />
           </span>
-          <span className="font-semibold">Home</span>
+          <span className="font-semibold">todos</span>
           <Link
             to="/account"
             aria-label="Account"
