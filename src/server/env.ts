@@ -150,6 +150,11 @@ export const env = {
       )
       return match ? knownPerson(match[0]) : null
     },
+    /** The address a person signs in with, if the list has one. */
+    emailFor(personId: string): string | null {
+      const match = _env.PEOPLE_EMAILS.find(([id]) => id === personId)
+      return match ? match[1] : null
+    },
     get devSignedInAs() {
       return knownPerson(_env.DEV_SIGNED_IN_AS)
     },

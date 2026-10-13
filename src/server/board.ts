@@ -27,6 +27,8 @@ export interface Board {
   timeZone: string
   /** The person signed in on this device. */
   me: string
+  /** The address `me` signs in with, for the account menu. */
+  meEmail: string | null
   people: Array<Person>
   areas: Array<Area>
   /** Open items, plus those finished in the last week. */
@@ -76,6 +78,7 @@ export const getBoard = createServerFn({ method: 'GET' }).handler(
       now: now.stamp,
       timeZone: env.timeZone,
       me,
+      meEmail: env.auth.emailFor(me),
       people: env.people,
       areas,
       items,

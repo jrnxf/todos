@@ -15,7 +15,7 @@ import {
   ItemMedia,
   ItemTitle,
 } from '@/components/ui/item'
-import { authClient } from '@/lib/auth-client'
+import { useSignOut } from '@/lib/auth-client'
 import { useBoard } from '@/lib/queries'
 import { sendTestAlert } from '@/server/board'
 
@@ -47,15 +47,7 @@ function AccountScreen() {
     onError: () => toast.error('Could not send the test alert.'),
   })
 
-  const signOut = useMutation({
-    mutationFn: async () => {
-      const { error } = await authClient.signOut()
-      if (error) throw new Error(error.message)
-    },
-    // A full page load, so nothing of the list is left in memory.
-    onSuccess: () => window.location.assign('/signin'),
-    onError: () => toast.error('Could not sign out. Try again.'),
-  })
+  const signOut = useSignOut()
 
   return (
     <Column>

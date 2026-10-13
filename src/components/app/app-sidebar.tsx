@@ -1,7 +1,7 @@
 // The laptop's left sidebar: where you are, how much is in each place, the
-// areas in their colours, and the month at a glance. Built from shadcn's
-// stock sidebar (the "sidebar with a calendar" block). Phones never see it;
-// they have the tab bar.
+// areas in their colours, the month at a glance, and who is signed in. Built
+// from shadcn's stock sidebar (the "sidebar with a calendar" block). Phones
+// never see it; they have the tab bar.
 import { useState } from 'react'
 import { Link, useNavigate, useRouterState } from '@tanstack/react-router'
 import {
@@ -66,7 +66,7 @@ import {
 import { AreaDot, AreaForm } from './area'
 import { DAY_DOT } from './calendar-views'
 import { useAdd } from './capture'
-import { PersonAvatar } from './todo-row'
+import { NavUser } from './nav-user'
 import type { Area } from '@/db/schema'
 import type { ItemFields } from '@/server/board'
 
@@ -105,16 +105,6 @@ export function AppSidebar({ addPreset }: { addPreset?: Partial<ItemFields> }) {
             <CheckIcon className="size-3.5" strokeWidth={3} />
           </span>
           <span className="font-semibold">todos</span>
-          <Link
-            to="/account"
-            aria-label="Account"
-            className="ml-auto rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-          >
-            <PersonAvatar
-              person={board.people.find((p) => p.id === board.me)}
-              size="sm"
-            />
-          </Link>
         </div>
         <SidebarMenu>
           <SidebarMenuItem>
@@ -287,6 +277,8 @@ export function AppSidebar({ addPreset }: { addPreset?: Partial<ItemFields> }) {
           }}
           className="bg-transparent [--cell-size:2.1rem]"
         />
+        <SidebarSeparator className="mx-0" />
+        <NavUser />
       </SidebarFooter>
 
       <Dialog

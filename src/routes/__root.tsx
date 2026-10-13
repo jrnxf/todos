@@ -4,6 +4,7 @@ import {
   createRootRouteWithContext,
 } from '@tanstack/react-router'
 import { Toaster } from '@/components/ui/sonner'
+import { themeBootScript } from '@/lib/theme'
 
 import appCss from '../styles.css?url'
 
@@ -25,16 +26,6 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       { name: 'mobile-web-app-capable', content: 'yes' },
       { name: 'apple-mobile-web-app-capable', content: 'yes' },
       { name: 'apple-mobile-web-app-title', content: 'todos' },
-      {
-        name: 'theme-color',
-        content: '#ffffff',
-        media: '(prefers-color-scheme: light)',
-      },
-      {
-        name: 'theme-color',
-        content: '#0a0a0a',
-        media: '(prefers-color-scheme: dark)',
-      },
     ],
     links: [
       { rel: 'stylesheet', href: appCss },
@@ -58,13 +49,10 @@ export const Route = createRootRouteWithContext<RouterContext>()({
   shellComponent: RootDocument,
 })
 
-// The theme follows the device. Set before first paint so a dark phone never
-// flashes white, and kept in step if the device switches while the app is open.
-const themeBootScript = `(function(){var m=window.matchMedia('(prefers-color-scheme: dark)');function a(){document.documentElement.classList.toggle('dark',m.matches)}a();m.addEventListener('change',a)})()`
-
 function RootDocument({ children }: { children: React.ReactNode }) {
   return (
-    // The class on <html> is owned by the script above, not by React.
+    // The class on <html> is owned by the boot script (src/lib/theme.ts),
+    // not by React.
     <html lang="en" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
