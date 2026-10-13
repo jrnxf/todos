@@ -8,6 +8,7 @@ import { channelFor, notify } from '@/alerts/notify'
 import { getDb, schema } from '@/db/client'
 import { AREA_COLORS } from '@/db/schema'
 import { addDays, localNow } from '@/lib/dates'
+import { withPictures } from '@/lib/people'
 import { JEV_USE } from '@/lib/read'
 import { SIGNED_OUT } from '@/lib/signed-out'
 import { env } from './env'
@@ -16,8 +17,8 @@ import type { Channel } from '@/alerts/notify'
 import type { AlertConfig } from '@/alerts/rules'
 import type { Area, Todo } from '@/db/schema'
 import type { LocalDate, Stamp } from '@/lib/dates'
+import type { PersonView } from '@/lib/people'
 import type { JevRead } from '@/lib/read'
-import type { Person } from './env'
 
 /** How long a finished to-do stays on the board. */
 const DONE_VISIBLE_DAYS = 7
@@ -32,7 +33,8 @@ export interface Board {
   me: string
   /** The address `me` signs in with, for the account menu. */
   meEmail: string | null
-  people: Array<Person>
+  /** Everyone in the household, with the Google picture when there is one. */
+  people: Array<PersonView>
   areas: Array<Area>
   /** Open items, plus those finished in the last week. */
   items: Array<Todo>
@@ -62,7 +64,7 @@ export const getBoard = createServerFn({ method: 'GET' }).handler(
       Date.now() - DONE_VISIBLE_DAYS * 86_400_000,
     ).toISOString()
 
-    const [areas, items] = await Promise.all([
+    const [areas, items, accounts] = await Promise.all([
       db.select().from(schema.areas),
       db
         .select()
@@ -76,6 +78,12 @@ export const getBoard = createServerFn({ method: 'GET' }).handler(
             ),
           ),
         ),
+      db
+        .select({
+          email: schema.authUser.email,
+          image: schema.authUser.image,
+        })
+        .from(schema.authUser),
     ])
 
     return {
@@ -84,7 +92,7 @@ export const getBoard = createServerFn({ method: 'GET' }).handler(
       timeZone: env.timeZone,
       me,
       meEmail: env.auth.emailFor(me),
-      people: env.people,
+      people: withPictures(env.people, accounts, env.auth.emailFor),
       areas,
       items,
       alertConfig: { ...env.alerts },

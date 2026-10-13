@@ -36,6 +36,9 @@ function build() {
         clientSecret: google.clientSecret,
         // A phone with two Google accounts gets asked which one.
         prompt: 'select_account',
+        // Google's picture links can expire, and a person can change their
+        // picture. Without this the link is saved once, at the first sign-in.
+        overrideUserInfoOnSignIn: true,
       },
     },
     user: {

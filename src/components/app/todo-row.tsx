@@ -1,7 +1,7 @@
 import { Link, useRouterState } from '@tanstack/react-router'
 import { cn } from 'cn'
 import { CalendarIcon, ClockIcon, FlagIcon } from 'lucide-react'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
@@ -17,7 +17,7 @@ import { useBoard, useSetDone } from '@/lib/queries'
 import { AreaDot } from './area'
 import { Row, Rows } from './rows'
 import type { Todo } from '@/db/schema'
-import type { Person } from '@/server/env'
+import type { PersonView } from '@/lib/people'
 import type { DueTone } from '@/lib/board'
 
 const TONE: Record<DueTone, string> = {
@@ -30,12 +30,17 @@ export function PersonAvatar({
   person,
   size,
 }: {
-  person: Person | undefined
+  person: PersonView | undefined
   size?: 'sm' | 'default' | 'lg'
 }) {
   if (!person) return null
   return (
     <Avatar size={size} aria-label={person.name}>
+      {/* The initial is drawn until the picture has loaded, and stays when
+          there is none or it fails: the avatar never changes size. */}
+      {person.image && (
+        <AvatarImage src={person.image} alt="" referrerPolicy="no-referrer" />
+      )}
       <AvatarFallback className="font-medium text-foreground">
         {person.initial}
       </AvatarFallback>
