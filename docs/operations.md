@@ -113,14 +113,28 @@ instead of sent.
    Pushover app, turn on Critical Alerts for high priority if a must-not-miss
    to-do should sound through silent.
 
-## Area guesses (optional)
+## Reading titles with Jev (optional)
 
-When a new to-do's title does not say which area it belongs in, the add bar
-can ask [Jev](https://docs.typesafe.ai), TypeSafe AI's decision model, to pick
-one of your areas. It fills the area only when the answer is at least 80%
-sure and arrives within a second and a half; otherwise the area stays empty,
-as it does when the service is down or the phone is offline. A guess shows
-under the title and one tap takes it back.
+The add bar fills its buttons from what is typed: "Sam: dentist fri 5pm !" is
+Sam's, on Friday at five, and must not be missed. On its own it does that
+with rules in the page, which read only what is said outright.
+
+Given a key, it first asks [Jev](https://docs.typesafe.ai), TypeSafe AI's
+decision model, once typing pauses. One request asks for all of it: the day,
+the time, whose it is, the area, the heads-up, the flag, and for each word of
+the title whether it is part of the task. Jev can only pick from options it
+is handed or answer yes or no, so it never writes a date or a title of its
+own.
+
+- A button is filled from Jev's answer only when Jev is at least 80% sure.
+  A word leaves the title only when Jev is at least 90% sure it is not part
+  of the task, and only for a button it filled.
+- Anything short of that falls back to the rules, field by field: an unsure
+  answer, a "none", a reply slower than a second and a half, an error, or no
+  connection. So does a date more than 120 days out, and a time that is not
+  on a quarter hour.
+- What Jev filled shows under the title as "Guessed", and one tap takes it
+  back. A button you set yourself, or took back, is never filled again.
 
 It is off until you give the Worker a key:
 
@@ -128,11 +142,35 @@ It is off until you give the Worker a key:
 bunx wrangler secret put TYPESAFE_API_KEY
 ```
 
-With the key set, each new to-do's title, the first names in `PEOPLE` and
-your area names are sent to TypeSafe AI, a company outside the household.
-Nothing else is, and nothing is sent for a to-do whose area you said or
-picked. Delete the secret (`bunx wrangler secret delete TYPESAFE_API_KEY`) to
-turn it off again.
+With the key set, this is sent to TypeSafe AI, a company outside the
+household, each time typing pauses on a new to-do: the title as typed so far,
+the first names in `PEOPLE` and which of them is typing, your area names, and
+today's date. Nothing else is: no notes, no other to-dos, no addresses.
+Nothing is sent for a to-do whose every button you set by hand, and a button
+you set by hand is not asked about. Delete the secret
+(`bunx wrangler secret delete TYPESAFE_API_KEY`) and deploy to turn it off
+again: nothing is sent, and the add bar reads titles with its rules alone, as
+it does without a key.
+
+Jev is charged by what is sent: roughly 5,000 tokens a request for a
+ten-word title, which at the listed $0.042 per million is about $0.0002 for
+each pause in typing.
+
+### Checking how well it reads
+
+Before trusting it with dates, measure it. `bun run eval:read` sends 30
+household sentences, each with the fill a person would expect, and writes the
+hit rate per field, every miss, the delay and the cost to
+`data/read-eval/report.md`, next to what the rules alone get.
+
+```bash
+bun run eval:read          # the plan and the estimated cost; sends nothing
+TYPESAFE_API_KEY=... bun run eval:read --yes
+```
+
+It stops before the request that would take it past its spending cap, five
+cents unless `--cap-usd` says otherwise. The sentences and the made-up
+household they are read for are in `scripts/read-eval.ts`.
 
 ## Each phone
 

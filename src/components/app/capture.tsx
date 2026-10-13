@@ -2,7 +2,9 @@
 // is set, then it shows its value. Sending clears the bar and leaves it open,
 // so several to-dos go in one after another. What is said in the title is
 // read out of it and fills the pills ("Sam: dentist fri 5pm !"); each reading
-// can be taken back with one tap.
+// can be taken back with one tap. With a TypeSafe key the server also asks
+// Jev once typing pauses (src/server/jev-read.ts); what it is sure of comes
+// first, and can be taken back the same way.
 //
 // On a phone the bar is a sheet from the top of the screen, where neither the
 // keyboard nor the browser's own bars can cover it, and a pill opens its
@@ -47,14 +49,14 @@ import { Input } from '@/components/ui/input'
 import { useAddItem, useBoard } from '@/lib/queries'
 import { readTitle } from '@/lib/read'
 import { shortWhenLabel } from '@/lib/when'
-import { suggestArea } from '@/server/board'
+import { readTitleWithJev } from '@/server/board'
 import { AreaDot } from './area'
 import { Picker, useIsDesktop } from './picker'
 import { AreaFields, HeadsUpFields, WhoFields } from './small-pickers'
 import { WhenFields } from './when-picker'
 import type { LucideIcon } from 'lucide-react'
 import type { AreaColor } from '@/db/schema'
-import type { ReadField } from '@/lib/read'
+import type { JevRead, ReadField } from '@/lib/read'
 import type { DateParser, When } from '@/lib/when'
 import type { ItemFields } from '@/server/board'
 
@@ -126,36 +128,51 @@ function keepCursor(event: React.MouseEvent) {
     event.preventDefault()
 }
 
-// How long typing has to pause before an area guess is asked for.
-const GUESS_AFTER_MS = 600
+// How long typing has to pause before Jev is asked.
+const ASK_AFTER_MS = 600
 
 /**
- * The area the server guesses for `title` once typing has paused; null until
- * it answers and whenever it has no guess. Asks nothing unless `wanted`.
+ * Jev's reading of `title`, asked for once typing has paused; null until it
+ * answers and whenever there is no answer. Nothing is asked without `ask`,
+ * the fields still open. While more is typed onto a title that was answered,
+ * that answer holds, so a filled pill does not blink out on every key.
  */
-function useAreaGuess(title: string, wanted: boolean): number | null {
-  const [guess, setGuess] = useState<{
+function useJevRead(
+  title: string,
+  ask: Array<ReadField>,
+  enabled: boolean,
+): JevRead | null {
+  const [answer, setAnswer] = useState<{
     title: string
-    areaId: number | null
+    read: JevRead | null
   } | null>(null)
+  const wanted = enabled && ask.length > 0 && title.length >= 3
+  // Which fields are open is read when the pause ends. A pill set by hand
+  // meanwhile is not a reason to ask again: its answer is simply not used.
+  const asking = useRef(ask)
   useEffect(() => {
-    if (!wanted || title.length < 3) return
+    asking.current = ask
+  })
+  useEffect(() => {
+    if (!wanted) return
     let live = true
     const timer = setTimeout(() => {
-      suggestArea({ data: { title } }).then(
-        (areaId) => {
-          if (live) setGuess({ title, areaId })
+      readTitleWithJev({ data: { title, ask: asking.current } }).then(
+        (read) => {
+          if (live) setAnswer({ title, read })
         },
-        // Offline or signed out: no guess, and nothing to say about it.
-        () => {},
+        // Offline or signed out: no answer, and nothing to say about it.
+        () => {
+          if (live) setAnswer({ title, read: null })
+        },
       )
-    }, GUESS_AFTER_MS)
+    }, ASK_AFTER_MS)
     return () => {
       live = false
       clearTimeout(timer)
     }
   }, [title, wanted])
-  return wanted && guess?.title === title ? guess.areaId : null
+  return wanted && answer && title.startsWith(answer.title) ? answer.read : null
 }
 
 export function AddProvider({ children }: { children: React.ReactNode }) {
@@ -330,17 +347,30 @@ function CaptureBar({
   const [takenBack, setTakenBack] = useState<
     Partial<Record<ReadField, string>>
   >({})
-  const [noGuess, setNoGuess] = useState(false)
+  // A field whose reading was taken back is not Jev's to fill either.
+  const [notJevs, setNotJevs] = useState<ReadonlySet<ReadField>>(new Set())
   const [added, setAdded] = useState<string | null>(null)
   const [open, setOpen] = useState<Open>(null)
 
+  const typed = fields.title.trim()
+  // Asked about only what is still open. With every pill set by hand or
+  // taken back there is nothing to ask, and nothing is sent.
+  const jev = useJevRead(
+    typed,
+    READ_FIELDS.map((one) => one.field).filter(
+      (field) => !byHand.has(field) && !notJevs.has(field),
+    ),
+    board.jev,
+  )
   const readWith = (skip: ReadonlySet<ReadField>) =>
-    readTitle(parser, fields.title, {
+    readTitle(parser, typed, {
       today: board.today,
       me: board.me,
       people: board.people,
       areas: board.areas,
       skip,
+      jev,
+      notJevs,
     })
   const first = readWith(byHand)
   const refused = READ_FIELDS.map((one) => one.field).filter(
@@ -351,17 +381,8 @@ function CaptureBar({
   const read =
     refused.length > 0 ? readWith(new Set([...byHand, ...refused])) : first
   // What will be sent: the pills set by hand, under what the title says.
-  const said: ItemFields = { ...fields, ...read.fields }
+  const now: ItemFields = { ...fields, ...read.fields }
   const title = read.title
-  // With no area said or set, one may be guessed (src/server/area-guess.ts).
-  const guessed = useAreaGuess(
-    title,
-    board.areaGuess && said.areaId === null && !byHand.has('area') && !noGuess,
-  )
-  const guessedArea = board.areas.find((one) => one.id === guessed)
-  const now: ItemFields = guessedArea
-    ? { ...said, areaId: guessedArea.id }
-    : said
   const when: When = { dueDate: now.dueDate, dueTime: now.dueTime }
   const area = board.areas.find((one) => one.id === now.areaId)
 
@@ -462,6 +483,20 @@ function CaptureBar({
     const phrase = read.phrases[one.field]?.replace(/^[\s,;]+/, '')
     return phrase ? [{ ...one, phrase }] : []
   })
+  // And what Jev filled in: the words it took for it, or else the value.
+  const guessedValue: Record<ReadField, string> = {
+    when: shortWhenLabel(when, board.today),
+    area: area?.name ?? '',
+    who: board.people.find((p) => p.id === now.assignee)?.name ?? '',
+    headsUp: headsUpPill(now.headsUpDays) || '1d',
+    flag: 'Must not miss',
+  }
+  const wasGuessed = READ_FIELDS.flatMap((one) => {
+    const words = read.guessed[one.field]
+    return words === undefined
+      ? []
+      : [{ ...one, words, value: guessedValue[one.field] }]
+  })
 
   const submit = () => {
     if (!title) return
@@ -470,7 +505,7 @@ function CaptureBar({
     setFields(blank)
     setByHand(new Set())
     setTakenBack({})
-    setNoGuess(false)
+    setNotJevs(new Set())
     titleRef.current?.focus()
   }
 
@@ -515,7 +550,7 @@ function CaptureBar({
         className="h-9 border-0 bg-transparent px-0 text-base font-medium shadow-none focus-visible:ring-0 md:text-base dark:bg-transparent"
       />
 
-      {(wasRead.length > 0 || guessedArea) && (
+      {(wasRead.length > 0 || wasGuessed.length > 0) && (
         <div className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
           {wasRead.length > 0 && 'Read from the title'}
           {wasRead.map(({ field, icon: Icon, name, phrase }) => (
@@ -525,31 +560,36 @@ function CaptureBar({
               size={desktop ? 'xs' : 'sm'}
               className="max-w-full rounded-full font-normal"
               aria-label={`"${phrase}" is not ${name}`}
-              onClick={() =>
+              onClick={() => {
                 setTakenBack((before) => ({
                   ...before,
                   [field]: read.phrases[field],
                 }))
-              }
+                setNotJevs((before) => new Set([...before, field]))
+              }}
             >
               <Icon data-icon="inline-start" />
               <span className="truncate">{phrase}</span>
               <XIcon data-icon="inline-end" />
             </Button>
           ))}
-          {guessedArea && (
+          {wasGuessed.length > 0 && 'Guessed'}
+          {wasGuessed.map(({ field, name, words, value }) => (
             <Button
+              key={field}
               variant="outline"
               size={desktop ? 'xs' : 'sm'}
               className="max-w-full rounded-full font-normal"
-              aria-label={`${guessedArea.name} is a guess, and not the area`}
-              onClick={() => setNoGuess(true)}
+              aria-label={`${words ? `"${words}"` : value} is a guess, and not ${name}`}
+              // Taken back, the pill is the person's: empty until they set
+              // it, with its words back in the title.
+              onClick={() => setByHand((before) => new Set([...before, field]))}
             >
               <SparklesIcon data-icon="inline-start" />
-              <span className="truncate">Guessed {guessedArea.name}</span>
+              <span className="truncate">{words || value}</span>
               <XIcon data-icon="inline-end" />
             </Button>
-          )}
+          ))}
         </div>
       )}
 

@@ -29,9 +29,10 @@ PUSHOVER_APP_TOKEN=
 # id:userkey pairs, ids as in PEOPLE.
 PUSHOVER_USER_KEYS=
 
-# Optional. A TypeSafe AI key: the add bar then asks their Jev model which
-# area a new to-do belongs in when the title does not say. That sends them
-# the title, the first names in PEOPLE and the area names. Empty: off.
+# Optional. A TypeSafe AI key: the add bar then asks their Jev model to read
+# a new to-do's title (the date, the person, the area, the heads-up, the
+# flag). That sends them the title, the first names in PEOPLE and the area
+# names. Empty: off, and the add bar reads titles with its own rules only.
 TYPESAFE_API_KEY=
 
 # In dev, links and Google's reply should point at the laptop, not the

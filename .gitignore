@@ -14,3 +14,6 @@ worker-configuration.d.ts
 
 # Design pages for review; they can hold real names and real to-dos.
 .lavish
+
+# Reports from `bun run eval:read`.
+data/

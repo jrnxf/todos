@@ -6,6 +6,10 @@
 // A guess that fills a button wrongly is worse than a button left empty, so
 // nothing here guesses: each thing is read only where it is said outright,
 // and whatever was read can be taken back (`skip`).
+//
+// With a TypeSafe key the server also asks Jev (src/server/jev-read.ts). What
+// Jev is sure of comes first; these rules read the rest, and all of it when
+// there is no answer.
 import { HEADS_UP_CHOICES } from './board'
 import { parseWhen } from './when'
 import type { LocalDate, LocalTime } from './dates'
@@ -21,6 +25,35 @@ export interface ReadContext {
   areas: Array<{ id: number; name: string }>
   /** Fields to leave alone: set by hand, or read and then taken back. */
   skip?: ReadonlySet<ReadField>
+  /** What Jev was sure of for this very text, if it was asked and answered. */
+  jev?: JevRead | null
+  /** Fields Jev may not fill, though the rules still read them. */
+  notJevs?: ReadonlySet<ReadField>
+}
+
+/**
+ * Jev's reading of a title: only the fields it was sure of. A field that is
+ * absent is one the rules read instead.
+ */
+export interface JevRead {
+  when?: { dueDate: LocalDate; dueTime: LocalTime | null }
+  who?: string
+  area?: number
+  headsUp?: Array<number>
+  flag?: true
+  /**
+   * The words that only say one of those fields and so leave the title, by
+   * their place in `titleWords`. Never a word of the task itself.
+   */
+  drops: Array<{ index: number; field: ReadField }>
+}
+
+/** A title's words, in order: what Jev is asked about one by one. */
+export function titleWords(text: string): Array<{ text: string; at: number }> {
+  return [...text.matchAll(/\S+/g)].map((found) => ({
+    text: found[0],
+    at: found.index,
+  }))
 }
 
 export interface TitleRead {
@@ -37,6 +70,11 @@ export interface TitleRead {
   }
   /** The words each field was read from, as typed. */
   phrases: Partial<Record<ReadField, string>>
+  /**
+   * The fields Jev filled rather than the rules, each with the words that
+   * left the title for it; empty when none did.
+   */
+  guessed: Partial<Record<ReadField, string>>
 }
 
 const OFFERED = new Set(HEADS_UP_CHOICES.map((choice) => choice.days))
@@ -71,8 +109,9 @@ function tidy(text: string): string {
     .trim()
 }
 
-// Where a name means "this is theirs". A name alone does not: "Call Sam" and
-// "Sam's eye appointment" are about Sam, not Sam's to do.
+// Where a name means "this is theirs". A name in passing does not: "Call Sam"
+// and "Sam's eye appointment" are about Sam, not Sam's to do. A name that
+// opens the title does: "Sam visit the garden center".
 function whose(name: string): Array<RegExp> {
   const n = escaped(name)
   return [
@@ -84,6 +123,7 @@ function whose(name: string): Array<RegExp> {
     ),
     new RegExp(String.raw`^\s*(ask|tell|have|get|remind)\s+${n}\s+to\s+`, 'i'),
     new RegExp(String.raw`\s*[-–(]\s*${n}\)?\s*$`, 'i'),
+    new RegExp(String.raw`^\s*${n}\s+`, 'i'),
   ]
 }
 
@@ -92,11 +132,60 @@ export function readTitle(
   text: string,
   context: ReadContext,
 ): TitleRead {
-  const unread: TitleRead = { title: text.trim(), fields: {}, phrases: {} }
+  const unread: TitleRead = {
+    title: text.trim(),
+    fields: {},
+    phrases: {},
+    guessed: {},
+  }
   const fields: TitleRead['fields'] = {}
   const phrases: TitleRead['phrases'] = {}
-  const reads = (field: ReadField) => !context.skip?.has(field)
+  const guessed: TitleRead['guessed'] = {}
+  const jev = context.jev
   let rest = text
+
+  // Jev first: what it was sure of fills the field, and the words that only
+  // said it leave the title. A field set by hand or taken back is not its to
+  // fill.
+  if (jev) {
+    const open = (field: ReadField) =>
+      !context.skip?.has(field) && !context.notJevs?.has(field)
+    if (jev.when && open('when')) {
+      fields.dueDate = jev.when.dueDate
+      fields.dueTime = jev.when.dueTime
+      guessed.when = ''
+    }
+    if (jev.who !== undefined && open('who')) {
+      fields.assignee = jev.who
+      guessed.who = ''
+    }
+    if (jev.area !== undefined && open('area')) {
+      fields.areaId = jev.area
+      guessed.area = ''
+    }
+    if (jev.headsUp && open('headsUp')) {
+      fields.headsUpDays = jev.headsUp
+      guessed.headsUp = ''
+    }
+    if (jev.flag && open('flag')) {
+      fields.mustNotMiss = true
+      guessed.flag = ''
+    }
+    const words = titleWords(text)
+    const drops = jev.drops.filter(
+      (drop) => guessed[drop.field] !== undefined && drop.index < words.length,
+    )
+    const gone = new Set(drops.map((drop) => drop.index))
+    for (const drop of drops)
+      guessed[drop.field] =
+        `${guessed[drop.field]} ${words[drop.index].text}`.trim()
+    rest = words
+      .filter((_word, index) => !gone.has(index))
+      .map((word) => word.text)
+      .join(' ')
+  }
+  const reads = (field: ReadField) =>
+    !context.skip?.has(field) && guessed[field] === undefined
 
   /** Takes the first match out of what is left and notes it against `field`. */
   const take = (field: ReadField, pattern: RegExp): RegExpExecArray | null => {
@@ -162,7 +251,9 @@ export function readTitle(
   }
   const title = tidy(when ? when.title : rest)
   // Nothing but things to read is not a to-do: "Tomorrow" stays "Tomorrow".
-  if (!title) return unread
+  // Jev's reading is the first to go: the rules alone may leave a title.
+  if (!title)
+    return jev ? readTitle(parser, text, { ...context, jev: null }) : unread
 
   // Or an area named in passing, which stays in the title: "Flu shots for
   // the kids" is in Kids.
@@ -175,5 +266,5 @@ export function readTitle(
     }
   }
 
-  return { title, fields, phrases }
+  return { title, fields, phrases, guessed }
 }

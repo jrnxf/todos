@@ -62,26 +62,27 @@ database, make a Google sign-in client, set the settings, deploy.
 
 ## Where things live
 
-| Path                       | What                                                            |
-| -------------------------- | --------------------------------------------------------------- |
-| `wrangler.jsonc`           | The Worker: database binding, cron, and the shared settings     |
-| `src/server.ts`            | The Worker entry: requests, plus the cron that calls the tick   |
-| `src/start.ts`             | The front door: nothing but sign-in is served to a stranger     |
-| `src/server/auth.ts`       | Better Auth: Google sign-in, sessions, the `auth_` tables       |
-| `src/server/identity.ts`   | "Who is asking": the session's Google account, looked up        |
-| `src/server/env.ts`        | Every setting, validated at boot                                |
-| `src/server/board.ts`      | Every read and write the screens make                           |
-| `src/server/area-guess.ts` | The optional area guess for a new to-do (TypeSafe's Jev)        |
-| `src/db/schema.ts`         | The tables. Migrations under `drizzle/` are applied by wrangler |
-| `src/lib/dates.ts`         | Dates as household-local strings, never UTC instants            |
-| `src/lib/when.ts`          | Date shortcuts, and reading a date out of a title. With tests   |
-| `src/lib/read.ts`          | Reading who, area, heads-up and flag out of a title. With tests |
-| `src/alerts/rules.ts`      | Which alerts exist and when. Pure, with tests                   |
-| `src/alerts/tick.ts`       | One scheduler pass: send what fell due since the last pass      |
-| `src/alerts/notify.ts`     | The one way an alert leaves the app (Pushover today)            |
-| `src/routes/`              | Today, Up next, List, Calendar, Done, Account, and sign-in      |
-| `src/components/app/`      | Capture bar, pickers, calendar views, sidebar, the to-do drawer |
-| `src/components/ui/`       | Stock shadcn components. Add more with `bunx shadcn add`        |
+| Path                     | What                                                            |
+| ------------------------ | --------------------------------------------------------------- |
+| `wrangler.jsonc`         | The Worker: database binding, cron, and the shared settings     |
+| `src/server.ts`          | The Worker entry: requests, plus the cron that calls the tick   |
+| `src/start.ts`           | The front door: nothing but sign-in is served to a stranger     |
+| `src/server/auth.ts`     | Better Auth: Google sign-in, sessions, the `auth_` tables       |
+| `src/server/identity.ts` | "Who is asking": the session's Google account, looked up        |
+| `src/server/env.ts`      | Every setting, validated at boot                                |
+| `src/server/board.ts`    | Every read and write the screens make                           |
+| `src/server/jev-read.ts` | The optional reading of a new to-do's title by TypeSafe's Jev   |
+| `src/db/schema.ts`       | The tables. Migrations under `drizzle/` are applied by wrangler |
+| `src/lib/dates.ts`       | Dates as household-local strings, never UTC instants            |
+| `src/lib/when.ts`        | Date shortcuts, and reading a date out of a title. With tests   |
+| `src/lib/read.ts`        | Reading who, area, heads-up and flag out of a title. With tests |
+| `scripts/read-eval.ts`   | `bun run eval:read`: scores Jev's reading on 30 sentences       |
+| `src/alerts/rules.ts`    | Which alerts exist and when. Pure, with tests                   |
+| `src/alerts/tick.ts`     | One scheduler pass: send what fell due since the last pass      |
+| `src/alerts/notify.ts`   | The one way an alert leaves the app (Pushover today)            |
+| `src/routes/`            | Today, Up next, List, Calendar, Done, Account, and sign-in      |
+| `src/components/app/`    | Capture bar, pickers, calendar views, sidebar, the to-do drawer |
+| `src/components/ui/`     | Stock shadcn components. Add more with `bunx shadcn add`        |
 
 ## Four seams, kept on purpose
 

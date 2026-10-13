@@ -86,10 +86,15 @@ const _env = createEnv({
     DEV_SIGNED_IN_AS: z.string().default(''),
 
     // Optional, a secret: a TypeSafe AI key. With it, the add bar asks their
-    // Jev model which area a new to-do belongs in when the title does not
-    // say (src/server/area-guess.ts), which sends them the title, the first
-    // names in PEOPLE and the area names. Without it nothing is sent.
+    // Jev model to read a new to-do's title (src/server/jev-read.ts), which
+    // sends them the title, the first names in PEOPLE and the area names.
+    // Without it nothing is sent.
     TYPESAFE_API_KEY: z.string().default(''),
+    // Where Jev is asked. Only ever changed to point a dev server at a
+    // stand-in, so that trying the add bar spends nothing.
+    TYPESAFE_API_URL: z
+      .string()
+      .default('https://api.typesafe.ai/v1/systemone'),
 
     // Optional dead-man switch: a URL fetched after every scheduler pass
     // that completes (healthchecks.io or the like). If the passes stop, the
@@ -165,8 +170,13 @@ export const env = {
       return knownPerson(_env.DEV_SIGNED_IN_AS)
     },
   },
-  get typesafeApiKey() {
-    return _env.TYPESAFE_API_KEY
+  typesafe: {
+    get apiKey() {
+      return _env.TYPESAFE_API_KEY
+    },
+    get url() {
+      return _env.TYPESAFE_API_URL
+    },
   },
   get heartbeatUrl() {
     return _env.HEARTBEAT_URL

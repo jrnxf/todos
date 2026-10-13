@@ -9,12 +9,13 @@ import { getDb, schema } from '@/db/client'
 import { AREA_COLORS } from '@/db/schema'
 import { addDays, localNow } from '@/lib/dates'
 import { SIGNED_OUT } from '@/lib/signed-out'
-import { guessArea } from './area-guess'
 import { env } from './env'
+import { READ_FIELDS, readWithJev } from './jev-read'
 import type { Channel } from '@/alerts/notify'
 import type { AlertConfig } from '@/alerts/rules'
 import type { Area, Todo } from '@/db/schema'
 import type { LocalDate, Stamp } from '@/lib/dates'
+import type { JevRead } from '@/lib/read'
 import type { Person } from './env'
 
 /** How long a finished to-do stays on the board. */
@@ -37,8 +38,8 @@ export interface Board {
   alertConfig: AlertConfig
   /** How alerts reach `me`: 'log' means none are really sent. */
   channel: Channel
-  /** Whether the add bar may ask for an area guess (TYPESAFE_API_KEY is set). */
-  areaGuess: boolean
+  /** Whether the add bar may ask Jev to read a title (TYPESAFE_API_KEY is set). */
+  jev: boolean
 }
 
 /**
@@ -87,7 +88,7 @@ export const getBoard = createServerFn({ method: 'GET' }).handler(
       items,
       alertConfig: { ...env.alerts },
       channel: channelFor(me),
-      areaGuess: env.typesafeApiKey !== '',
+      jev: env.typesafe.apiKey !== '',
     }
   },
 )
@@ -170,16 +171,27 @@ export const setDeleted = createServerFn({ method: 'POST' })
   })
 
 /**
- * The area a new to-do's title suggests, or null: not sure enough, switched
- * off, or the service could not be reached in time.
+ * What Jev is sure of in a new to-do's title, for the fields still open, or
+ * null: switched off, or the service could not be reached in time. The add
+ * bar reads the rest, or all of it, with its own rules.
  */
-export const suggestArea = createServerFn({ method: 'POST' })
-  .validator(z.object({ title: z.string().trim().min(1).max(200) }))
-  .handler(async ({ data }): Promise<number | null> => {
-    const apiKey = env.typesafeApiKey
+export const readTitleWithJev = createServerFn({ method: 'POST' })
+  .validator(
+    z.object({
+      title: z.string().trim().min(1).max(200),
+      ask: z.array(z.enum(READ_FIELDS)).min(1).max(READ_FIELDS.length),
+    }),
+  )
+  .handler(async ({ data, context }): Promise<JevRead | null> => {
+    const me = signedIn(context)
+    const apiKey = env.typesafe.apiKey
     if (!apiKey) return null
     const areas = await getDb().select().from(schema.areas)
-    return guessArea(data.title, { people: env.people, areas }, { apiKey })
+    return readWithJev(
+      data.title,
+      { today: localNow(env.timeZone).date, me, people: env.people, areas },
+      { apiKey, ask: data.ask, endpoint: env.typesafe.url },
+    )
   })
 
 const areaFields = z.object({
