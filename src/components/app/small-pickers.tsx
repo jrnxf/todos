@@ -49,7 +49,7 @@ export function WhoFields({
 }) {
   const { people } = useBoard()
   return (
-    <Sheet title="Who" hint="Either means whoever gets to it first.">
+    <Sheet title="Who" hint="Unassigned means whoever gets to it first.">
       <Chips
         value={[value ?? EITHER]}
         onValueChange={([picked]: Array<string | undefined>) => {
@@ -57,7 +57,7 @@ export function WhoFields({
           if (picked) onChange(picked === EITHER ? null : picked)
         }}
       >
-        <ToggleGroupItem value={EITHER}>Either</ToggleGroupItem>
+        <ToggleGroupItem value={EITHER}>Unassigned</ToggleGroupItem>
         {people.map((person) => (
           <ToggleGroupItem key={person.id} value={person.id}>
             {person.name}

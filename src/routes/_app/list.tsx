@@ -45,9 +45,9 @@ function ListScreen() {
     .filter(inArea)
     .sort((a, b) => (b.doneAt ?? '').localeCompare(a.doneAt ?? ''))
   const filters = [
-    { value: ALL, label: 'All' },
+    { value: ALL, label: 'Anyone' },
     ...board.people.map((person) => ({ value: person.id, label: person.name })),
-    { value: EITHER, label: 'Either' },
+    { value: EITHER, label: 'Unassigned' },
   ]
 
   return (

@@ -212,7 +212,7 @@ export function TodoDetailBody({ todo }: { todo: Todo }) {
           onOpenChange={toggle('who')}
           trigger={
             <ValueRow icon={UserIcon} label="Who">
-              <span>{nameOf(todo.assignee) ?? 'Either'}</span>
+              <span>{nameOf(todo.assignee) ?? 'Unassigned'}</span>
             </ValueRow>
           }
         >
