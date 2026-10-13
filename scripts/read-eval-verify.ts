@@ -7,7 +7,7 @@
 // value and date extraction). So here the rules read first and write the
 // title, and the model is asked only what takes judgment:
 //
-//   area    which area, from options that are named and described, when the
+//   tag    which tag, from options that are named and described, when the
 //           rules found none
 //   when    is the phrase the rules read a date from really when the to-do is
 //           due, or part of a name ("the Sunday paper")? A no takes the date
@@ -16,7 +16,7 @@
 //           written, the month, the day, the weekday), put together in code
 //
 // One request carries all of it, and three columns are read out of the one
-// reply: the area alone, the area and the veto, and those with the date in
+// reply: the tag alone, the tag and the veto, and those with the date in
 // parts. Nothing here sends anything, and nothing here is used by the app.
 import * as chrono from 'chrono-node'
 import { addDays, weekday } from '@/lib/dates'
@@ -35,7 +35,7 @@ export const JEV_VERSION = 'jev-1.13.0'
 
 const NONE = 'none'
 
-// What each area is for, by the names households give them. An area with
+// What each tag is for, by the names households give them. A tag with
 // another name is offered by its name alone. The examples are not, and must
 // never be, sentences of the test (scripts/read-eval-verify.test.ts).
 interface About {
@@ -111,7 +111,7 @@ const ABOUT: Partial<Record<string, About>> = {
     ],
   },
 }
-const NO_AREA: About = {
+const NO_TAG: About = {
   what: 'It does not clearly belong in one of the areas, or it could sit in two.',
   not_for: 'A to-do that plainly fits one area.',
   examples: ['Wrap the wedding gift', 'Charge the camera'],
@@ -143,8 +143,8 @@ const WEEKDAYS = [
 
 /** The questions a request can hold, by id. */
 export const QUESTIONS = {
-  area: 'area',
-  areaReversed: 'area_reversed',
+  tag: 'area',
+  tagReversed: 'area_reversed',
   when: 'when',
   mode: 'date_mode',
   month: 'date_month',
@@ -163,11 +163,11 @@ const PARTS: ReadonlyArray<string> = [
 ]
 
 /** The three readings made of one reply. */
-export type Column = 'area' | 'verify' | 'parts'
+export type Column = 'tag' | 'verify' | 'parts'
 /** Which questions each column reads; the rest of the request is not its. */
 export function columnAsks(column: Column, id: string): boolean {
   if (PARTS.includes(id)) return column === 'parts'
-  if (id === QUESTIONS.when) return column !== 'area'
+  if (id === QUESTIONS.when) return column !== 'tag'
   return true
 }
 
@@ -182,11 +182,11 @@ export interface Asked {
   } | null
 }
 
-const areaOption = (name: string) => name
-function areaOptions(household: Household): Array<[string, About | null]> {
-  return household.areas.map((area) => [
-    areaOption(area.name),
-    ABOUT[area.name.toLowerCase()] ?? null,
+const tagOption = (name: string) => name
+function tagOptions(household: Household): Array<[string, About | null]> {
+  return household.tags.map((tag) => [
+    tagOption(tag.name),
+    ABOUT[tag.name.toLowerCase()] ?? null,
   ])
 }
 
@@ -195,30 +195,30 @@ export function verifyRequest(title: string, household: Household): Asked {
   const rules = readTitle(chrono, title, household)
   const questions: Record<string, unknown> = {}
 
-  // The area, only where the rules found none: what they read is theirs.
+  // The tag, only where the rules found none: what they read is theirs.
   if (
-    rules.fields.areaId === undefined &&
-    gapsIn(chrono, title, household).includes('area') &&
-    household.areas.length > 0
+    rules.fields.tagId === undefined &&
+    gapsIn(chrono, title, household).includes('tag') &&
+    household.tags.length > 0
   ) {
     const instructions = {
       question: 'Which one area of this household list does `todo` belong in?',
       focus: `Judge what the task is about, not words it happens to contain. Pick \`${NONE}\` unless one area plainly fits.`,
     }
-    const options = areaOptions(household)
+    const options = tagOptions(household)
     // `none` first: Jev leans to the option that comes first, and an empty
     // button is the safe answer.
-    questions[QUESTIONS.area] = {
+    questions[QUESTIONS.tag] = {
       type: 'choice',
       instructions,
-      criteria: Object.fromEntries([[NONE, NO_AREA], ...options]),
+      criteria: Object.fromEntries([[NONE, NO_TAG], ...options]),
     }
     // And once more the other way round. The two must agree: it is the
     // check TypeSafe gives for that lean.
-    questions[QUESTIONS.areaReversed] = {
+    questions[QUESTIONS.tagReversed] = {
       type: 'choice',
       instructions,
-      criteria: Object.fromEntries([...options.reverse(), [NONE, NO_AREA]]),
+      criteria: Object.fromEntries([...options.reverse(), [NONE, NO_TAG]]),
     }
   }
 
@@ -320,18 +320,18 @@ export type Answers = Partial<Record<string, Answer>>
 
 /** How sure an answer has to be before a column acts on it. */
 export interface Cutoffs {
-  /** The area fills at this probability or more, both ways round. */
-  area: number
+  /** The tag fills at this probability or more, both ways round. */
+  tag: number
   /** The date is taken away at this probability of a yes or less. */
   veto: number
   /** A date in parts is used when its least sure part is this sure. */
   parts: number
 }
 /** Where a cut-off starts before any run has chosen one. */
-export const STARTING_CUTOFFS: Cutoffs = { area: 0.7, veto: 0.2, parts: 0.8 }
+export const STARTING_CUTOFFS: Cutoffs = { tag: 0.7, veto: 0.2, parts: 0.8 }
 /** The cut-offs tried, each from the most careful to the least. */
 export const GRIDS: Record<keyof Cutoffs, ReadonlyArray<number>> = {
-  area: [0.95, 0.9, 0.8, 0.7, 0.6, 0.5],
+  tag: [0.95, 0.9, 0.8, 0.7, 0.6, 0.5],
   veto: [0.05, 0.1, 0.2, 0.3, 0.4, 0.5],
   parts: [0.95, 0.9, 0.8, 0.7, 0.6, 0.5],
 }
@@ -352,22 +352,21 @@ export function confidence(answer: Answer | undefined): number {
   return options < 2 ? 0 : (top - 1 / options) / (1 - 1 / options)
 }
 
-/** The area both orders agree on, surely enough; else none. */
-export function areaFrom(
+/** The tag both orders agree on, surely enough; else none. */
+export function tagFrom(
   answers: Answers,
   household: Household,
   cutoff: number,
 ): number | undefined {
-  const one = picked(answers[QUESTIONS.area])
-  const other = picked(answers[QUESTIONS.areaReversed])
+  const one = picked(answers[QUESTIONS.tag])
+  const other = picked(answers[QUESTIONS.tagReversed])
   if (!one || !other || one.choice !== other.choice) return undefined
   const sure = Math.min(
     one.probabilities[one.choice] ?? 0,
     other.probabilities[other.choice] ?? 0,
   )
   if (sure < cutoff) return undefined
-  return household.areas.find((area) => areaOption(area.name) === one.choice)
-    ?.id
+  return household.tags.find((tag) => tagOption(tag.name) === one.choice)?.id
 }
 
 /** Whether the model says the phrase the rules read is not a deadline. */
@@ -439,7 +438,7 @@ export function dateFromParts(
 
 /**
  * What a column makes of a reply. The title and every field the rules read
- * stay the rules': the area is filled only where they left it empty, the
+ * stay the rules': the tag is filled only where they left it empty, the
  * veto can only take their date away (and puts its words back in the title),
  * and a date in parts is used only where they read none. With no answer it is
  * the rules' reading.
@@ -459,7 +458,7 @@ export function columnRead(
   const guessed = { ...rules.guessed }
 
   if (
-    column !== 'area' &&
+    column !== 'tag' &&
     rules.fields.dueDate !== undefined &&
     vetoed(answers, cutoffs.veto)
   ) {
@@ -475,11 +474,11 @@ export function columnRead(
     guessed.when = rules.phrases.when ?? ''
   }
 
-  if (fields.areaId === undefined) {
-    const area = areaFrom(answers, household, cutoffs.area)
-    if (area !== undefined) {
-      fields.areaId = area
-      guessed.area = ''
+  if (fields.tagId === undefined) {
+    const tag = tagFrom(answers, household, cutoffs.tag)
+    if (tag !== undefined) {
+      fields.tagId = tag
+      guessed.tag = ''
     }
   }
 

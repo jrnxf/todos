@@ -6,8 +6,8 @@ import {
   text,
 } from 'drizzle-orm/sqlite-core'
 
-/** The colours an area can have. Kept apart from the red and amber that mean late and soon. */
-export const AREA_COLORS = [
+/** The colours a tag can have. Kept apart from the red and amber that mean late and soon. */
+export const TAG_COLORS = [
   'blue',
   'teal',
   'green',
@@ -17,23 +17,25 @@ export const AREA_COLORS = [
   'violet',
   'gray',
 ] as const
-export type AreaColor = (typeof AREA_COLORS)[number]
+export type TagColor = (typeof TAG_COLORS)[number]
 
 // What a to-do is filed under: House, Kids, Paperwork, and whatever else the
 // household makes. A thing of its own so it can carry a colour and be renamed
-// in one place.
-export const areas = sqliteTable('areas', {
+// in one place. It was called an area, and the table and the column that
+// points at it keep that name in the database (drizzle/0001_areas.sql); this
+// file is the one place the two words meet.
+export const tags = sqliteTable('areas', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   name: text('name').notNull().unique(),
-  color: text('color').$type<AreaColor>().notNull(),
+  color: text('color').$type<TagColor>().notNull(),
 })
 
 export const items = sqliteTable('items', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   title: text('title').notNull(),
   notes: text('notes').notNull().default(''),
-  // null is "no area". Deleting an area leaves its to-dos with none.
-  areaId: integer('area_id').references(() => areas.id, {
+  // null is "no tag". Deleting a tag leaves its to-dos with none.
+  tagId: integer('area_id').references(() => tags.id, {
     onDelete: 'set null',
   }),
   // A person's id from the PEOPLE setting (who lives here is configuration,
@@ -154,4 +156,4 @@ export const authVerification = sqliteTable(
 )
 
 export type Todo = typeof items.$inferSelect
-export type Area = typeof areas.$inferSelect
+export type Tag = typeof tags.$inferSelect

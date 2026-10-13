@@ -27,7 +27,7 @@ export const HOUSEHOLD = {
     { id: 'michelle', name: 'Michelle' },
     { id: 'sam', name: 'Sam' },
   ],
-  areas: ['House', 'Yard', 'Kids', 'Paperwork', 'Car', 'Health', 'Pets'].map(
+  tags: ['House', 'Yard', 'Kids', 'Paperwork', 'Car', 'Health', 'Pets'].map(
     (name, index) => ({ id: index + 1, name }),
   ),
 }
@@ -37,8 +37,8 @@ export interface Expected {
   date?: string
   time?: string
   who?: string
-  /** An area's name, null for none, or left out where two would be right. */
-  area?: string | null
+  /** A tag's name, null for none, or left out where two would be right. */
+  tag?: string | null
   /** Left out: nothing said, the default stays. */
   headsUp?: Array<number>
   flag?: true
@@ -54,13 +54,13 @@ export const FIRST_CASES: Array<Case> = [
       date: '2026-10-17',
       time: '21:00',
       who: 'michelle',
-      area: 'Yard',
+      tag: 'Yard',
       flag: true,
     },
   ],
   [
     'Pay property tax by friday',
-    { title: 'Pay property tax', date: '2026-10-16', area: 'Paperwork' },
+    { title: 'Pay property tax', date: '2026-10-16', tag: 'Paperwork' },
   ],
   [
     'Sam: take the car in for an oil change tomorrow at 8am',
@@ -69,7 +69,7 @@ export const FIRST_CASES: Array<Case> = [
       date: '2026-10-14',
       time: '08:00',
       who: 'sam',
-      area: 'Car',
+      tag: 'Car',
     },
   ],
   [
@@ -85,7 +85,7 @@ export const FIRST_CASES: Array<Case> = [
     {
       title: 'renew my passport',
       who: 'sam',
-      area: 'Paperwork',
+      tag: 'Paperwork',
       headsUp: [14],
     },
   ],
@@ -95,16 +95,16 @@ export const FIRST_CASES: Array<Case> = [
       title: "pick up the dog's medicine",
       date: '2026-10-13',
       who: 'michelle',
-      area: 'Pets',
+      tag: 'Pets',
     },
   ],
   [
     'Mow the lawn sunday',
-    { title: 'Mow the lawn', date: '2026-10-18', area: 'Yard' },
+    { title: 'Mow the lawn', date: '2026-10-18', tag: 'Yard' },
   ],
   [
     'Buy Michelle a birthday present',
-    { title: 'Buy Michelle a birthday present', area: null },
+    { title: 'Buy Michelle a birthday present', tag: null },
   ],
   [
     "Michelle's dentist appointment thursday 2:15pm",
@@ -112,19 +112,19 @@ export const FIRST_CASES: Array<Case> = [
       title: "Michelle's dentist appointment",
       date: '2026-10-15',
       time: '14:15',
-      area: 'Health',
+      tag: 'Health',
     },
   ],
   [
     'Clean the gutters on october 24',
-    { title: 'Clean the gutters', date: '2026-10-24', area: 'House' },
+    { title: 'Clean the gutters', date: '2026-10-24', tag: 'House' },
   ],
   [
     'Sign the permission slip for the field trip tomorrow !!',
     {
       title: 'Sign the permission slip for the field trip',
       date: '2026-10-14',
-      area: 'Kids',
+      tag: 'Kids',
       flag: true,
     },
   ],
@@ -133,7 +133,7 @@ export const FIRST_CASES: Array<Case> = [
     {
       title: 'Renew car registration',
       date: '2026-10-30',
-      area: 'Car',
+      tag: 'Car',
       flag: true,
     },
   ],
@@ -143,28 +143,28 @@ export const FIRST_CASES: Array<Case> = [
       title: 'Take the cat to the vet',
       date: '2026-10-14',
       time: '16:45',
-      area: 'Pets',
+      tag: 'Pets',
     },
   ],
   [
     'Replace smoke detector batteries',
-    { title: 'Replace smoke detector batteries', area: 'House' },
+    { title: 'Replace smoke detector batteries', tag: 'House' },
   ],
   [
     'Michelle to call the plumber about the kitchen leak',
     {
       title: 'call the plumber about the kitchen leak',
       who: 'michelle',
-      area: 'House',
+      tag: 'House',
     },
   ],
   [
     'Submit FSA receipts, no reminder',
-    { title: 'Submit FSA receipts', area: 'Paperwork', headsUp: [] },
+    { title: 'Submit FSA receipts', tag: 'Paperwork', headsUp: [] },
   ],
   [
     'Pick up March of the Penguins from the library',
-    { title: 'Pick up March of the Penguins from the library', area: null },
+    { title: 'Pick up March of the Penguins from the library', tag: null },
   ],
   [
     'Take 2 weeks of recycling to the depot',
@@ -176,7 +176,7 @@ export const FIRST_CASES: Array<Case> = [
       title: 'Schedule furnace service',
       date: '2026-11-05',
       time: '10:00',
-      area: 'House',
+      tag: 'House',
       headsUp: [7],
     },
   ],
@@ -190,34 +190,34 @@ export const FIRST_CASES: Array<Case> = [
   ],
   [
     'Order new tires for the car',
-    { title: 'Order new tires for the car', area: 'Car' },
+    { title: 'Order new tires for the car', tag: 'Car' },
   ],
   [
     'Wish grandma a happy birthday!',
-    { title: 'Wish grandma a happy birthday!', area: null },
+    { title: 'Wish grandma a happy birthday!', tag: null },
   ],
   [
     'Call Michelle about dinner',
-    { title: 'Call Michelle about dinner', area: null },
+    { title: 'Call Michelle about dinner', tag: null },
   ],
   [
     'Refill my allergy prescription today',
     {
       title: 'Refill my allergy prescription',
       date: '2026-10-13',
-      area: 'Health',
+      tag: 'Health',
     },
   ],
   [
     'Rake the leaves in 3 days',
-    { title: 'Rake the leaves', date: '2026-10-16', area: 'Yard' },
+    { title: 'Rake the leaves', date: '2026-10-16', tag: 'Yard' },
   ],
   [
     'Register the kids for soccer by tuesday must not miss',
     {
       title: 'Register the kids for soccer',
       date: '2026-10-20',
-      area: 'Kids',
+      tag: 'Kids',
       flag: true,
     },
   ],
@@ -226,14 +226,14 @@ export const FIRST_CASES: Array<Case> = [
     {
       title: 'File the insurance claim',
       who: 'michelle',
-      area: 'Paperwork',
+      tag: 'Paperwork',
     },
   ],
   [
     'Fix the light on the 2nd floor',
-    { title: 'Fix the light on the 2nd floor', area: 'House' },
+    { title: 'Fix the light on the 2nd floor', tag: 'House' },
   ],
-  ['Buy dog food', { title: 'Buy dog food', area: 'Pets' }],
+  ['Buy dog food', { title: 'Buy dog food', tag: 'Pets' }],
   [
     'Remind me to book the eye exam for dec 3 at 11:15am',
     {
@@ -241,7 +241,7 @@ export const FIRST_CASES: Array<Case> = [
       date: '2026-12-03',
       time: '11:15',
       who: 'sam',
-      area: 'Health',
+      tag: 'Health',
     },
   ],
 ]
@@ -261,29 +261,29 @@ export const NEW_CASES: Array<Case> = [
       title: 'take out the trash',
       date: '2026-10-15',
       who: 'michelle',
-      area: 'House',
+      tag: 'House',
     },
   ],
-  ["Return Sam's Club order", { title: "Return Sam's Club order", area: null }],
+  ["Return Sam's Club order", { title: "Return Sam's Club order", tag: null }],
   [
     "Get Sam's suit dry cleaned before friday",
-    { title: "Get Sam's suit dry cleaned", date: '2026-10-16', area: null },
+    { title: "Get Sam's suit dry cleaned", date: '2026-10-16', tag: null },
   ],
   [
     "Plan Michelle's surprise party next week",
     {
       title: "Plan Michelle's surprise party",
       date: '2026-10-19',
-      area: null,
+      tag: null,
     },
   ],
   [
     "Thank Michelle's mom for the casserole",
-    { title: "Thank Michelle's mom for the casserole", area: null },
+    { title: "Thank Michelle's mom for the casserole", tag: null },
   ],
   [
     'sam needs to call the school about pickup',
-    { title: 'call the school about pickup', who: 'sam', area: 'Kids' },
+    { title: 'call the school about pickup', who: 'sam', tag: 'Kids' },
   ],
   [
     'Remind Michelle to sign the tax forms before the 1st',
@@ -291,7 +291,7 @@ export const NEW_CASES: Array<Case> = [
       title: 'sign the tax forms',
       date: '2026-11-01',
       who: 'michelle',
-      area: 'Paperwork',
+      tag: 'Paperwork',
     },
   ],
   ['Water the plants - sam', { title: 'Water the plants', who: 'sam' }],
@@ -301,10 +301,10 @@ export const NEW_CASES: Array<Case> = [
       title: 'return the library books',
       date: '2026-10-15',
       who: 'michelle',
-      area: null,
+      tag: null,
     },
   ],
-  ['Buy a card for Sam', { title: 'Buy a card for Sam', area: null }],
+  ['Buy a card for Sam', { title: 'Buy a card for Sam', tag: null }],
   ['Text Samantha about carpool', { title: 'Text Samantha about carpool' }],
   [
     'thurs - michelle - get the oil changed',
@@ -312,7 +312,7 @@ export const NEW_CASES: Array<Case> = [
       title: 'get the oil changed',
       date: '2026-10-15',
       who: 'michelle',
-      area: 'Car',
+      tag: 'Car',
     },
   ],
   [
@@ -321,7 +321,7 @@ export const NEW_CASES: Array<Case> = [
       title: 'pick up the dry cleaning',
       date: '2026-10-17',
       who: 'michelle',
-      area: null,
+      tag: null,
     },
   ],
   [
@@ -330,7 +330,7 @@ export const NEW_CASES: Array<Case> = [
       title: 'Sam and Michelle anniversary dinner reservation',
       date: '2026-10-16',
       time: '19:30',
-      area: null,
+      tag: null,
     },
   ],
   [
@@ -339,7 +339,7 @@ export const NEW_CASES: Array<Case> = [
       title: 'buy halloween candy',
       date: '2026-10-30',
       who: 'michelle',
-      area: null,
+      tag: null,
     },
   ],
   [
@@ -348,7 +348,7 @@ export const NEW_CASES: Array<Case> = [
       title: 'Pick Michelle up from the airport',
       date: '2026-10-18',
       time: '17:40',
-      area: null,
+      tag: null,
     },
   ],
   [
@@ -357,16 +357,16 @@ export const NEW_CASES: Array<Case> = [
       title: 'drop off the donation boxes',
       date: '2026-10-16',
       who: 'sam',
-      area: null,
+      tag: null,
     },
   ],
   [
     'Sam to mow before it rains',
-    { title: 'mow before it rains', who: 'sam', area: 'Yard' },
+    { title: 'mow before it rains', who: 'sam', tag: 'Yard' },
   ],
   [
     'Health: book a mammogram for michelle',
-    { title: 'book a mammogram for michelle', area: 'Health' },
+    { title: 'book a mammogram for michelle', tag: 'Health' },
   ],
 
   // Dates and times.
@@ -376,12 +376,12 @@ export const NEW_CASES: Array<Case> = [
       title: 'drop the car at the shop',
       date: '2026-10-14',
       time: '08:00',
-      area: 'Car',
+      tag: 'Car',
     },
   ],
   [
     'dentist at 9 on the 22nd',
-    { title: 'dentist', date: '2026-10-22', time: '09:00', area: 'Health' },
+    { title: 'dentist', date: '2026-10-22', time: '09:00', tag: 'Health' },
   ],
   [
     'Dinner at the Nguyens at 7 saturday',
@@ -393,7 +393,7 @@ export const NEW_CASES: Array<Case> = [
       title: 'pick up kids from practice',
       date: '2026-10-13',
       time: '15:00',
-      area: 'Kids',
+      tag: 'Kids',
     },
   ],
   [
@@ -402,12 +402,12 @@ export const NEW_CASES: Array<Case> = [
       title: 'Biscuit to the vet',
       date: '2026-10-19',
       time: '14:30',
-      area: 'Pets',
+      tag: 'Pets',
     },
   ],
   [
     'Take out the trash tuesday',
-    { title: 'Take out the trash', date: '2026-10-20', area: 'House' },
+    { title: 'Take out the trash', date: '2026-10-20', tag: 'House' },
   ],
   [
     'Cancel the gym membership by end of month',
@@ -419,7 +419,7 @@ export const NEW_CASES: Array<Case> = [
       title: 'take the dog to the groomer',
       date: '2026-10-14',
       time: '10:00',
-      area: 'Pets',
+      tag: 'Pets',
     },
   ],
   [
@@ -428,7 +428,7 @@ export const NEW_CASES: Array<Case> = [
       title: 'parent teacher conference',
       date: '2026-10-14',
       time: '18:00',
-      area: 'Kids',
+      tag: 'Kids',
     },
   ],
   [
@@ -437,24 +437,24 @@ export const NEW_CASES: Array<Case> = [
       title: 'Schedule the HVAC guy',
       date: '2026-10-15',
       time: '12:00',
-      area: 'House',
+      tag: 'House',
     },
   ],
   [
     'Check the sump pump in 2 weeks',
-    { title: 'Check the sump pump', date: '2026-10-27', area: 'House' },
+    { title: 'Check the sump pump', date: '2026-10-27', tag: 'House' },
   ],
   [
     'Flu shot Oct 20 9:15',
-    { title: 'Flu shot', date: '2026-10-20', time: '09:15', area: 'Health' },
+    { title: 'Flu shot', date: '2026-10-20', time: '09:15', tag: 'Health' },
   ],
   [
     'Put the winter tires on before november 15',
-    { title: 'Put the winter tires on', date: '2026-11-15', area: 'Car' },
+    { title: 'Put the winter tires on', date: '2026-11-15', tag: 'Car' },
   ],
   [
     'Read chapter 3 with the kids tonight',
-    { title: 'Read chapter 3 with the kids', date: '2026-10-13', area: 'Kids' },
+    { title: 'Read chapter 3 with the kids', date: '2026-10-13', tag: 'Kids' },
   ],
   [
     'Take the kids to the pumpkin patch saturday at 10am',
@@ -462,14 +462,14 @@ export const NEW_CASES: Array<Case> = [
       title: 'Take the kids to the pumpkin patch',
       date: '2026-10-17',
       time: '10:00',
-      area: 'Kids',
+      tag: 'Kids',
     },
   ],
 
   // Alerts, in several wordings.
   [
     'i should schedule a physical, remind me 3 days before',
-    { title: 'schedule a physical', who: 'sam', area: 'Health', headsUp: [3] },
+    { title: 'schedule a physical', who: 'sam', tag: 'Health', headsUp: [3] },
   ],
   [
     'Kids dentist checkup nov 3rd at 4pm heads up the day before',
@@ -485,7 +485,7 @@ export const NEW_CASES: Array<Case> = [
     {
       title: 'Pay the water bill',
       date: '2026-11-03',
-      area: 'Paperwork',
+      tag: 'Paperwork',
       headsUp: [],
     },
   ],
@@ -498,7 +498,7 @@ export const NEW_CASES: Array<Case> = [
     {
       title: 'Book the cabin for the ski trip',
       date: '2026-12-18',
-      area: null,
+      tag: null,
       headsUp: [7, 1],
     },
   ],
@@ -507,7 +507,7 @@ export const NEW_CASES: Array<Case> = [
     {
       title: 'Get the car inspected',
       date: '2026-11-05',
-      area: 'Car',
+      tag: 'Car',
       headsUp: [2],
     },
   ],
@@ -516,7 +516,7 @@ export const NEW_CASES: Array<Case> = [
     {
       title: 'Send the rent check',
       date: '2026-11-01',
-      area: 'Paperwork',
+      tag: 'Paperwork',
       headsUp: [],
     },
   ],
@@ -525,7 +525,7 @@ export const NEW_CASES: Array<Case> = [
     {
       title: 'Mail the wedding gift',
       date: '2026-10-29',
-      area: null,
+      tag: null,
       headsUp: [2],
     },
   ],
@@ -535,17 +535,17 @@ export const NEW_CASES: Array<Case> = [
     'URGENT call the insurance company about the claim',
     {
       title: 'call the insurance company about the claim',
-      area: 'Paperwork',
+      tag: 'Paperwork',
       flag: true,
     },
   ],
   [
     'Pick up the prescription asap',
-    { title: 'Pick up the prescription', area: 'Health', flag: true },
+    { title: 'Pick up the prescription', tag: 'Health', flag: true },
   ],
   [
     'Urgent care follow-up call',
-    { title: 'Urgent care follow-up call', area: 'Health' },
+    { title: 'Urgent care follow-up call', tag: 'Health' },
   ],
   [
     'Read the important notice from the HOA',
@@ -553,7 +553,7 @@ export const NEW_CASES: Array<Case> = [
   ],
   [
     'Tell the kids great job on report cards!',
-    { title: 'Tell the kids great job on report cards!', area: 'Kids' },
+    { title: 'Tell the kids great job on report cards!', tag: 'Kids' },
   ],
   [
     'Pay the daycare invoice today!!!',
@@ -561,50 +561,50 @@ export const NEW_CASES: Array<Case> = [
   ],
   [
     'high priority: fix the leaking roof',
-    { title: 'fix the leaking roof', area: 'House', flag: true },
+    { title: 'fix the leaking roof', tag: 'House', flag: true },
   ],
   [
     'File taxes by april 15 !!',
     {
       title: 'File taxes',
       date: '2027-04-15',
-      area: 'Paperwork',
+      tag: 'Paperwork',
       flag: true,
     },
   ],
 
-  // Areas named outright.
+  // Tags named outright.
   [
     'Yard: trim the hedges this weekend',
-    { title: 'trim the hedges', date: '2026-10-17', area: 'Yard' },
+    { title: 'trim the hedges', date: '2026-10-17', tag: 'Yard' },
   ],
   [
     'fix the squeaky door #house',
-    { title: 'fix the squeaky door', area: 'House' },
+    { title: 'fix the squeaky door', tag: 'House' },
   ],
   [
     'Car - rotate the tires saturday',
-    { title: 'rotate the tires', date: '2026-10-17', area: 'Car' },
+    { title: 'rotate the tires', date: '2026-10-17', tag: 'Car' },
   ],
   [
     'paperwork: shred old bank statements',
-    { title: 'shred old bank statements', area: 'Paperwork' },
+    { title: 'shred old bank statements', tag: 'Paperwork' },
   ],
   [
     'House - replace the kitchen faucet next week',
-    { title: 'replace the kitchen faucet', date: '2026-10-19', area: 'House' },
+    { title: 'replace the kitchen faucet', date: '2026-10-19', tag: 'House' },
   ],
   [
     'order flea medicine #pets, must do',
-    { title: 'order flea medicine', area: 'Pets', flag: true },
+    { title: 'order flea medicine', tag: 'Pets', flag: true },
   ],
 
-  // Areas implied.
-  ['clean the litter box', { title: 'clean the litter box', area: 'Pets' }],
-  ['plant the tulip bulbs', { title: 'plant the tulip bulbs', area: 'Yard' }],
+  // Tags implied.
+  ['clean the litter box', { title: 'clean the litter box', tag: 'Pets' }],
+  ['plant the tulip bulbs', { title: 'plant the tulip bulbs', tag: 'Yard' }],
   [
     'Pick up 4 bags of mulch',
-    { title: 'Pick up 4 bags of mulch', area: 'Yard' },
+    { title: 'Pick up 4 bags of mulch', tag: 'Yard' },
   ],
 
   // Numbers, months, weekdays and names that are part of the task.
@@ -618,30 +618,30 @@ export const NEW_CASES: Array<Case> = [
   ],
   [
     'Order 12 folding chairs for the party',
-    { title: 'Order 12 folding chairs for the party', area: null },
+    { title: 'Order 12 folding chairs for the party', tag: null },
   ],
   [
     'Call 311 about the pothole',
-    { title: 'Call 311 about the pothole', area: null },
+    { title: 'Call 311 about the pothole', tag: null },
   ],
   [
     'Buy tickets for August: Osage County',
-    { title: 'Buy tickets for August: Osage County', area: null },
+    { title: 'Buy tickets for August: Osage County', tag: null },
   ],
   [
     "Email the teacher about Friday's field trip",
-    { title: "Email the teacher about Friday's field trip", area: 'Kids' },
+    { title: "Email the teacher about Friday's field trip", tag: 'Kids' },
   ],
   [
     'Try the 7 layer dip recipe',
-    { title: 'Try the 7 layer dip recipe', area: null },
+    { title: 'Try the 7 layer dip recipe', tag: null },
   ],
 
   // Nothing to read at all.
-  ['Think about it', { title: 'Think about it', area: null }],
-  ['misc errands', { title: 'misc errands', area: null }],
-  ['Call back', { title: 'Call back', area: null }],
-  ['???', { title: '???', area: null }],
+  ['Think about it', { title: 'Think about it', tag: null }],
+  ['misc errands', { title: 'misc errands', tag: null }],
+  ['Call back', { title: 'Call back', tag: null }],
+  ['???', { title: '???', tag: null }],
 ]
 
 /**
@@ -656,7 +656,7 @@ export const HELD_OUT_CASES: Array<Case> = [
     {
       title: "call the vet about Biscuit's shots",
       who: 'michelle',
-      area: 'Pets',
+      tag: 'Pets',
     },
   ],
   [
@@ -669,7 +669,7 @@ export const HELD_OUT_CASES: Array<Case> = [
       title: "Sam's haircut",
       date: '2026-10-17',
       time: '11:00',
-      area: null,
+      tag: null,
     },
   ],
   [
@@ -678,7 +678,7 @@ export const HELD_OUT_CASES: Array<Case> = [
       title: 'Lunch with Michelle and her sister',
       date: '2026-10-18',
       time: '12:00',
-      area: null,
+      tag: null,
     },
   ],
   [
@@ -687,29 +687,29 @@ export const HELD_OUT_CASES: Array<Case> = [
       title: 'grab the dry cleaning after work',
       date: '2026-10-15',
       who: 'sam',
-      area: null,
+      tag: null,
     },
   ],
   [
     'Michelle should book her eye exam',
-    { title: 'book her eye exam', who: 'michelle', area: 'Health' },
+    { title: 'book her eye exam', who: 'michelle', tag: 'Health' },
   ],
   [
     "pick up sam's prescription at the pharmacy tomorrow",
     {
       title: "pick up sam's prescription at the pharmacy",
       date: '2026-10-14',
-      area: 'Health',
+      tag: 'Health',
     },
   ],
-  ['Call mom (sam)', { title: 'Call mom', who: 'sam', area: null }],
+  ['Call mom (sam)', { title: 'Call mom', who: 'sam', tag: null }],
   [
     'Michelle, can you get stamps on the way home',
     { title: 'get stamps on the way home', who: 'michelle' },
   ],
   [
     'Watch 10 Things I Hate About You with Michelle',
-    { title: 'Watch 10 Things I Hate About You with Michelle', area: null },
+    { title: 'Watch 10 Things I Hate About You with Michelle', tag: null },
   ],
   [
     'tell sam to bring the folding table up from the basement',
@@ -719,11 +719,11 @@ export const HELD_OUT_CASES: Array<Case> = [
   // Dates and times.
   [
     'oil change next tuesday at 7:30am',
-    { title: 'oil change', date: '2026-10-20', time: '07:30', area: 'Car' },
+    { title: 'oil change', date: '2026-10-20', time: '07:30', tag: 'Car' },
   ],
   [
     'Put the recycling out thurs',
-    { title: 'Put the recycling out', date: '2026-10-15', area: 'House' },
+    { title: 'Put the recycling out', date: '2026-10-15', tag: 'House' },
   ],
   [
     'Parent teacher night 10/22 6:30pm',
@@ -731,7 +731,7 @@ export const HELD_OUT_CASES: Array<Case> = [
       title: 'Parent teacher night',
       date: '2026-10-22',
       time: '18:30',
-      area: 'Kids',
+      tag: 'Kids',
     },
   ],
   [
@@ -740,12 +740,12 @@ export const HELD_OUT_CASES: Array<Case> = [
       title: 'Swim lessons start',
       date: '2026-11-02',
       time: '16:00',
-      area: 'Kids',
+      tag: 'Kids',
     },
   ],
   [
     'Return the amazon package by the 20th',
-    { title: 'Return the amazon package', date: '2026-10-20', area: null },
+    { title: 'Return the amazon package', date: '2026-10-20', tag: null },
   ],
   [
     'vet appt for Biscuit fri @ 2',
@@ -753,16 +753,16 @@ export const HELD_OUT_CASES: Array<Case> = [
       title: 'vet appt for Biscuit',
       date: '2026-10-16',
       time: '14:00',
-      area: 'Pets',
+      tag: 'Pets',
     },
   ],
   [
     'Change the furnace filter on the first of the month',
-    { title: 'Change the furnace filter', date: '2026-11-01', area: 'House' },
+    { title: 'Change the furnace filter', date: '2026-11-01', tag: 'House' },
   ],
   [
     'Trash cans to the curb tonite',
-    { title: 'Trash cans to the curb', date: '2026-10-13', area: 'House' },
+    { title: 'Trash cans to the curb', date: '2026-10-13', tag: 'House' },
   ],
   [
     'Soccer practice wed 5-6pm',
@@ -770,12 +770,12 @@ export const HELD_OUT_CASES: Array<Case> = [
       title: 'Soccer practice',
       date: '2026-10-14',
       time: '17:00',
-      area: 'Kids',
+      tag: 'Kids',
     },
   ],
   [
     'Pay the electric bill a week from today',
-    { title: 'Pay the electric bill', date: '2026-10-20', area: 'Paperwork' },
+    { title: 'Pay the electric bill', date: '2026-10-20', tag: 'Paperwork' },
   ],
   [
     'noon tomorrow lunch with the Parkers',
@@ -783,12 +783,12 @@ export const HELD_OUT_CASES: Array<Case> = [
       title: 'lunch with the Parkers',
       date: '2026-10-14',
       time: '12:00',
-      area: null,
+      tag: null,
     },
   ],
   [
     'dentist thrusday 3pm',
-    { title: 'dentist', date: '2026-10-15', time: '15:00', area: 'Health' },
+    { title: 'dentist', date: '2026-10-15', time: '15:00', tag: 'Health' },
   ],
 
   // Alerts, in several wordings.
@@ -797,7 +797,7 @@ export const HELD_OUT_CASES: Array<Case> = [
     {
       title: 'Book the flu clinic',
       date: '2026-10-21',
-      area: 'Health',
+      tag: 'Health',
       headsUp: [2],
     },
   ],
@@ -806,7 +806,7 @@ export const HELD_OUT_CASES: Array<Case> = [
     {
       title: 'Property tax',
       date: '2026-12-10',
-      area: 'Paperwork',
+      tag: 'Paperwork',
       headsUp: [3, 14],
     },
   ],
@@ -815,20 +815,20 @@ export const HELD_OUT_CASES: Array<Case> = [
     {
       title: 'Call grandma on her birthday',
       date: '2026-11-09',
-      area: null,
+      tag: null,
       headsUp: [],
     },
   ],
   [
     'School photos nov 12, let me know the day before',
-    { title: 'School photos', date: '2026-11-12', area: 'Kids', headsUp: [1] },
+    { title: 'School photos', date: '2026-11-12', tag: 'Kids', headsUp: [1] },
   ],
   [
     'Change the smoke alarm batteries sunday, no need to remind me',
     {
       title: 'Change the smoke alarm batteries',
       date: '2026-10-18',
-      area: 'House',
+      tag: 'House',
       headsUp: [],
     },
   ],
@@ -838,13 +838,13 @@ export const HELD_OUT_CASES: Array<Case> = [
       title: 'pack lunches for the field trip',
       date: '2026-10-15',
       who: 'sam',
-      area: 'Kids',
+      tag: 'Kids',
       headsUp: [1],
     },
   ],
   [
     'Order the turkey 2 weeks before thanksgiving',
-    { title: 'Order the turkey 2 weeks before thanksgiving', area: null },
+    { title: 'Order the turkey 2 weeks before thanksgiving', tag: null },
   ],
 
   // Emphasis that is a flag, and emphasis that is not.
@@ -854,7 +854,7 @@ export const HELD_OUT_CASES: Array<Case> = [
     {
       title: 'Call the school back',
       date: '2026-10-13',
-      area: 'Kids',
+      tag: 'Kids',
       flag: true,
     },
   ],
@@ -867,7 +867,7 @@ export const HELD_OUT_CASES: Array<Case> = [
     {
       title: 'Pick up the birthday cake',
       date: '2026-10-17',
-      area: null,
+      tag: null,
       flag: true,
     },
   ],
@@ -876,39 +876,39 @@ export const HELD_OUT_CASES: Array<Case> = [
     {
       title: 'Mortgage payment',
       date: '2026-10-15',
-      area: 'Paperwork',
+      tag: 'Paperwork',
       flag: true,
     },
   ],
   [
     'Watch the Critical Role finale',
-    { title: 'Watch the Critical Role finale', area: null },
+    { title: 'Watch the Critical Role finale', tag: null },
   ],
   [
     'top priority - call the bank about the fraud alert',
     {
       title: 'call the bank about the fraud alert',
-      area: 'Paperwork',
+      tag: 'Paperwork',
       flag: true,
     },
   ],
   [
     "Don't forget to feed the fish",
-    { title: 'feed the fish', area: 'Pets', flag: true },
+    { title: 'feed the fish', tag: 'Pets', flag: true },
   ],
 
-  // Areas named outright.
+  // Tags named outright.
   [
     '#yard rake under the maple',
-    { title: 'rake under the maple', area: 'Yard' },
+    { title: 'rake under the maple', tag: 'Yard' },
   ],
   [
     'kids: order school pictures by friday',
-    { title: 'order school pictures', date: '2026-10-16', area: 'Kids' },
+    { title: 'order school pictures', date: '2026-10-16', tag: 'Kids' },
   ],
   [
     'wash the car #car this weekend',
-    { title: 'wash the car', date: '2026-10-17', area: 'Car' },
+    { title: 'wash the car', date: '2026-10-17', tag: 'Car' },
   ],
   [
     "Pets: Biscuit's nail trim on the 24th at 10",
@@ -916,38 +916,38 @@ export const HELD_OUT_CASES: Array<Case> = [
       title: "Biscuit's nail trim",
       date: '2026-10-24',
       time: '10:00',
-      area: 'Pets',
+      tag: 'Pets',
     },
   ],
-  ['(house) caulk the bathtub', { title: 'caulk the bathtub', area: 'House' }],
+  ['(house) caulk the bathtub', { title: 'caulk the bathtub', tag: 'House' }],
 
-  // Areas implied.
-  ['Fill out the FAFSA', { title: 'Fill out the FAFSA', area: 'Paperwork' }],
+  // Tags implied.
+  ['Fill out the FAFSA', { title: 'Fill out the FAFSA', tag: 'Paperwork' }],
   [
     'Aerate and overseed the lawn',
-    { title: 'Aerate and overseed the lawn', area: 'Yard' },
+    { title: 'Aerate and overseed the lawn', tag: 'Yard' },
   ],
 
   // Numbers, months, weekdays and times that are part of the task.
   [
     'Borrow Tuesdays with Morrie from the library',
-    { title: 'Borrow Tuesdays with Morrie from the library', area: null },
+    { title: 'Borrow Tuesdays with Morrie from the library', tag: null },
   ],
   [
     'Find the April Fools photos for the album',
-    { title: 'Find the April Fools photos for the album', area: null },
+    { title: 'Find the April Fools photos for the album', tag: null },
   ],
   [
     'Buy 2 tickets for the 7pm show',
-    { title: 'Buy 2 tickets for the 7pm show', area: null },
+    { title: 'Buy 2 tickets for the 7pm show', tag: null },
   ],
   [
     'Call the 24 hour nurse line about the rash',
-    { title: 'Call the 24 hour nurse line about the rash', area: 'Health' },
+    { title: 'Call the 24 hour nurse line about the rash', tag: 'Health' },
   ],
 
   // Nothing to read at all.
-  ['groceries', { title: 'groceries', area: null }],
+  ['groceries', { title: 'groceries', tag: null }],
 ]
 
 export const FRESH_CASES: Array<Case> = [
@@ -962,7 +962,7 @@ export const FRESH_CASES: Array<Case> = [
       title: 'drop off the donation bags',
       date: '2026-10-16',
       who: 'michelle',
-      area: null,
+      tag: null,
     },
   ],
   [
@@ -971,7 +971,7 @@ export const FRESH_CASES: Array<Case> = [
       title: "Michelle's physical",
       date: '2026-10-29',
       time: '08:15',
-      area: 'Health',
+      tag: 'Health',
     },
   ],
   [
@@ -979,7 +979,7 @@ export const FRESH_CASES: Array<Case> = [
     {
       title: 'call the insurance company about the claim',
       who: 'sam',
-      area: 'Paperwork',
+      tag: 'Paperwork',
     },
   ],
   [
@@ -989,7 +989,7 @@ export const FRESH_CASES: Array<Case> = [
       date: '2026-10-15',
       time: '16:00',
       who: 'michelle',
-      area: 'Pets',
+      tag: 'Pets',
     },
   ],
   [
@@ -1004,16 +1004,16 @@ export const FRESH_CASES: Array<Case> = [
       title: 'Dishwasher repair',
       date: '2026-10-14',
       time: '13:00',
-      area: 'House',
+      tag: 'House',
     },
   ],
   [
     'renew car registration by nov 30',
-    { title: 'renew car registration', date: '2026-11-30', area: 'Car' },
+    { title: 'renew car registration', date: '2026-11-30', tag: 'Car' },
   ],
   [
     'flu shot tmrw 9:15',
-    { title: 'flu shot', date: '2026-10-14', time: '09:15', area: 'Health' },
+    { title: 'flu shot', date: '2026-10-14', time: '09:15', tag: 'Health' },
   ],
   [
     'Mail the rent check on the 1st',
@@ -1025,12 +1025,12 @@ export const FRESH_CASES: Array<Case> = [
       title: 'Pick up the kids early',
       date: '2026-10-16',
       time: '14:30',
-      area: 'Kids',
+      tag: 'Kids',
     },
   ],
   [
     'sign up for spring soccer before december 5',
-    { title: 'sign up for spring soccer', date: '2026-12-05', area: 'Kids' },
+    { title: 'sign up for spring soccer', date: '2026-12-05', tag: 'Kids' },
   ],
   [
     'Take the minivan in for new tires monday at 8',
@@ -1038,12 +1038,12 @@ export const FRESH_CASES: Array<Case> = [
       title: 'Take the minivan in for new tires',
       date: '2026-10-19',
       time: '08:00',
-      area: 'Car',
+      tag: 'Car',
     },
   ],
   [
     'Water the tomatoes tonight',
-    { title: 'Water the tomatoes', date: '2026-10-13', area: 'Yard' },
+    { title: 'Water the tomatoes', date: '2026-10-13', tag: 'Yard' },
   ],
   [
     'Plumber coming 10/21 at 11am',
@@ -1051,12 +1051,12 @@ export const FRESH_CASES: Array<Case> = [
       title: 'Plumber coming',
       date: '2026-10-21',
       time: '11:00',
-      area: 'House',
+      tag: 'House',
     },
   ],
   [
     'day after tomorrow: return library books',
-    { title: 'return library books', date: '2026-10-15', area: null },
+    { title: 'return library books', date: '2026-10-15', tag: null },
   ],
 
   // Alerts, and a span of days that is not one.
@@ -1065,7 +1065,7 @@ export const FRESH_CASES: Array<Case> = [
     {
       title: 'Passport photos',
       date: '2026-11-06',
-      area: 'Paperwork',
+      tag: 'Paperwork',
       headsUp: [3],
     },
   ],
@@ -1074,7 +1074,7 @@ export const FRESH_CASES: Array<Case> = [
     {
       title: "Biscuit's heartworm pill",
       date: '2026-11-01',
-      area: 'Pets',
+      tag: 'Pets',
       headsUp: [1],
     },
   ],
@@ -1084,7 +1084,7 @@ export const FRESH_CASES: Array<Case> = [
       title: 'Dinner at the Hendersons',
       date: '2026-10-17',
       time: '18:00',
-      area: null,
+      tag: null,
       headsUp: [],
     },
   ],
@@ -1093,13 +1093,13 @@ export const FRESH_CASES: Array<Case> = [
     {
       title: 'Car inspection',
       date: '2026-11-20',
-      area: 'Car',
+      tag: 'Car',
       headsUp: [2, 7],
     },
   ],
   [
     'Start the thank you notes 3 days before the party',
-    { title: 'Start the thank you notes 3 days before the party', area: null },
+    { title: 'Start the thank you notes 3 days before the party', tag: null },
   ],
 
   // Emphasis that is a flag, and emphasis that is not.
@@ -1109,14 +1109,14 @@ export const FRESH_CASES: Array<Case> = [
   ],
   [
     'Refill the inhaler prescription, do not forget',
-    { title: 'Refill the inhaler prescription', area: 'Health', flag: true },
+    { title: 'Refill the inhaler prescription', tag: 'Health', flag: true },
   ],
   [
     'Submit the FSA receipts by friday!!',
     {
       title: 'Submit the FSA receipts',
       date: '2026-10-16',
-      area: 'Paperwork',
+      tag: 'Paperwork',
       flag: true,
     },
   ],
@@ -1125,105 +1125,105 @@ export const FRESH_CASES: Array<Case> = [
     {
       title: 'Kindergarten registration closes',
       date: '2026-10-15',
-      area: 'Kids',
+      tag: 'Kids',
       flag: true,
     },
   ],
   [
     'Schedule a non-urgent checkup for Sam',
-    { title: 'Schedule a non-urgent checkup for Sam', area: 'Health' },
+    { title: 'Schedule a non-urgent checkup for Sam', tag: 'Health' },
   ],
   [
     'asap - get the brake light replaced',
-    { title: 'get the brake light replaced', area: 'Car', flag: true },
+    { title: 'get the brake light replaced', tag: 'Car', flag: true },
   ],
   [
     'Important: sign the permission slip tonight',
     {
       title: 'sign the permission slip',
       date: '2026-10-13',
-      area: 'Kids',
+      tag: 'Kids',
       flag: true,
     },
   ],
 
-  // Areas named outright.
+  // Tags named outright.
   [
     '#health schedule the mammogram',
-    { title: 'schedule the mammogram', area: 'Health' },
+    { title: 'schedule the mammogram', tag: 'Health' },
   ],
   [
     'Yard: order firewood for delivery on the 23rd',
-    { title: 'order firewood for delivery', date: '2026-10-23', area: 'Yard' },
+    { title: 'order firewood for delivery', date: '2026-10-23', tag: 'Yard' },
   ],
   [
     'paperwork - shred the old bank statements',
-    { title: 'shred the old bank statements', area: 'Paperwork' },
+    { title: 'shred the old bank statements', tag: 'Paperwork' },
   ],
   [
     'defrost the freezer #house saturday',
-    { title: 'defrost the freezer', date: '2026-10-17', area: 'House' },
+    { title: 'defrost the freezer', date: '2026-10-17', tag: 'House' },
   ],
 
-  // Areas implied, some with no word that gives them away.
+  // Tags implied, some with no word that gives them away.
   [
     'Pack the diaper bag for daycare',
-    { title: 'Pack the diaper bag for daycare', area: 'Kids' },
+    { title: 'Pack the diaper bag for daycare', tag: 'Kids' },
   ],
   [
     'Get the snow tires put on',
-    { title: 'Get the snow tires put on', area: 'Car' },
+    { title: 'Get the snow tires put on', tag: 'Car' },
   ],
   [
     'Clean out the hamster cage',
-    { title: 'Clean out the hamster cage', area: 'Pets' },
+    { title: 'Clean out the hamster cage', tag: 'Pets' },
   ],
-  ['Rotate the mattress', { title: 'Rotate the mattress', area: 'House' }],
-  ['Split the hostas', { title: 'Split the hostas', area: 'Yard' }],
+  ['Rotate the mattress', { title: 'Rotate the mattress', tag: 'House' }],
+  ['Split the hostas', { title: 'Split the hostas', tag: 'Yard' }],
   ['Dispute the hospital bill', { title: 'Dispute the hospital bill' }],
   [
     'Order new contact lenses',
-    { title: 'Order new contact lenses', area: 'Health' },
+    { title: 'Order new contact lenses', tag: 'Health' },
   ],
-  ['Bleed the radiators', { title: 'Bleed the radiators', area: 'House' }],
+  ['Bleed the radiators', { title: 'Bleed the radiators', tag: 'House' }],
 
   // A day, a time or a word of stress inside a name: none of it is to be
   // read.
   [
     'Watch Saturday Night Live with Michelle',
-    { title: 'Watch Saturday Night Live with Michelle', area: null },
+    { title: 'Watch Saturday Night Live with Michelle', tag: null },
   ],
   [
     'Order Taco Tuesday supplies',
-    { title: 'Order Taco Tuesday supplies', area: null },
+    { title: 'Order Taco Tuesday supplies', tag: null },
   ],
   [
     'Rewatch 500 Days of Summer',
-    { title: 'Rewatch 500 Days of Summer', area: null },
+    { title: 'Rewatch 500 Days of Summer', tag: null },
   ],
   [
     'Return the Critical Thinking workbook to school',
-    { title: 'Return the Critical Thinking workbook to school', area: 'Kids' },
+    { title: 'Return the Critical Thinking workbook to school', tag: 'Kids' },
   ],
   [
     'Buy the 9 to 5 soundtrack on vinyl',
-    { title: 'Buy the 9 to 5 soundtrack on vinyl', area: null },
+    { title: 'Buy the 9 to 5 soundtrack on vinyl', tag: null },
   ],
   [
     'Borrow the Sunday Suppers cookbook',
-    { title: 'Borrow the Sunday Suppers cookbook', area: null },
+    { title: 'Borrow the Sunday Suppers cookbook', tag: null },
   ],
   [
     'Drop off film at One Hour Photo',
-    { title: 'Drop off film at One Hour Photo', area: null },
+    { title: 'Drop off film at One Hour Photo', tag: null },
   ],
   [
     'Reserve seats for the midnight premiere',
-    { title: 'Reserve seats for the midnight premiere', area: null },
+    { title: 'Reserve seats for the midnight premiere', tag: null },
   ],
   [
     'Set up the First Friday art walk carpool',
-    { title: 'Set up the First Friday art walk carpool', area: null },
+    { title: 'Set up the First Friday art walk carpool', tag: null },
   ],
   [
     'Renew the Urgent Care Plus membership',

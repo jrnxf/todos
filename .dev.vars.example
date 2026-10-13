@@ -30,8 +30,8 @@ PUSHOVER_APP_TOKEN=
 PUSHOVER_USER_KEYS=
 
 # Optional. A TypeSafe AI key: the add bar then asks their Jev model to read
-# a new to-do's title (the date, the person, the area, the heads-up, the
-# flag). That sends them the title, the first names in PEOPLE and the area
+# a new to-do's title (the date, the person, the tag, the heads-up, the
+# flag). That sends them the title, the first names in PEOPLE and the tag
 # names. Empty: off, and the add bar reads titles with its own rules only.
 TYPESAFE_API_KEY=
 

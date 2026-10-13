@@ -27,8 +27,8 @@ const WEEKDAYS = [
   'saturday',
 ]
 const CLOCK = /^(\d{1,2})(?::(\d{2}))?\s*(am|pm)$/i
-/** Words that put a to-do in an area, by the area's name. */
-const AREA_WORDS: Partial<Record<string, Array<string>>> = {
+/** Words that put a to-do in a tag, by the tag's name. */
+const TAG_WORDS: Partial<Record<string, Array<string>>> = {
   house: ['garden', 'gutters', 'furnace', 'plumber', 'lawn'],
   kids: ['school', 'pediatrician', 'soccer', 'daycare'],
   paperwork: ['tax', 'taxes', 'passport', 'insurance', 'receipts'],
@@ -160,7 +160,7 @@ export function standInReply(request: Request) {
       ...choose(
         'area',
         optionWhere('area', (name) =>
-          (AREA_WORDS[name] ?? []).some((word) =>
+          (TAG_WORDS[name] ?? []).some((word) =>
             new RegExp(String.raw`\b${word}\b`).test(lower),
           ),
         ),

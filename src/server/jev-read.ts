@@ -2,7 +2,7 @@
 // the add bar. Jev only ever picks one of the options it is handed or answers
 // yes or no, each with a probability (https://docs.typesafe.ai/api), so every
 // field is asked that way: the day as a pick among the coming days, the time
-// among quarter hours, the person, the area and the heads-up among ours, the
+// among quarter hours, the person, the tag and the heads-up among ours, the
 // flag as a yes or no, and each word of the title as a pick of what it says.
 // All of it goes in one request. Where Jev only fills the gaps the rules left
 // (`JEV_USE` in src/lib/read.ts), the words are not asked about and the title
@@ -42,7 +42,7 @@ const TASK = 'task'
 export const READ_FIELDS = [
   'when',
   'who',
-  'area',
+  'tag',
   'headsUp',
   'flag',
 ] as const satisfies ReadonlyArray<ReadField>
@@ -53,13 +53,19 @@ export interface Household {
   /** Who is typing, a person's id: "I need to..." is theirs. */
   me: string
   people: Array<{ id: string; name: string }>
-  areas: Array<{ id: number; name: string }>
+  tags: Array<{ id: number; name: string }>
 }
 
 const dayOption = (date: LocalDate) => `day_${date}`
 const timeOption = (time: LocalTime) => `time_${time}`
 const personOption = (index: number) => `person_${index}`
-const areaOption = (areaId: number) => `area_${areaId}`
+// What Jev is sent still calls a tag an "area": its question, its options and
+// the field name a word can be for stay as they were tested. The names here
+// are the only place the two meet.
+const WIRE_AREA = 'area'
+const tagOption = (tagId: number) => `${WIRE_AREA}_${tagId}`
+const wireField = (field: ReadField): string =>
+  field === 'tag' ? WIRE_AREA : field
 const alertOption = (days: number) => `days_${days}`
 const wordQuestion = (index: number) => `word_${index}`
 
@@ -79,7 +85,7 @@ function ahead(days: number): string {
 const SAYS: Record<ReadField, string> = {
   when: 'Only says the day or the time it is due, or links to it ("on saturday", "at 9pm", "by tomorrow").',
   who: 'Only says whose job it is: that person\'s name opening or closing the to-do, or the words handing it to them ("Sam:", "ask Sam to", "I need to").',
-  area: 'Only a tag or heading naming the area ("#kids", "House:").',
+  tag: 'Only a tag or heading naming the area ("#kids", "House:").',
   headsUp:
     'Only asks for a reminder ahead of the deadline, or for none ("remind me 3 days before").',
   flag: 'Only stresses that it must not be missed ("don\'t forget", "important", "urgent", "!!").',
@@ -87,7 +93,7 @@ const SAYS: Record<ReadField, string> = {
 
 /**
  * What is sent: the to-do's title, today's date, the first names (so "Sam's
- * boots" reads as a person and not a thing) and the area names. Nothing else
+ * boots" reads as a person and not a thing) and the tag names. Nothing else
  * leaves. Only the fields in `ask` are asked about, and the title's words
  * only with `words`.
  */
@@ -150,16 +156,16 @@ export function jevRequest(
     }
 
   if (
-    asks('area') &&
-    household.areas.length > 0 &&
-    household.areas.length < MOST_OPTIONS
+    asks('tag') &&
+    household.tags.length > 0 &&
+    household.tags.length < MOST_OPTIONS
   )
-    questions.area = {
+    questions[WIRE_AREA] = {
       type: 'choice',
       instructions: `Which ONE area of this household's to-do list does \`todo\` belong in? Each option is an area's name. Pick \`${NONE}\` unless the to-do clearly belongs in one of them.`,
       criteria: {
         ...Object.fromEntries(
-          household.areas.map((area) => [areaOption(area.id), area.name]),
+          household.tags.map((tag) => [tagOption(tag.id), tag.name]),
         ),
         [NONE]: 'It does not clearly belong in any of the areas.',
       },
@@ -210,7 +216,9 @@ export function jevRequest(
         criteria: {
           [TASK]:
             'Part of what has to be done: the action, the thing, the place, or anyone it is about.',
-          ...Object.fromEntries(ask.map((field) => [field, SAYS[field]])),
+          ...Object.fromEntries(
+            ask.map((field) => [wireField(field), SAYS[field]]),
+          ),
         },
       }
     })
@@ -284,10 +292,10 @@ export function jevReadFrom(
     if (who) read.who = who.id
   }
 
-  if (asks('area')) {
-    const choice = picked('area')
-    const area = household.areas.find((one) => areaOption(one.id) === choice)
-    if (area) read.area = area.id
+  if (asks('tag')) {
+    const choice = picked(WIRE_AREA)
+    const tag = household.tags.find((one) => tagOption(one.id) === choice)
+    if (tag) read.tag = tag.id
   }
 
   if (asks('headsUp')) {
@@ -309,14 +317,14 @@ export function jevReadFrom(
   const filled: Record<ReadField, boolean> = {
     when: read.when !== undefined,
     who: read.who !== undefined,
-    area: read.area !== undefined,
+    tag: read.tag !== undefined,
     headsUp: read.headsUp !== undefined,
     flag: read.flag === true,
   }
   const words = titleWords(title)
   words.forEach((_word, index) => {
     const says = picked(wordQuestion(index), DROP_FLOOR)
-    const field = READ_FIELDS.find((one) => one === says)
+    const field = READ_FIELDS.find((one) => wireField(one) === says)
     if (field && asks(field) && filled[field]) read.drops.push({ index, field })
   })
   // A title with no words left is no title: keep them all.

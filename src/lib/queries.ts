@@ -11,16 +11,16 @@ import {
 } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
-  addArea,
+  addTag,
   addItem,
-  deleteArea,
+  deleteTag,
   getBoard,
   setDeleted,
   setDone,
-  updateArea,
+  updateTag,
   updateItem,
 } from '@/server/board'
-import type { Area, AreaColor, Todo } from '@/db/schema'
+import type { Tag, TagColor, Todo } from '@/db/schema'
 import type { Board, ItemFields } from '@/server/board'
 
 export const boardQ = queryOptions({
@@ -143,47 +143,47 @@ export function useDelete() {
   }
 }
 
-/** Resolves with the new area, so the caller can put a to-do in it at once. */
-export function useAddArea() {
+/** Resolves with the new tag, so the caller can put a to-do in it at once. */
+export function useAddTag() {
   const client = useQueryClient()
   return useMutation({
-    mutationFn: (area: { name: string; color: AreaColor }) =>
-      addArea({ data: area }),
-    onSuccess: (created: Area) => {
+    mutationFn: (tag: { name: string; color: TagColor }) =>
+      addTag({ data: tag }),
+    onSuccess: (created: Tag) => {
       const board = client.getQueryData(boardQ.queryKey)
-      if (board && !board.areas.some((area) => area.id === created.id)) {
+      if (board && !board.tags.some((tag) => tag.id === created.id)) {
         client.setQueryData(boardQ.queryKey, {
           ...board,
-          areas: [...board.areas, created],
+          tags: [...board.tags, created],
         })
       }
     },
-    onError: () => toast.error('Could not make that area.'),
+    onError: () => toast.error('Could not make that tag.'),
     onSettled: () => client.invalidateQueries({ queryKey: boardQ.queryKey }),
   })
 }
 
-export function useUpdateArea() {
+export function useUpdateTag() {
   return useBoardChange(
-    (vars: { id: number; patch: { name?: string; color?: AreaColor } }) =>
-      updateArea({ data: vars }),
+    (vars: { id: number; patch: { name?: string; color?: TagColor } }) =>
+      updateTag({ data: vars }),
     (board, { id, patch }) => ({
       ...board,
-      areas: board.areas.map((area) =>
-        area.id === id ? { ...area, ...patch } : area,
+      tags: board.tags.map((tag) =>
+        tag.id === id ? { ...tag, ...patch } : tag,
       ),
     }),
   )
 }
 
-export function useDeleteArea() {
+export function useDeleteTag() {
   return useBoardChange(
-    (id: number) => deleteArea({ data: { id } }),
+    (id: number) => deleteTag({ data: { id } }),
     (board, id) => ({
       ...board,
-      areas: board.areas.filter((area) => area.id !== id),
+      tags: board.tags.filter((tag) => tag.id !== id),
       items: board.items.map((item) =>
-        item.areaId === id ? { ...item, areaId: null } : item,
+        item.tagId === id ? { ...item, tagId: null } : item,
       ),
     }),
   )

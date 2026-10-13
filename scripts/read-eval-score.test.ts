@@ -21,7 +21,7 @@ import type { TitleRead } from '@/lib/read'
 import type { Expected } from './read-eval-cases'
 import type { Outcome, Sent } from './read-eval-score'
 
-const areas = [
+const tags = [
   { id: 1, name: 'House' },
   { id: 2, name: 'Yard' },
 ]
@@ -57,7 +57,7 @@ const ways = [way('rules'), way('first'), way('verify:jev'), way('haiku')]
 const mow: Expected = {
   title: 'Mow the lawn',
   date: '2026-10-18',
-  area: 'Yard',
+  tag: 'Yard',
 }
 const outcomes: Array<Outcome> = [
   {
@@ -65,25 +65,25 @@ const outcomes: Array<Outcome> = [
     expected: mow,
     set: 'First',
     reads: {
-      // The date and the title, not the area.
+      // The date and the title, not the tag.
       rules: read('Mow the lawn', { dueDate: '2026-10-18', dueTime: null }),
-      // The area, but a scrap left in the title.
+      // The tag, but a scrap left in the title.
       first: read(
         'Mow the',
-        { dueDate: '2026-10-18', dueTime: null, areaId: 2 },
-        { when: 'sunday', area: '' },
+        { dueDate: '2026-10-18', dueTime: null, tagId: 2 },
+        { when: 'sunday', tag: '' },
       ),
       // All of it.
       'verify:jev': read(
         'Mow the lawn',
-        { dueDate: '2026-10-18', dueTime: null, areaId: 2 },
-        { area: '' },
+        { dueDate: '2026-10-18', dueTime: null, tagId: 2 },
+        { tag: '' },
       ),
       // The model wrote all of it, and got the day wrong.
       haiku: read('Mow the lawn', {
         dueDate: '2026-10-25',
         dueTime: null,
-        areaId: 2,
+        tagId: 2,
       }),
     },
     sent: {
@@ -96,12 +96,12 @@ const outcomes: Array<Outcome> = [
   },
   {
     sentence: 'Dinner with the Hendersons',
-    // No area given: two would be right, so it is not scored.
+    // No tag given: two would be right, so it is not scored.
     expected: { title: 'Dinner with the Hendersons' },
     set: 'New',
     reads: {
       rules: read('Dinner with the Hendersons'),
-      first: read('Dinner with the Hendersons', { areaId: 1 }, { area: '' }),
+      first: read('Dinner with the Hendersons', { tagId: 1 }, { tag: '' }),
       'verify:jev': read('Dinner with the Hendersons'),
       haiku: read('Dinner with the Hendersons'),
     },
@@ -120,34 +120,30 @@ describe('scoring a reading', () => {
     const side = sides(
       { title: 'Book the cabin', headsUp: [7, 1] },
       read('book the cabin,', { headsUpDays: [1, 7] }),
-      areas,
+      tags,
     )
     expect(side.title).toEqual(['book the cabin', 'book the cabin'])
     expect(side['heads-up']).toEqual(['[1, 7]', '[1, 7]'])
   })
 
   it('tells no area wanted from an area not scored', () => {
-    expect(sides({ title: 'x', area: null }, read('x'), areas).area).toEqual([
+    expect(sides({ title: 'x', tag: null }, read('x'), tags).tag).toEqual([
       'none',
       'none',
     ])
-    expect(sides({ title: 'x' }, read('x', { areaId: 1 }), areas).area).toBe(
-      null,
-    )
+    expect(sides({ title: 'x' }, read('x', { tagId: 1 }), tags).tag).toBe(null)
   })
 
   it('counts hits only over the sentences a field is scored on', () => {
-    expect(rate(tally(outcomes, 'rules', 'area', areas))).toBe('0/1 (0%)')
-    expect(rate(tally(outcomes, 'verify:jev', 'area', areas))).toBe(
-      '1/1 (100%)',
-    )
-    expect(rate(tally(outcomes, 'first', 'title', areas))).toBe('1/2 (50%)')
-    expect(rate(tally(outcomes, 'rules', 'date', areas))).toBe('2/2 (100%)')
-    expect(rate(tally([], 'rules', 'date', areas))).toBe('n/a')
+    expect(rate(tally(outcomes, 'rules', 'tag', tags))).toBe('0/1 (0%)')
+    expect(rate(tally(outcomes, 'verify:jev', 'tag', tags))).toBe('1/1 (100%)')
+    expect(rate(tally(outcomes, 'first', 'title', tags))).toBe('1/2 (50%)')
+    expect(rate(tally(outcomes, 'rules', 'date', tags))).toBe('2/2 (100%)')
+    expect(rate(tally([], 'rules', 'date', tags))).toBe('n/a')
   })
 
   it('lists each miss with what was wanted, what was read and who filled it', () => {
-    expect(tally(outcomes, 'first', 'title', areas).misses).toEqual([
+    expect(tally(outcomes, 'first', 'title', tags).misses).toEqual([
       {
         sentence: 'Mow the lawn sunday',
         set: 'First',
@@ -157,7 +153,7 @@ describe('scoring a reading', () => {
         filledBy: 'model',
       },
     ])
-    expect(tally(outcomes, 'rules', 'area', areas).misses[0]).toMatchObject({
+    expect(tally(outcomes, 'rules', 'tag', tags).misses[0]).toMatchObject({
       expected: 'Yard',
       got: 'none',
       filledBy: 'rules',
@@ -165,16 +161,16 @@ describe('scoring a reading', () => {
   })
 
   it('blames the model only for a field, or a title word, that it took', () => {
-    const jevs = read('x', { areaId: 1 }, { area: '' })
-    expect(filledBy('area', jevs)).toBe('model')
+    const jevs = read('x', { tagId: 1 }, { tag: '' })
+    expect(filledBy('tag', jevs)).toBe('model')
     expect(filledBy('date', jevs)).toBe('rules')
-    // Jev filled the area but dropped no word: the title is the rules'.
+    // Jev filled the tag but dropped no word: the title is the rules'.
     expect(filledBy('title', jevs)).toBe('rules')
     expect(filledBy('title', read('x', {}, { when: 'sunday' }))).toBe('model')
   })
 
   it('blames the model for all of a reading it wrote whole', () => {
-    expect(tally(outcomes, 'haiku', 'date', areas).misses).toEqual([
+    expect(tally(outcomes, 'haiku', 'date', tags).misses).toEqual([
       {
         sentence: 'Mow the lawn sunday',
         set: 'First',
@@ -188,8 +184,8 @@ describe('scoring a reading', () => {
   })
 
   it('counts the misses of a way over every field', () => {
-    expect(misses(outcomes, 'rules', areas)).toHaveLength(1)
-    expect(misses(outcomes, 'verify:jev', areas)).toHaveLength(0)
+    expect(misses(outcomes, 'rules', tags)).toHaveLength(1)
+    expect(misses(outcomes, 'verify:jev', tags)).toHaveLength(0)
   })
 })
 
@@ -249,7 +245,7 @@ describe('the report', () => {
       { name: 'First', size: 1, kind: 'tuned' as const },
       { name: 'New', size: 1, kind: 'fresh' as const },
     ],
-    areas,
+    tags,
     ways,
     skipped: [{ way: way('gemini'), why: 'GEMINI_API_KEY not set.' }],
     providers: PROVIDERS,
@@ -262,8 +258,8 @@ describe('the report', () => {
     standIn: false,
     cutoffs: [
       {
-        way: 'Area only, Jev',
-        question: 'how sure of the area',
+        way: 'Tag only, Jev',
+        question: 'how sure of the tag',
         acts: 'filled',
         chosen: 0.8,
         rows: [
@@ -280,19 +276,19 @@ describe('the report', () => {
     written.split(/^#{2,3} /m).find((part) => part.startsWith(heading)) ?? ''
 
   it('names the winner of each field, or calls it level', () => {
-    expect(winners(outcomes, ways, areas)).toEqual([
+    expect(winners(outcomes, ways, tags)).toEqual([
       'Title: Rules alone, Verify, Jev and Fast model, Haiku 4.5 at 2 of 2 (Jev first, the old usage 1).',
       'Date: Rules alone, Jev first, the old usage and Verify, Jev at 2 of 2 (Fast model, Haiku 4.5 1).',
       'Time: level, every way at 2 of 2.',
       'Who: level, every way at 2 of 2.',
-      'Area: Jev first, the old usage, Verify, Jev and Fast model, Haiku 4.5 at 1 of 1 (Rules alone 0).',
+      'Tag: Jev first, the old usage, Verify, Jev and Fast model, Haiku 4.5 at 1 of 1 (Rules alone 0).',
       'Heads-up: level, every way at 2 of 2.',
       'Flag: level, every way at 2 of 2.',
     ])
   })
 
   it('says in one paragraph which way won what', () => {
-    const said = verdict(outcomes, ways, areas, 1500)
+    const said = verdict(outcomes, ways, tags, 1500)
     expect(said).not.toContain('\n')
     expect(said).toContain(
       'fewest misses in total: Verify, Jev with 0 (Rules alone 1, Jev first, the old usage 1, Verify, Jev 0, Fast model, Haiku 4.5 1).',
@@ -304,15 +300,15 @@ describe('the report', () => {
   })
 
   it('answers first, on the fresh sentences, against the rules and the old usage', () => {
-    expect(headline(outcomes.slice(1), ways, areas, 'the fresh ones')).toBe(
+    expect(headline(outcomes.slice(1), ways, tags, 'the fresh ones')).toBe(
       'On the fresh ones, every way missed the same: 0 of 6 fields. Asking a model won nothing and lost nothing.',
     )
-    expect(headline(outcomes, ways, areas, 'all of them')).toBe(
+    expect(headline(outcomes, ways, tags, 'all of them')).toBe(
       'On all of them, Verify, Jev missed fewest: 0 of 13 fields. The rules alone missed 1, so asking a model won by 1 (Verify, Jev). Jev first, the old usage missed 1.',
     )
     // A model that wins nothing is said to win nothing.
     expect(
-      headline(outcomes, [way('rules'), way('haiku')], areas, 'all'),
+      headline(outcomes, [way('rules'), way('haiku')], tags, 'all'),
     ).toContain('Asking a model won nothing')
     expect(written.indexOf('## The answer')).toBeLessThan(
       written.indexOf('## Hit rate per field'),
@@ -330,7 +326,7 @@ describe('the report', () => {
   })
 
   it('shows what each cut-off costs, set by set, and which was chosen', () => {
-    const table = section('Area only, Jev: how sure of the area')
+    const table = section('Tag only, Jev: how sure of the tag')
     expect(table).toContain(
       '| Cut-off | New: missed, filled | First: missed, filled |',
     )
@@ -350,12 +346,12 @@ describe('the report', () => {
     expect(section('First')).toContain(
       '| title | 1/1 (100%) | 0/1 (0%) | 1/1 (100%) | 1/1 (100%) |',
     )
-    expect(section('New')).toContain('| area | n/a | n/a | n/a | n/a |')
+    expect(section('New')).toContain('| tag | n/a | n/a | n/a | n/a |')
   })
 
   it('lists the misses of each way under its own heading', () => {
     expect(section('Rules alone: 1')).toContain(
-      '| First | Mow the lawn sunday | area | Yard | none | rules |',
+      '| First | Mow the lawn sunday | tag | Yard | none | rules |',
     )
     expect(section('Jev first, the old usage: 1')).toContain(
       '| First | Mow the lawn sunday | title | mow the lawn | mow the | model |',

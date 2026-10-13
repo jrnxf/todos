@@ -21,7 +21,7 @@ import {
 } from './read-eval-ways'
 
 const TITLE = 'Sam: dentist fri 5pm'
-const ASK = ['when', 'area', 'headsUp', 'flag'] as const
+const ASK = ['when', 'tag', 'headsUp', 'flag'] as const
 const questions = jevRequest(TITLE, HOUSEHOLD, ASK, false)
 const send = standInFetch(HOUSEHOLD)
 const post = async (call: { url: string; headers: object; body: string }) => {
@@ -33,7 +33,7 @@ const post = async (call: { url: string; headers: object; body: string }) => {
   const reply: unknown = await response.json()
   return { status: response.status, reply }
 }
-const HEALTH = HOUSEHOLD.areas.find((one) => one.name === 'Health')?.id
+const HEALTH = HOUSEHOLD.tags.find((one) => one.name === 'Health')?.id
 
 describe('the ways', () => {
   it('are the rules, the old usage, three columns a decision model and two general models', () => {
@@ -41,16 +41,16 @@ describe('the ways', () => {
       ['rules', 'rules', undefined],
       ['first', 'first', 'jev'],
       ['verify:jev', 'verify', 'jev'],
-      ['area:jev', 'area', 'jev'],
+      ['tag:jev', 'tag', 'jev'],
       ['parts:jev', 'parts', 'jev'],
       ['verify:clef', 'verify', 'clef'],
-      ['area:clef', 'area', 'clef'],
+      ['tag:clef', 'tag', 'clef'],
       ['parts:clef', 'parts', 'clef'],
       ['verify:clefFlash', 'verify', 'clefFlash'],
-      ['area:clefFlash', 'area', 'clefFlash'],
+      ['tag:clefFlash', 'tag', 'clefFlash'],
       ['parts:clefFlash', 'parts', 'clefFlash'],
       ['verify:openai', 'verify', 'openai'],
-      ['area:openai', 'area', 'openai'],
+      ['tag:openai', 'tag', 'openai'],
       ['parts:openai', 'parts', 'openai'],
       ['haiku', 'model', 'haiku'],
       ['gemini', 'model', 'gemini'],
@@ -151,8 +151,8 @@ describe('a decision model', () => {
       ['alert', 'choice'],
       ['flag', 'predicate'],
     ])
-    const area = body.questions.find((one) => one.name === 'area')
-    expect(area?.choices).toContainEqual({
+    const tag = body.questions.find((one) => one.name === 'area')
+    expect(tag?.choices).toContainEqual({
       value: `area_${HEALTH}`,
       description: 'Health',
     })
@@ -194,7 +194,7 @@ describe('a decision model', () => {
       usage: { input_tokens: 42, output_tokens: 0, total_tokens: 42 },
     }
     expect(decisionReply('openai', reply, TITLE, HOUSEHOLD, ASK)).toEqual({
-      read: { area: HEALTH, flag: true, drops: [] },
+      read: { tag: HEALTH, flag: true, drops: [] },
       inputTokens: 42,
       outputTokens: 0,
       model: 'gpt-6-luna',
@@ -249,7 +249,7 @@ describe('a fast general model', () => {
       { type: 'null' },
     ])
     expect(schema.properties.area.anyOf[0]).toMatchObject({
-      enum: HOUSEHOLD.areas.map((one) => one.name),
+      enum: HOUSEHOLD.tags.map((one) => one.name),
     })
     // Nothing structured output refuses: no bounds on numbers or strings.
     expect(JSON.stringify(schema)).not.toMatch(
@@ -271,7 +271,7 @@ describe('a fast general model', () => {
         dueDate: '2026-10-16',
         dueTime: '17:00',
         assignee: 'sam',
-        areaId: HEALTH,
+        tagId: HEALTH,
         headsUpDays: [1, 7],
       },
       phrases: {},

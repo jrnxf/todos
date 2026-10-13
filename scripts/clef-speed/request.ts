@@ -1,6 +1,6 @@
 // One request of the documented usage, as scripts/read-eval-verify.ts builds
 // it for "Call the landlord saturday" in the test's made-up household: the
-// area both ways round, and whether "saturday" is when it is due. It is here
+// tag both ways round, and whether "saturday" is when it is due. It is here
 // only to be timed; nothing reads the answer.
 export const REQUEST = {
   state: {

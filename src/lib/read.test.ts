@@ -21,7 +21,7 @@ const context: ReadContext = {
     { id: 'alex', name: 'Alex' },
     { id: 'sam', name: 'Sam' },
   ],
-  areas: [
+  tags: [
     { id: HOUSE, name: 'House' },
     { id: KIDS, name: 'Kids' },
     { id: PAPERWORK, name: 'Paperwork' },
@@ -74,33 +74,33 @@ describe('whose a to-do is', () => {
   })
 })
 
-describe('the area', () => {
-  it('is read from a tag or a heading, which leave the title', () => {
+describe('the tag', () => {
+  it('is read from a hashtag or a heading, which leave the title', () => {
     expect(read('sign permission slip #kids')).toMatchObject({
       title: 'sign permission slip',
-      fields: { areaId: KIDS },
+      fields: { tagId: KIDS },
     })
     expect(read('House: replace smoke detector batteries')).toMatchObject({
       title: 'replace smoke detector batteries',
-      fields: { areaId: HOUSE },
+      fields: { tagId: HOUSE },
     })
   })
 
   it('is read from its own name in passing, which stays in the title', () => {
     expect(read('Flu shots for the kids')).toMatchObject({
       title: 'Flu shots for the kids',
-      fields: { areaId: KIDS },
+      fields: { tagId: KIDS },
     })
   })
 
   it('is read from a heading with a dash', () => {
     expect(read('Car - rotate the tires')).toMatchObject({
       title: 'rotate the tires',
-      fields: { areaId: CAR },
+      fields: { tagId: CAR },
     })
     expect(read('order flea medicine #pets, must do')).toMatchObject({
       title: 'order flea medicine',
-      fields: { areaId: PETS, mustNotMiss: true },
+      fields: { tagId: PETS, mustNotMiss: true },
     })
     // Not a heading: the word runs on.
     expect(read('House-warming gift for the Lees').title).toBe(
@@ -116,30 +116,30 @@ describe('the area', () => {
     ['Refill my allergy prescription', HEALTH],
     ['Put the winter tires on', CAR],
     ['Call the school about pickup', KIDS],
-    // What the area is about beats what is being done for it.
+    // What the tag is about beats what is being done for it.
     ["Pick up the dog's medicine", PETS],
     ['Renew car registration', CAR],
-  ])('is hinted at by %j, which stays whole', (text, areaId) => {
-    expect(read(text)).toMatchObject({ title: text, fields: { areaId } })
+  ])('is hinted at by %j, which stays whole', (text, tagId) => {
+    expect(read(text)).toMatchObject({ title: text, fields: { tagId } })
   })
 
   it.each([
     'Housekeeping deposit',
     'Buy a birthday present',
     'Call 311 about the pothole',
-    // Two areas as strongly as each other: neither.
+    // Two tags as strongly as each other: neither.
     'Pay the daycare invoice',
     'Take the kids and the dog to the park',
   ])('is left empty for %j', (text) => {
-    expect(read(text).fields.areaId).toBeUndefined()
+    expect(read(text).fields.tagId).toBeUndefined()
   })
 
-  it('is hinted at only for an area the household has', () => {
+  it('is hinted at only for a tag the household has', () => {
     expect(
       readTitle(chrono, 'Mow the lawn', {
         ...context,
-        areas: [{ id: ERRANDS, name: 'Errands' }],
-      }).fields.areaId,
+        tags: [{ id: ERRANDS, name: 'Errands' }],
+      }).fields.tagId,
     ).toBeUndefined()
   })
 })
@@ -247,7 +247,7 @@ describe('a whole title', () => {
       title: 'flu shots for the kids',
       fields: {
         assignee: 'sam',
-        areaId: KIDS,
+        tagId: KIDS,
         dueDate: '2026-10-17',
         dueTime: '10:30',
         headsUpDays: [3],
@@ -255,7 +255,7 @@ describe('a whole title', () => {
       },
       phrases: {
         who: 'Sam:',
-        area: 'kids',
+        tag: 'kids',
         when: 'sat 10:30',
         headsUp: ', remind me 3 days before',
         flag: '!',
@@ -270,7 +270,7 @@ describe('a whole title', () => {
       fields: { dueDate: '2026-10-14' },
     })
     expect(
-      read('Sam: call the school tomorrow', ['who', 'when', 'area']),
+      read('Sam: call the school tomorrow', ['who', 'when', 'tag']),
     ).toEqual({
       title: 'Sam: call the school tomorrow',
       fields: {},
@@ -305,7 +305,7 @@ describe("Jev's reading", () => {
   const jev: JevRead = {
     when: { dueDate: '2026-10-17', dueTime: '21:00' },
     who: 'sam',
-    area: HOUSE,
+    tag: HOUSE,
     flag: true,
     drops: [
       { index: 0, field: 'who' },
@@ -330,14 +330,14 @@ describe("Jev's reading", () => {
         dueDate: '2026-10-17',
         dueTime: '21:00',
         assignee: 'sam',
-        areaId: HOUSE,
+        tagId: HOUSE,
         mustNotMiss: true,
       },
       phrases: {},
       guessed: {
         when: 'at 9pm on saturday',
         who: 'Sam',
-        area: '',
+        tag: '',
         flag: "don't forget",
       },
     })
@@ -348,14 +348,14 @@ describe("Jev's reading", () => {
   })
 
   it('leaves to the rules each field it did not answer', () => {
-    // Only the area came back: who, when and the flag are read as before,
-    // and the area the rules would have hinted at is not.
-    const { area: _hinted, ...phrases } = read(text).phrases
-    expect(withJev(text, { area: HOUSE, drops: [] })).toEqual({
+    // Only the tag came back: who, when and the flag are read as before,
+    // and the tag the rules would have hinted at is not.
+    const { tag: _hinted, ...phrases } = read(text).phrases
+    expect(withJev(text, { tag: HOUSE, drops: [] })).toEqual({
       ...read(text),
-      fields: { ...read(text).fields, areaId: HOUSE },
+      fields: { ...read(text).fields, tagId: HOUSE },
       phrases,
-      guessed: { area: '' },
+      guessed: { tag: '' },
     })
     // The day came back and the rest did not.
     expect(
@@ -373,7 +373,7 @@ describe("Jev's reading", () => {
 
   it('never fills a field set by hand, and keeps its words', () => {
     const byHand = withJev(text, jev, { skip: new Set(['when', 'who']) })
-    expect(byHand.fields).toEqual({ areaId: HOUSE, mustNotMiss: true })
+    expect(byHand.fields).toEqual({ tagId: HOUSE, mustNotMiss: true })
     expect(byHand.title).toBe('Sam visit garden center at 9pm on saturday')
   })
 

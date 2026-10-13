@@ -29,10 +29,10 @@ import { dueLabel, headsUpSummary } from '@/lib/board'
 import { addDays, formatDay, formatInstantDay, formatTime } from '@/lib/dates'
 import { useBoard, useDelete, useSetDone, useUpdateItem } from '@/lib/queries'
 import { whenLabel } from '@/lib/when'
-import { AreaDot } from './area'
+import { TagDot } from './tag'
 import { Picker } from './picker'
 import { Row, Rows } from './rows'
-import { AreaFields, HeadsUpFields, WhoFields } from './small-pickers'
+import { TagFields, HeadsUpFields, WhoFields } from './small-pickers'
 import { SectionHeading } from './todo-row'
 import { WhenFields } from './when-picker'
 import type { LucideIcon } from 'lucide-react'
@@ -89,7 +89,7 @@ function ValueRow({
   )
 }
 
-type Open = 'when' | 'headsUp' | 'who' | 'area' | null
+type Open = 'when' | 'headsUp' | 'who' | 'tag' | null
 
 /** Everything about the to-do except the two buttons that finish or delete it. */
 export function TodoDetailBody({ todo }: { todo: Todo }) {
@@ -103,7 +103,7 @@ export function TodoDetailBody({ todo }: { todo: Todo }) {
   const due = dueLabel(todo, board.today)
   const alerts = upcomingAlerts(todo, board.now, board.alertConfig)
   const late = Boolean(todo.dueDate && todo.dueDate < board.today)
-  const area = board.areas.find((one) => one.id === todo.areaId)
+  const tag = board.tags.find((one) => one.id === todo.tagId)
 
   const save = (patch: Partial<ItemFields>) =>
     update.mutate({ id: todo.id, patch })
@@ -226,16 +226,16 @@ export function TodoDetailBody({ todo }: { todo: Todo }) {
         </Picker>
 
         <Picker
-          title="Area"
-          description="File it under an area."
-          open={open === 'area'}
-          onOpenChange={toggle('area')}
+          title="Tag"
+          description="File it under a tag."
+          open={open === 'tag'}
+          onOpenChange={toggle('tag')}
           trigger={
-            <ValueRow icon={TagIcon} label="Area">
-              {area ? (
+            <ValueRow icon={TagIcon} label="Tag">
+              {tag ? (
                 <span className="flex items-center gap-1.5">
-                  <AreaDot color={area.color} />
-                  {area.name}
+                  <TagDot color={tag.color} />
+                  {tag.name}
                 </span>
               ) : (
                 <span className="font-normal text-muted-foreground">None</span>
@@ -243,10 +243,10 @@ export function TodoDetailBody({ todo }: { todo: Todo }) {
             </ValueRow>
           }
         >
-          <AreaFields
-            value={todo.areaId}
-            onChange={(areaId) => {
-              save({ areaId })
+          <TagFields
+            value={todo.tagId}
+            onChange={(tagId) => {
+              save({ tagId })
               setOpen(null)
             }}
           />

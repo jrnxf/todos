@@ -8,9 +8,9 @@
 //   - Jev first, what the app does today, as the baseline of the old usage;
 //   - each decision model (Jev, Cloudflare Clef, Clef Flash, OpenAI
 //     Decisions) asked the documented way (scripts/read-eval-verify.ts): the
-//     rules read first, and the model picks the area and can take back a
+//     rules read first, and the model picks the tag and can take back a
 //     date that is part of a name. One request a sentence, read three ways:
-//     that, the area alone, and with the date in parts where the rules read
+//     that, the tag alone, and with the date in parts where the rules read
 //     none;
 //   - one call to a fast general model (Claude Haiku 4.5, Gemini 3.1 Flash
 //     Lite) for all of it.
@@ -58,7 +58,7 @@ import {
   GRIDS,
   JEV_VERSION,
   STARTING_CUTOFFS,
-  areaFrom,
+  tagFrom,
   chooseCutoff,
   columnAsks,
   columnRead,
@@ -459,13 +459,13 @@ for (const provider of asked) {
   const cuts: Cutoffs = { ...STARTING_CUTOFFS }
   const steps = [
     {
-      key: 'area',
-      column: 'area',
-      question: 'how sure of the area, both ways round, before it is filled',
+      key: 'tag',
+      column: 'tag',
+      question: 'how sure of the tag, both ways round, before it is filled',
       acts: 'filled',
       acted: (answers: Answers, cutoff: number, index: number) =>
-        sentences[index].rules.fields.areaId === undefined &&
-        areaFrom(answers, HOUSEHOLD, cutoff) !== undefined,
+        sentences[index].rules.fields.tagId === undefined &&
+        tagFrom(answers, HOUSEHOLD, cutoff) !== undefined,
     },
     {
       key: 'veto',
@@ -485,7 +485,7 @@ for (const provider of asked) {
         dateFromParts(answers, HOUSEHOLD.today, cutoff) !== undefined,
     },
   ] as const
-  // In turn: the veto is chosen with the area's cut-off in place, and the
+  // In turn: the veto is chosen with the tag's cut-off in place, and the
   // parts with both.
   for (const step of steps) {
     const rows = GRIDS[step.key].map((cutoff) => {
@@ -502,7 +502,7 @@ for (const provider of asked) {
             misses(
               read.filter((one) => one.set === name),
               'column',
-              HOUSEHOLD.areas,
+              HOUSEHOLD.tags,
             ).length,
         ),
         acted: bySet(
@@ -619,7 +619,7 @@ writeFileSync(
       size: set.cases.length,
       kind: set.kind,
     })),
-    areas: HOUSEHOLD.areas,
+    tags: HOUSEHOLD.tags,
     ways,
     skipped,
     providers: PROVIDERS,

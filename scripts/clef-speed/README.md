@@ -12,7 +12,7 @@ and take it down.
 
 What it does when asked, and nothing else:
 
-1. Sends one request of the documented usage (`request.ts`: the area both
+1. Sends one request of the documented usage (`request.ts`: the tag both
    ways round and the date check, about 5,000 characters, the made-up
    household) to Clef 15 times back to back, then 4 times ten seconds apart.
 2. Does the same with Clef Flash.

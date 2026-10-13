@@ -141,7 +141,7 @@ export interface Way {
   name: string
   /**
    * `rules`: nothing is sent. `first`: Jev as the app asks it today, for
-   * every field and every word. `area`, `verify` and `parts`: a decision
+   * every field and every word. `tag`, `verify` and `parts`: a decision
    * model asked the documented way (scripts/read-eval-verify.ts), three
    * readings of one reply. `model`: one call to a general model for all of
    * it.
@@ -153,14 +153,14 @@ export interface Way {
 
 const ABOUT: Record<Column, string> = {
   verify:
-    'the rules read first and write the title; the model picks the area from described options where the rules found none, and can take back a date the rules read from words that are part of a name. It never writes a date, a time or a title',
-  area: 'test only, to show the area question’s worth alone: the same reply, read for the area and nothing else',
+    'the rules read first and write the title; the model picks the tag from described options where the rules found none, and can take back a date the rules read from words that are part of a name. It never writes a date, a time or a title',
+  tag: 'test only, to show the tag question’s worth alone: the same reply, read for the tag and nothing else',
   parts:
     'test only: the same reply again, and where the rules read no date, one put together in code from the parts the model names (how it is written, the month, the day, the weekday)',
 }
 const COLUMN_NAME: Record<Column, string> = {
   verify: 'Verify',
-  area: 'Area only',
+  tag: 'Tag only',
   parts: 'Verify + date parts',
 }
 /** The decision models asked the documented way, in the report's order. */
@@ -181,7 +181,7 @@ const SHORT: Record<DecisionProvider, string> = {
 export const columnWay = (provider: DecisionProvider, column: Column) =>
   `${column}:${provider}`
 /** The columns read out of one reply, the one that is the proposal first. */
-export const COLUMNS: ReadonlyArray<Column> = ['verify', 'area', 'parts']
+export const COLUMNS: ReadonlyArray<Column> = ['verify', 'tag', 'parts']
 
 /** Every way, in the order the report shows them. */
 export const WAYS: Array<Way> = [
@@ -486,7 +486,7 @@ export function fastSchema(household: Household) {
       area: {
         ...orNull({
           type: 'string',
-          enum: household.areas.map((one) => one.name),
+          enum: household.tags.map((one) => one.name),
         }),
         description: 'The one area it belongs in, or null when none fits.',
       },
@@ -512,7 +512,7 @@ export function fastInstructions(household: Household): string {
   )
   return [
     'You read one to-do typed into a shared household list and return what its buttons should be set to. Fill a field only from what the to-do says; when it does not say, return null. A wrong fill is worse than an empty one.',
-    `Today is ${weekday}, ${household.today}. The household is ${household.people.map((one) => one.name).join(' and ')}${me ? `; ${me.name} is typing ("I", "me")` : ''}. The areas are ${household.areas.map((one) => one.name).join(', ')}.`,
+    `Today is ${weekday}, ${household.today}. The household is ${household.people.map((one) => one.name).join(' and ')}${me ? `; ${me.name} is typing ("I", "me")` : ''}. The areas are ${household.tags.map((one) => one.name).join(', ')}.`,
     'title: the to-do as typed, in the same words, case and spelling, with only the words removed that say the day or time, hand it to someone ("Sam:", "ask Sam to", "I need to", "can you"), name the area as a tag or heading ("#kids", "House:"), ask for or refuse a reminder, or stress it. Never drop or change a word of the task itself, and never drop a name, number, day or month that is part of the task ("Friday Night Lights", "Sam\'s suit", "2 weeks of recycling").',
     'due_date: the day it is due or happens on. A weekday means the next one, and when it is today\'s weekday it means a week from today. "next week" is the coming Monday, "this weekend" the coming Saturday, "before friday" is Friday, "the 5th" is the next 5th. A day or month already gone by is the next one to come. A day that is part of a name or says whose something is ("Friday\'s field trip") is not a due date.',
     'due_time: the time of day, when one is said. An hour without am or pm is the one the task makes likely: "dinner at 7" is 19:00, "dentist at 9" is 09:00.',
@@ -626,9 +626,9 @@ export function fastRead(json: string, household: Household): TitleRead | null {
     fields.assignee = who.id
   }
   if (area !== null) {
-    const where = household.areas.find((one) => one.name === area)
+    const where = household.tags.find((one) => one.name === area)
     if (!where) return null
-    fields.areaId = where.id
+    fields.tagId = where.id
   }
   if (days !== null) {
     if (

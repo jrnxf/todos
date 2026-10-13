@@ -26,16 +26,16 @@
   --color-border: var(--border);
   --color-destructive: var(--destructive);
   --color-warning: var(--warning);
-  /* What an area can be coloured. Chosen to stay apart from the red and
+  /* What a tag can be coloured. Chosen to stay apart from the red and
      amber that mean late and soon. */
-  --color-area-blue: oklch(0.62 0.19 255);
-  --color-area-teal: oklch(0.68 0.12 195);
-  --color-area-green: oklch(0.65 0.17 150);
-  --color-area-amber: oklch(0.74 0.16 70);
-  --color-area-red: oklch(0.62 0.22 25);
-  --color-area-pink: oklch(0.68 0.19 350);
-  --color-area-violet: oklch(0.6 0.2 300);
-  --color-area-gray: oklch(0.6 0 0);
+  --color-tag-blue: oklch(0.62 0.19 255);
+  --color-tag-teal: oklch(0.68 0.12 195);
+  --color-tag-green: oklch(0.65 0.17 150);
+  --color-tag-amber: oklch(0.74 0.16 70);
+  --color-tag-red: oklch(0.62 0.22 25);
+  --color-tag-pink: oklch(0.68 0.19 350);
+  --color-tag-violet: oklch(0.6 0.2 300);
+  --color-tag-gray: oklch(0.6 0 0);
   --color-success: var(--success);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);

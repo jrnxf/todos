@@ -1,6 +1,6 @@
 // The documented usage is trusted for three promises, and none of them would
 // look wrong in a report if it broke: the veto can only take a date away, the
-// area question never touches a field the rules read, and no sentence of the
+// tag question never touches a field the rules read, and no sentence of the
 // test is written into the requests it is scored by. No key is at hand, so
 // the requests are also held to the shapes the providers document.
 import * as chrono from 'chrono-node'
@@ -26,8 +26,8 @@ import {
 } from './read-eval-ways'
 import type { Answers, Cutoffs } from './read-eval-verify'
 
-const YARD = HOUSEHOLD.areas.find((one) => one.name === 'Yard')?.id
-const cuts: Cutoffs = { area: 0.7, veto: 0.2, parts: 0.8 }
+const YARD = HOUSEHOLD.tags.find((one) => one.name === 'Yard')?.id
+const cuts: Cutoffs = { tag: 0.7, veto: 0.2, parts: 0.8 }
 const pick = (choice: string, sure = 0.95, others = ['none', 'x']) => ({
   choice,
   probabilities: Object.fromEntries([
@@ -37,10 +37,10 @@ const pick = (choice: string, sure = 0.95, others = ['none', 'x']) => ({
       .map((other) => [other, (1 - sure) / others.length]),
   ]),
 })
-/** A reply that pushes every way it can: an area, a veto and a date. */
+/** A reply that pushes every way it can: a tag, a veto and a date. */
 const pushy: Answers = {
-  [QUESTIONS.area]: pick('Yard'),
-  [QUESTIONS.areaReversed]: pick('Yard'),
+  [QUESTIONS.tag]: pick('Yard'),
+  [QUESTIONS.tagReversed]: pick('Yard'),
   [QUESTIONS.when]: { noul: 0.01 },
   [QUESTIONS.mode]: pick('relative'),
   [QUESTIONS.anchor]: pick('tomorrow'),
@@ -51,12 +51,12 @@ describe('the request', () => {
   it('asks only what the rules left to judgment', () => {
     const ids = (title: string) =>
       Object.keys(verifyRequest(title, HOUSEHOLD).request?.questions ?? {})
-    // A date was read: is it one? An area was found: not asked.
+    // A date was read: is it one? A tag was found: not asked.
     expect(ids('Mow the lawn saturday')).toEqual([QUESTIONS.when])
-    // No area and no date: the area both ways round, and the date in parts.
+    // No tag and no date: the tag both ways round, and the date in parts.
     expect(ids('Call mom')).toEqual([
-      QUESTIONS.area,
-      QUESTIONS.areaReversed,
+      QUESTIONS.tag,
+      QUESTIONS.tagReversed,
       QUESTIONS.mode,
       QUESTIONS.month,
       QUESTIONS.day,
@@ -64,7 +64,7 @@ describe('the request', () => {
       QUESTIONS.weekday,
       QUESTIONS.week,
     ])
-    // An area named outright is not asked about.
+    // A tag named outright is not asked about.
     expect(ids('#yard rake saturday')).toEqual([QUESTIONS.when])
   })
 
@@ -75,18 +75,18 @@ describe('the request', () => {
       todo: 'Call mom',
       today: 'Tuesday, 2026-10-13',
     })
-    const area = request?.questions[QUESTIONS.area] as {
+    const tag = request?.questions[QUESTIONS.tag] as {
       criteria: Record<string, { what: string; examples: Array<string> }>
     }
-    const reversed = request?.questions[QUESTIONS.areaReversed] as typeof area
-    expect(Object.keys(area.criteria)).toEqual([
+    const reversed = request?.questions[QUESTIONS.tagReversed] as typeof tag
+    expect(Object.keys(tag.criteria)).toEqual([
       'none',
-      ...HOUSEHOLD.areas.map((one) => one.name),
+      ...HOUSEHOLD.tags.map((one) => one.name),
     ])
     expect(Object.keys(reversed.criteria)).toEqual(
-      Object.keys(area.criteria).reverse(),
+      Object.keys(tag.criteria).reverse(),
     )
-    expect(area.criteria.Yard.what).toMatch(/lawn/)
+    expect(tag.criteria.Yard.what).toMatch(/lawn/)
   })
 
   it('asks about the very words the rules read the date from', () => {
@@ -204,7 +204,7 @@ describe('reading a reply', () => {
 describe('the columns', () => {
   it('are the rules alone with no answer', () => {
     const rules = rulesRead('Mow the lawn saturday')
-    for (const column of ['area', 'verify', 'parts'] as const)
+    for (const column of ['tag', 'verify', 'parts'] as const)
       expect(
         columnRead(
           column,
@@ -220,26 +220,26 @@ describe('the columns', () => {
   it('fill an area only where the rules found none, and only when both orders agree surely', () => {
     const rules = rulesRead('Call mom')
     const read = (answers: Answers) =>
-      columnRead('area', 'Call mom', HOUSEHOLD, rules, answers, cuts).fields
-        .areaId
+      columnRead('tag', 'Call mom', HOUSEHOLD, rules, answers, cuts).fields
+        .tagId
     expect(read(pushy)).toBe(YARD)
-    expect(read({ ...pushy, [QUESTIONS.areaReversed]: pick('Pets') })).toBe(
+    expect(read({ ...pushy, [QUESTIONS.tagReversed]: pick('Pets') })).toBe(
       undefined,
     )
-    expect(read({ ...pushy, [QUESTIONS.area]: pick('Yard', 0.6) })).toBe(
+    expect(read({ ...pushy, [QUESTIONS.tag]: pick('Yard', 0.6) })).toBe(
       undefined,
     )
     expect(
       read({
-        [QUESTIONS.area]: pick('none'),
-        [QUESTIONS.areaReversed]: pick('none'),
+        [QUESTIONS.tag]: pick('none'),
+        [QUESTIONS.tagReversed]: pick('none'),
       }),
     ).toBe(undefined)
-    // Not an area of this household.
+    // Not a tag of this household.
     expect(
       read({
-        [QUESTIONS.area]: pick('Boat'),
-        [QUESTIONS.areaReversed]: pick('Boat'),
+        [QUESTIONS.tag]: pick('Boat'),
+        [QUESTIONS.tagReversed]: pick('Boat'),
       }),
     ).toBe(undefined)
   })
@@ -265,9 +265,9 @@ describe('the columns', () => {
         cuts,
       ),
     ).toEqual(rules)
-    // The area-only column does not read the veto at all.
+    // The tag-only column does not read the veto at all.
     expect(
-      columnRead('area', title, HOUSEHOLD, rules, pushy, cuts).fields.dueDate,
+      columnRead('tag', title, HOUSEHOLD, rules, pushy, cuts).fields.dueDate,
     ).toBe('2026-10-17')
   })
 
@@ -297,11 +297,11 @@ describe('the columns', () => {
   it('never overwrite a field the rules read by the area question, on any sentence', () => {
     for (const [sentence] of CASES) {
       const rules = rulesRead(sentence)
-      const read = columnRead('area', sentence, HOUSEHOLD, rules, pushy, cuts)
+      const read = columnRead('tag', sentence, HOUSEHOLD, rules, pushy, cuts)
       expect(read.title).toBe(rules.title)
       expect(read.fields).toEqual(
-        rules.fields.areaId === undefined
-          ? { ...rules.fields, areaId: YARD }
+        rules.fields.tagId === undefined
+          ? { ...rules.fields, tagId: YARD }
           : rules.fields,
       )
     }
@@ -333,8 +333,8 @@ describe('the columns', () => {
   })
 
   it('say which questions are whose, for the cost of each', () => {
-    expect(columnAsks('area', QUESTIONS.area)).toBe(true)
-    expect(columnAsks('area', QUESTIONS.when)).toBe(false)
+    expect(columnAsks('tag', QUESTIONS.tag)).toBe(true)
+    expect(columnAsks('tag', QUESTIONS.when)).toBe(false)
     expect(columnAsks('verify', QUESTIONS.when)).toBe(true)
     expect(columnAsks('verify', QUESTIONS.mode)).toBe(false)
     expect(columnAsks('parts', QUESTIONS.week)).toBe(true)
@@ -408,7 +408,7 @@ describe('choosing a cut-off', () => {
     // Harm starts at 0.6: 0.7 is the least careful clean one, so 0.8.
     expect(
       chooseCutoff(
-        GRIDS.area,
+        GRIDS.tag,
         harm({ 0.95: 0, 0.9: 0, 0.8: 0, 0.7: 0, 0.6: 2, 0.5: 3 }),
       ),
     ).toBe(0.8)
@@ -417,7 +417,7 @@ describe('choosing a cut-off', () => {
     // Harm everywhere but the most careful: that one.
     expect(
       chooseCutoff(
-        GRIDS.area,
+        GRIDS.tag,
         harm({ 0.95: 0, 0.9: 1, 0.8: 1, 0.7: 1, 0.6: 1, 0.5: 1 }),
       ),
     ).toBe(0.95)

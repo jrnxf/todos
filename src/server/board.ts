@@ -6,7 +6,7 @@ import { and, eq, gte, isNull, lt, or } from 'drizzle-orm'
 import { z } from 'zod'
 import { channelFor, notify } from '@/alerts/notify'
 import { getDb, schema } from '@/db/client'
-import { AREA_COLORS } from '@/db/schema'
+import { TAG_COLORS } from '@/db/schema'
 import { addDays, localNow } from '@/lib/dates'
 import { withPictures } from '@/lib/people'
 import { JEV_USE } from '@/lib/read'
@@ -15,7 +15,7 @@ import { env } from './env'
 import { READ_FIELDS, readWithJev } from './jev-read'
 import type { Channel } from '@/alerts/notify'
 import type { AlertConfig } from '@/alerts/rules'
-import type { Area, Todo } from '@/db/schema'
+import type { Tag, Todo } from '@/db/schema'
 import type { LocalDate, Stamp } from '@/lib/dates'
 import type { PersonView } from '@/lib/people'
 import type { JevRead } from '@/lib/read'
@@ -35,7 +35,7 @@ export interface Board {
   meEmail: string | null
   /** Everyone in the household, with the Google picture when there is one. */
   people: Array<PersonView>
-  areas: Array<Area>
+  tags: Array<Tag>
   /** Open items, plus those finished in the last week. */
   items: Array<Todo>
   alertConfig: AlertConfig
@@ -64,8 +64,8 @@ export const getBoard = createServerFn({ method: 'GET' }).handler(
       Date.now() - DONE_VISIBLE_DAYS * 86_400_000,
     ).toISOString()
 
-    const [areas, items, accounts] = await Promise.all([
-      db.select().from(schema.areas),
+    const [tags, items, accounts] = await Promise.all([
+      db.select().from(schema.tags),
       db
         .select()
         .from(schema.items)
@@ -93,7 +93,7 @@ export const getBoard = createServerFn({ method: 'GET' }).handler(
       me,
       meEmail: env.auth.emailFor(me),
       people: withPictures(env.people, accounts, env.auth.emailFor),
-      areas,
+      tags,
       items,
       alertConfig: { ...env.alerts },
       channel: channelFor(me),
@@ -108,7 +108,7 @@ const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/)
 const fields = z.object({
   title: z.string().trim().min(1).max(200),
   notes: z.string().max(5000),
-  areaId: z.number().int().nullable(),
+  tagId: z.number().int().nullable(),
   assignee: z.string().nullable(),
   dueDate: date.nullable(),
   dueTime: time.nullable(),
@@ -195,10 +195,10 @@ export const readTitleWithJev = createServerFn({ method: 'POST' })
     const me = signedIn(context)
     const apiKey = env.typesafe.apiKey
     if (!apiKey) return null
-    const areas = await getDb().select().from(schema.areas)
+    const tags = await getDb().select().from(schema.tags)
     return readWithJev(
       data.title,
-      { today: localNow(env.timeZone).date, me, people: env.people, areas },
+      { today: localNow(env.timeZone).date, me, people: env.people, tags },
       {
         apiKey,
         ask: data.ask,
@@ -208,45 +208,45 @@ export const readTitleWithJev = createServerFn({ method: 'POST' })
     )
   })
 
-const areaFields = z.object({
+const tagFields = z.object({
   name: z.string().trim().min(1).max(40),
-  color: z.enum(AREA_COLORS),
+  color: z.enum(TAG_COLORS),
 })
 
-/** Makes an area. Asked for a name that exists, it hands back that one. */
-export const addArea = createServerFn({ method: 'POST' })
-  .validator(areaFields)
-  .handler(async ({ data }): Promise<Area> => {
+/** Makes a tag. Asked for a name that exists, it hands back that one. */
+export const addTag = createServerFn({ method: 'POST' })
+  .validator(tagFields)
+  .handler(async ({ data }): Promise<Tag> => {
     const db = getDb()
     const made = await db
-      .insert(schema.areas)
+      .insert(schema.tags)
       .values(data)
       .onConflictDoNothing()
       .returning()
     if (made.length > 0) return made[0]
     const [existing] = await db
       .select()
-      .from(schema.areas)
-      .where(eq(schema.areas.name, data.name))
+      .from(schema.tags)
+      .where(eq(schema.tags.name, data.name))
     return existing
   })
 
-export const updateArea = createServerFn({ method: 'POST' })
-  .validator(z.object({ id: z.number().int(), patch: areaFields.partial() }))
+export const updateTag = createServerFn({ method: 'POST' })
+  .validator(z.object({ id: z.number().int(), patch: tagFields.partial() }))
   .handler(async ({ data }): Promise<void> => {
     const db = getDb()
     await db
-      .update(schema.areas)
+      .update(schema.tags)
       .set(data.patch)
-      .where(eq(schema.areas.id, data.id))
+      .where(eq(schema.tags.id, data.id))
   })
 
-/** Its to-dos stay, with no area. */
-export const deleteArea = createServerFn({ method: 'POST' })
+/** Its to-dos stay, with no tag. */
+export const deleteTag = createServerFn({ method: 'POST' })
   .validator(z.object({ id: z.number().int() }))
   .handler(async ({ data }): Promise<void> => {
     const db = getDb()
-    await db.delete(schema.areas).where(eq(schema.areas.id, data.id))
+    await db.delete(schema.tags).where(eq(schema.tags.id, data.id))
   })
 
 export interface SentAlert {

@@ -87,7 +87,7 @@ const _env = createEnv({
 
     // Optional, a secret: a TypeSafe AI key. With it, the add bar asks their
     // Jev model to read a new to-do's title (src/server/jev-read.ts), which
-    // sends them the title, the first names in PEOPLE and the area names.
+    // sends them the title, the first names in PEOPLE and the tag names.
     // Without it nothing is sent.
     TYPESAFE_API_KEY: z.string().default(''),
     // Where Jev is asked. Only ever changed to point a dev server at a

@@ -42,7 +42,7 @@ const ago = (days: number) =>
 
 interface Seed {
   title: string
-  area?: string
+  tag?: string
   assignee?: string
   due_date?: string
   due_time?: string
@@ -54,31 +54,31 @@ interface Seed {
 const seeds: Array<Seed> = [
   {
     title: 'Sign field-trip form',
-    area: 'Kids',
+    tag: 'Kids',
     assignee: second,
     due_date: day(-3),
   },
   {
     title: 'Replace furnace filter',
-    area: 'House',
+    tag: 'House',
     assignee: first,
     due_date: day(-2),
   },
   {
     title: 'Call plumber about slow drain',
-    area: 'House',
+    tag: 'House',
     assignee: first,
     due_date: day(0),
   },
   {
     title: 'RSVP to birthday party',
-    area: 'Kids',
+    tag: 'Kids',
     due_date: day(0),
     due_time: '17:00',
   },
   {
     title: 'Car registration renewal',
-    area: 'Paperwork',
+    tag: 'Paperwork',
     assignee: first,
     due_date: day(3),
     heads_up_days: '[1,3]',
@@ -86,68 +86,69 @@ const seeds: Array<Seed> = [
   },
   {
     title: 'Flu shots, kids',
-    area: 'Kids',
+    tag: 'Kids',
     assignee: second,
     due_date: day(5),
     due_time: '10:30',
   },
   {
     title: 'Winterize hose bibs',
-    area: 'House',
+    tag: 'House',
     assignee: first,
     due_date: day(6),
   },
   {
     title: 'Passports, both kids',
-    area: 'Paperwork',
+    tag: 'Paperwork',
     due_date: day(18),
     heads_up_days: '[1,14]',
     must_not_miss: 1,
   },
   {
     title: 'FSA receipts',
-    area: 'Paperwork',
+    tag: 'Paperwork',
     assignee: first,
     due_date: day(19),
   },
   {
     title: 'Schedule chimney sweep',
-    area: 'House',
+    tag: 'House',
     assignee: first,
     due_date: day(33),
   },
   {
     title: 'Renew library cards',
-    area: 'Kids',
+    tag: 'Kids',
     assignee: second,
     due_date: day(39),
   },
   {
     title: 'Photo book for grandparents',
-    area: 'Kids',
+    tag: 'Kids',
     assignee: second,
     due_date: day(50),
   },
-  { title: 'Fix closet door', area: 'House' },
-  { title: 'Update will beneficiaries', area: 'Paperwork' },
+  { title: 'Fix closet door', tag: 'House' },
+  { title: 'Update will beneficiaries', tag: 'Paperwork' },
   {
     title: 'Book dentist, kids',
-    area: 'Kids',
+    tag: 'Kids',
     assignee: second,
     done_at: ago(1),
     done_by: second,
   },
   {
     title: 'Pay water bill',
-    area: 'House',
+    tag: 'House',
     assignee: first,
     done_at: ago(4),
     done_by: first,
   },
 ]
 
-// An area is stored by id; the migration made House, Kids and Paperwork.
-const areaId = (name: string | undefined) =>
+// A tag is stored by id; the migration made House, Kids and Paperwork. The
+// table and the column are still called areas and area_id in the database.
+const tagId = (name: string | undefined) =>
   name === undefined
     ? 'NULL'
     : `(SELECT id FROM areas WHERE name = ${quote(name)})`
@@ -162,10 +163,10 @@ function quote(value: string | number | undefined): string {
 
 const sql = [
   ...seeds.map((seed) => {
-    const { area, ...rest } = seed
+    const { tag, ...rest } = seed
     const row = { created_at: ago(14), created_by: second, ...rest }
     const columns = [...Object.keys(row), 'area_id']
-    const values = [...Object.values(row).map(quote), areaId(area)]
+    const values = [...Object.values(row).map(quote), tagId(tag)]
     return `INSERT INTO items (${columns.join(', ')}) VALUES (${values.join(', ')});`
   }),
 ].join('\n')

@@ -14,7 +14,7 @@ import {
 import { dueLabel } from '@/lib/board'
 import { formatTime } from '@/lib/dates'
 import { useBoard, useSetDone } from '@/lib/queries'
-import { AreaDot } from './area'
+import { TagDot } from './tag'
 import { Row, Rows } from './rows'
 import type { Todo } from '@/db/schema'
 import type { PersonView } from '@/lib/people'
@@ -100,21 +100,21 @@ function TimeLine({ todo }: { todo: Todo }) {
 
 export interface RowOptions {
   secondary?: Secondary
-  /** Leave the area off, for lists already grouped by it. */
-  hideArea?: boolean
+  /** Leave the tag off, for lists already grouped by it. */
+  hideTag?: boolean
 }
 
 export function TodoRow({
   todo,
   secondary = 'due',
-  hideArea = false,
+  hideTag = false,
   lead,
 }: RowOptions & {
   todo: Todo
   /** Something to show before the checkbox, such as a date or a time. */
   lead?: React.ReactNode
 }) {
-  const { people, areas } = useBoard()
+  const { people, tags } = useBoard()
   const setDone = useSetDone()
   const done = Boolean(todo.doneAt)
   const openId = useRouterState({
@@ -124,9 +124,7 @@ export function TodoRow({
   const selected = openId === todo.id
 
   const assignee = people.find((p) => p.id === todo.assignee)
-  const area = hideArea
-    ? undefined
-    : areas.find((one) => one.id === todo.areaId)
+  const tag = hideTag ? undefined : tags.find((one) => one.id === todo.tagId)
   const when =
     secondary === 'due' && todo.dueDate ? (
       <DueLine todo={todo} />
@@ -165,9 +163,9 @@ export function TodoRow({
           >
             {todo.title}
           </ItemTitle>
-          {!done && (when || area) && (
+          {!done && (when || tag) && (
             <ItemDescription
-              // On a laptop the area sits at the right of the row instead,
+              // On a laptop the tag sits at the right of the row instead,
               // so a line holding nothing else is not drawn there.
               className={cn(
                 'flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[0.8125rem]',
@@ -175,10 +173,10 @@ export function TodoRow({
               )}
             >
               {when}
-              {area && (
+              {tag && (
                 <span className="flex items-center gap-1.5 lg:hidden">
-                  <AreaDot color={area.color} />
-                  {area.name}
+                  <TagDot color={tag.color} />
+                  {tag.name}
                 </span>
               )}
             </ItemDescription>
@@ -186,16 +184,16 @@ export function TodoRow({
         </ItemContent>
       </Link>
       <ItemActions className="gap-3">
-        {area && (
+        {tag && (
           <span className="hidden items-center gap-1.5 text-xs text-muted-foreground lg:flex">
-            <AreaDot color={area.color} />
-            {area.name}
+            <TagDot color={tag.color} />
+            {tag.name}
           </span>
         )}
         {assignee ? (
           <PersonAvatar person={assignee} size="sm" />
         ) : (
-          // Keeps the area labels in one column on a laptop.
+          // Keeps the tag labels in one column on a laptop.
           <span className="hidden size-6 lg:block" />
         )}
       </ItemActions>

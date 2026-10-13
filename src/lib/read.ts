@@ -1,11 +1,11 @@
-// Reading the rest of a to-do out of its typed title: whose it is, the area,
+// Reading the rest of a to-do out of its typed title: whose it is, the tag,
 // the heads-up and the flag, on top of the date that lib/when.ts reads.
 // "Sam: flu shots for the kids sat 10:30 !" is Sam's, in Kids, on Saturday,
 // and must not be missed.
 //
 // A guess that fills a button wrongly is worse than a button left empty, so
 // each thing is read only where it is said, and whatever was read can be
-// taken back (`skip`). The one hint is the area (lib/area-hints.ts), which
+// taken back (`skip`). The one hint is the tag (lib/tag-hints.ts), which
 // may be read from the words of the task and gives way when they point two
 // ways.
 //
@@ -14,17 +14,17 @@
 // these rules read the rest. Jev fills the gaps: these rules read first, and
 // Jev is asked only about what they left empty. Either way the rules read all
 // of it when there is no answer.
-import { hintedArea } from './area-hints'
+import { hintedTag } from './tag-hints'
 import { parseWhen } from './when'
 import type { LocalDate, LocalTime } from './dates'
 import type { DateParser } from './when'
 
-export type ReadField = 'when' | 'who' | 'area' | 'headsUp' | 'flag'
+export type ReadField = 'when' | 'who' | 'tag' | 'headsUp' | 'flag'
 
 const FIELDS: ReadonlyArray<ReadField> = [
   'when',
   'who',
-  'area',
+  'tag',
   'headsUp',
   'flag',
 ]
@@ -37,7 +37,7 @@ const FIELDS: ReadonlyArray<ReadField> = [
  * rules read the rest.
  *
  * `gaps`: the rules read first and write the title alone. Jev is asked only
- * about a field they left empty, and about the area unless it was named
+ * about a field they left empty, and about the tag unless it was named
  * outright ("#kids", "House: ..."). It never touches a field the rules read.
  */
 export type JevUse = 'first' | 'gaps'
@@ -54,7 +54,7 @@ export interface ReadContext {
   /** Who is typing: "I need to..." is theirs. */
   me: string
   people: Array<{ id: string; name: string }>
-  areas: Array<{ id: number; name: string }>
+  tags: Array<{ id: number; name: string }>
   /** Fields to leave alone: set by hand, or read and then taken back. */
   skip?: ReadonlySet<ReadField>
   /** What Jev was sure of for this very text, if it was asked and answered. */
@@ -72,7 +72,7 @@ export interface ReadContext {
 export interface JevRead {
   when?: { dueDate: LocalDate; dueTime: LocalTime | null }
   who?: string
-  area?: number
+  tag?: number
   headsUp?: Array<number>
   flag?: true
   /**
@@ -98,7 +98,7 @@ export interface TitleRead {
     dueDate?: LocalDate
     dueTime?: LocalTime | null
     assignee?: string
-    areaId?: number
+    tagId?: number
     headsUpDays?: Array<number>
     mustNotMiss?: true
   }
@@ -222,7 +222,7 @@ export function readTitle(
 
 /**
  * The fields to ask Jev about when it fills the gaps: those the rules left
- * empty in `text`, and the area unless it was named outright. Never one set
+ * empty in `text`, and the tag unless it was named outright. Never one set
  * by hand or taken back.
  */
 export function gapsIn(
@@ -268,9 +268,9 @@ function reading(
       fields.assignee = jev.who
       guessed.who = ''
     }
-    if (jev.area !== undefined && open('area')) {
-      fields.areaId = jev.area
-      guessed.area = ''
+    if (jev.tag !== undefined && open('tag')) {
+      fields.tagId = jev.tag
+      guessed.tag = ''
     }
     if (jev.headsUp && open('headsUp')) {
       fields.headsUpDays = jev.headsUp
@@ -355,18 +355,18 @@ function reading(
       fields.assignee = context.me
   }
 
-  // An area said as a tag or a heading: "#kids", "House: ...", "Car - ...".
+  // A tag named as a hashtag or a heading: "#kids", "House: ...", "Car - ...".
   let named = false
-  if (reads('area')) {
-    const area = context.areas.find((one) => {
+  if (reads('tag')) {
+    const tag = context.tags.find((one) => {
       const n = escaped(one.name)
       return (
-        take('area', new RegExp(String.raw`(^|\s)#${n}\b`, 'i')) ??
-        take('area', new RegExp(String.raw`^\s*${n}(?:\s*:|\s+[-–])\s+`, 'i'))
+        take('tag', new RegExp(String.raw`(^|\s)#${n}\b`, 'i')) ??
+        take('tag', new RegExp(String.raw`^\s*${n}(?:\s*:|\s+[-–])\s+`, 'i'))
       )
     })
-    if (area) {
-      fields.areaId = area.id
+    if (tag) {
+      fields.tagId = tag.id
       named = true
     }
   }
@@ -395,22 +395,22 @@ function reading(
       ? reading(parser, text, { ...context, jev: null })
       : { read: unread, gaps: [] }
 
-  // Or an area the title only points to, in words that stay in it: "Flu
+  // Or a tag the title only points to, in words that stay in it: "Flu
   // shots for the kids" is in Kids, "Mow the lawn" in Yard.
-  if (reads('area') && fields.areaId === undefined) {
-    const hinted = hintedArea(title, context.areas)
+  if (reads('tag') && fields.tagId === undefined) {
+    const hinted = hintedTag(title, context.tags)
     if (hinted) {
-      fields.areaId = hinted.area.id
-      phrases.area = hinted.phrase
+      fields.tagId = hinted.tag.id
+      phrases.tag = hinted.phrase
     }
   }
 
-  // What the rules left empty. The area is one of them unless it was named
+  // What the rules left empty. The tag is one of them unless it was named
   // outright: one the title only points to is a hint, and Jev may know better.
   const left: Record<ReadField, boolean> = {
     when: fields.dueDate === undefined,
     who: fields.assignee === undefined,
-    area: !named,
+    tag: !named,
     headsUp: fields.headsUpDays === undefined,
     flag: fields.mustNotMiss === undefined,
   }
@@ -429,10 +429,10 @@ function reading(
       fields.assignee = filler.who
       guessed.who = ''
     }
-    if (filler.area !== undefined && fills('area')) {
-      fields.areaId = filler.area
-      delete phrases.area
-      guessed.area = ''
+    if (filler.tag !== undefined && fills('tag')) {
+      fields.tagId = filler.tag
+      delete phrases.tag
+      guessed.tag = ''
     }
     if (filler.headsUp && fills('headsUp')) {
       fields.headsUpDays = filler.headsUp

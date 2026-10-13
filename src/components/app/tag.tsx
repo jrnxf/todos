@@ -1,28 +1,28 @@
-// An area's colour as a dot, and the small form that makes or changes one.
+// A tag's colour as a dot, and the small form that makes or changes one.
 // Colour is only ever a dot: red and amber text already mean late and soon.
 import { useState } from 'react'
 import { cn } from 'cn'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { AREA_COLORS } from '@/db/schema'
-import type { AreaColor } from '@/db/schema'
+import { TAG_COLORS } from '@/db/schema'
+import type { TagColor } from '@/db/schema'
 
-const BG: Record<AreaColor, string> = {
-  blue: 'bg-area-blue',
-  teal: 'bg-area-teal',
-  green: 'bg-area-green',
-  amber: 'bg-area-amber',
-  red: 'bg-area-red',
-  pink: 'bg-area-pink',
-  violet: 'bg-area-violet',
-  gray: 'bg-area-gray',
+const BG: Record<TagColor, string> = {
+  blue: 'bg-tag-blue',
+  teal: 'bg-tag-teal',
+  green: 'bg-tag-green',
+  amber: 'bg-tag-amber',
+  red: 'bg-tag-red',
+  pink: 'bg-tag-pink',
+  violet: 'bg-tag-violet',
+  gray: 'bg-tag-gray',
 }
 
-export function AreaDot({
+export function TagDot({
   color,
   className,
 }: {
-  color: AreaColor
+  color: TagColor
   className?: string
 }) {
   return (
@@ -37,19 +37,19 @@ export function AreaDot({
   )
 }
 
-export function AreaForm({
+export function TagForm({
   initial,
   submitLabel,
   onSubmit,
   onCancel,
 }: {
-  initial?: { name: string; color: AreaColor }
+  initial?: { name: string; color: TagColor }
   submitLabel: string
-  onSubmit: (area: { name: string; color: AreaColor }) => void
+  onSubmit: (tag: { name: string; color: TagColor }) => void
   onCancel?: () => void
 }) {
   const [name, setName] = useState(initial?.name ?? '')
-  const [color, setColor] = useState<AreaColor>(initial?.color ?? 'green')
+  const [color, setColor] = useState<TagColor>(initial?.color ?? 'green')
   const trimmed = name.trim()
   const submit = () => {
     if (trimmed) onSubmit({ name: trimmed, color })
@@ -67,7 +67,7 @@ export function AreaForm({
           }
         }}
         placeholder="Name, e.g. Garden"
-        aria-label="Area name"
+        aria-label="Tag name"
         maxLength={40}
         className="h-10 text-base md:text-sm"
       />
@@ -76,7 +76,7 @@ export function AreaForm({
         aria-label="Colour"
         className="flex flex-wrap gap-2"
       >
-        {AREA_COLORS.map((option) => (
+        {TAG_COLORS.map((option) => (
           <button
             key={option}
             type="button"

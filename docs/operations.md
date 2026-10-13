@@ -13,7 +13,7 @@ your Worker is served at, such as `todos.<account>.workers.dev`.
 - Sign-in with Google (Better Auth), limited to a list of addresses. The
   address is public, but all it shows a stranger is the sign-in page.
 
-The database holds only what the household creates (to-dos, areas, sign-in
+The database holds only what the household creates (to-dos, tags, sign-in
 sessions), one row of scheduler state, and the migration history. Who lives
 in the house is a setting, not a table.
 
@@ -121,7 +121,7 @@ with rules in the page, which read only what is said outright.
 
 Given a key, it first asks [Jev](https://docs.typesafe.ai), TypeSafe AI's
 decision model, once typing pauses. One request asks for all of it: the day,
-the time, whose it is, the area, the heads-up, the flag, and for each word of
+the time, whose it is, the tag, the heads-up, the flag, and for each word of
 the title whether it is part of the task. Jev can only pick from options it
 is handed or answer yes or no, so it never writes a date or a title of its
 own.
@@ -144,7 +144,7 @@ bunx wrangler secret put TYPESAFE_API_KEY
 
 With the key set, this is sent to TypeSafe AI, a company outside the
 household, each time typing pauses on a new to-do: the title as typed so far,
-the first names in `PEOPLE` and which of them is typing, your area names, and
+the first names in `PEOPLE` and which of them is typing, your tag names, and
 today's date. Nothing else is: no notes, no other to-dos, no addresses.
 Nothing is sent for a to-do whose every button you set by hand, and a button
 you set by hand is not asked about. Delete the secret
@@ -168,14 +168,14 @@ on the same inputs:
 - **Verify**, for each decision model there is a key for (Jev, Cloudflare
   Clef, Clef Flash, OpenAI's Decisions API): the model asked the way its
   makers document (`scripts/read-eval-verify.ts`). The rules read first and
-  write the title. The model is asked only what takes judgment: which area,
+  write the title. The model is asked only what takes judgment: which tag,
   from options that are named and described, where the rules found none; and
   whether the words the rules read a date from are really when the to-do is
   due, or part of a name ("the Sunday paper"). A no takes that date away
   again. The model never writes a date, a time or a title, and never
   touches a field the rules read but that one date.
-- **Area only** and **Verify + date parts**: test only, read out of the same
-  reply, to show each part's worth on its own. The first reads the area and
+- **Tag only** and **Verify + date parts**: test only, read out of the same
+  reply, to show each part's worth on its own. The first reads the tag and
   nothing else. The second also asks, where the rules read no date, for the
   parts of one (how it is written, the month, the day, the weekday) and puts
   them together in code.

@@ -7,7 +7,7 @@ list.
 
 - **Views:** today, what is up next, a calendar (month and agenda), everything,
   and what got done this week.
-- **Areas** with a colour each, made by you: House, Kids, whatever fits.
+- **Tags** with a colour each, made by you: House, Kids, whatever fits.
 - **Alerts** through [Pushover](https://pushover.net): a morning digest, a
   heads-up some days before, a nudge an hour before a timed to-do, and a "must
   not miss" switch that alerts everyone until it is done.
@@ -75,7 +75,7 @@ database, make a Google sign-in client, set the settings, deploy.
 | `src/db/schema.ts`       | The tables. Migrations under `drizzle/` are applied by wrangler |
 | `src/lib/dates.ts`       | Dates as household-local strings, never UTC instants            |
 | `src/lib/when.ts`        | Date shortcuts, and reading a date out of a title. With tests   |
-| `src/lib/read.ts`        | Reading who, area, heads-up and flag out of a title. With tests |
+| `src/lib/read.ts`        | Reading who, tag, heads-up and flag out of a title. With tests  |
 | `scripts/read-eval.ts`   | `bun run eval:read`: scores the ways to read 200 test sentences |
 | `src/alerts/rules.ts`    | Which alerts exist and when. Pure, with tests                   |
 | `src/alerts/tick.ts`     | One scheduler pass: send what fell due since the last pass      |

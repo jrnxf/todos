@@ -19,30 +19,30 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { byDue, isOpen } from '@/lib/board'
 import { useBoard } from '@/lib/queries'
-import type { Area, Todo } from '@/db/schema'
+import type { Tag, Todo } from '@/db/schema'
 
 export const Route = createFileRoute('/_app/list')({
-  // With an area in the URL the list is that one area; the laptop sidebar
+  // With a tag in the URL the list is that one tag; the laptop sidebar
   // links here for each of them.
-  validateSearch: z.object({ area: z.coerce.number().int().optional() }),
+  validateSearch: z.object({ tag: z.coerce.number().int().optional() }),
   component: ListScreen,
 })
 
 const ALL = 'all'
 const EITHER = 'either'
 
-// The whole plate, grouped by area, including the things with no date.
+// The whole plate, grouped by tag, including the things with no date.
 function ListScreen() {
   const board = useBoard()
   const search = Route.useSearch()
-  const area = board.areas.find((one) => one.id === search.area)
+  const tag = board.tags.find((one) => one.id === search.tag)
   const [who, setWho] = useState(ALL)
 
-  const inArea = (todo: Todo) => !area || todo.areaId === area.id
-  const open = board.items.filter(isOpen).filter(inArea)
+  const inTag = (todo: Todo) => !tag || todo.tagId === tag.id
+  const open = board.items.filter(isOpen).filter(inTag)
   const done = board.items
     .filter((todo) => !isOpen(todo))
-    .filter(inArea)
+    .filter(inTag)
     .sort((a, b) => (b.doneAt ?? '').localeCompare(a.doneAt ?? ''))
   const filters = [
     { value: ALL, label: 'Anyone' },
@@ -53,9 +53,9 @@ function ListScreen() {
   return (
     <Column>
       <ScreenHeader
-        title={area?.name ?? 'Everything'}
+        title={tag?.name ?? 'Everything'}
         subtitle={
-          area ? `${open.length} open` : `${open.length} open, grouped by area`
+          tag ? `${open.length} open` : `${open.length} open, grouped by tag`
         }
       />
       <Tabs value={who} onValueChange={setWho} className="gap-5">
@@ -86,10 +86,10 @@ function ListScreen() {
             >
               {todos.length === 0 ? (
                 <Nothing />
-              ) : area ? (
-                <TodoGroup todos={[...todos].sort(byDue)} hideArea />
+              ) : tag ? (
+                <TodoGroup todos={[...todos].sort(byDue)} hideTag />
               ) : (
-                <ByArea todos={todos} areas={board.areas} />
+                <ByTag todos={todos} tags={board.tags} />
               )}
             </TabsContent>
           )
@@ -125,21 +125,21 @@ function Nothing() {
   )
 }
 
-function ByArea({ todos, areas }: { todos: Array<Todo>; areas: Array<Area> }) {
+function ByTag({ todos, tags }: { todos: Array<Todo>; tags: Array<Tag> }) {
   const sorted = [...todos].sort(byDue)
   return (
     <>
-      {areas.map((area) => (
+      {tags.map((tag) => (
         <Section
-          key={area.id}
-          title={area.name}
-          todos={sorted.filter((todo) => todo.areaId === area.id)}
-          hideArea
+          key={tag.id}
+          title={tag.name}
+          todos={sorted.filter((todo) => todo.tagId === tag.id)}
+          hideTag
         />
       ))}
       <Section
-        title="No area"
-        todos={sorted.filter((todo) => todo.areaId === null)}
+        title="No tag"
+        todos={sorted.filter((todo) => todo.tagId === null)}
       />
     </>
   )

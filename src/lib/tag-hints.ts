@@ -1,15 +1,15 @@
-// Which area a to-do belongs in when it does not name one: "Mow the lawn" is
+// Which tag a to-do belongs in when it does not name one: "Mow the lawn" is
 // the yard's, "Refill my prescription" is health's.
 //
-// Areas are made by each household, so this only knows the common ones, by
+// Tags are made by each household, so this only knows the common ones, by
 // the names people give them, and says nothing about any other. It is a hint
 // and never more: the words stay in the title, a to-do that points two ways
-// gets no area, and Jev, when it is asked, may know better.
+// gets no tag, and Jev, when it is asked, may know better.
 
 interface Kind {
-  /** What a household might call the area. */
+  /** What a household might call the tag. */
   names: Array<string>
-  /** What the area is about: "the dog's medicine" is the dog's first. */
+  /** What the tag is about: "the dog's medicine" is the dog's first. */
   about: Array<string>
   /** Things and jobs that belong to it. */
   hints: Array<string>
@@ -346,43 +346,43 @@ function found(title: string, terms: Array<string>): Array<string> {
 }
 
 /**
- * The one area `title` points to and the words that say so, or null: no area
+ * The one tag `title` points to and the words that say so, or null: no tag
  * it knows, none hinted at, or two as strongly as each other.
  */
-export function hintedArea<T extends { name: string }>(
+export function hintedTag<T extends { name: string }>(
   title: string,
-  areas: ReadonlyArray<T>,
-): { area: T; phrase: string } | null {
-  const known = areas.map((area) => {
-    const name = area.name.trim().toLowerCase()
+  tags: ReadonlyArray<T>,
+): { tag: T; phrase: string } | null {
+  const known = tags.map((tag) => {
+    const name = tag.name.trim().toLowerCase()
     const kinds = KINDS.filter((kind) => kind.names.includes(name))
-    return { area, name, kind: kinds.length === 1 ? kinds[0] : null }
+    return { tag, name, kind: kinds.length === 1 ? kinds[0] : null }
   })
-  // An area named in passing, or what it is about, comes first: "Order new
+  // A tag named in passing, or what it is about, comes first: "Order new
   // tires for the car" and "the dog's medicine" need nothing else.
-  const about = known.flatMap(({ area, name, kind }) => {
+  const about = known.flatMap(({ tag, name, kind }) => {
     const words = found(title, [
       name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
       ...(kind?.about ?? []),
     ])
-    return words.length > 0 ? [{ area, words }] : []
+    return words.length > 0 ? [{ tag, words }] : []
   })
   const hinted =
     about.length > 0
       ? about
       : known
-          .map(({ area, kind }) => ({
-            area,
+          .map(({ tag, kind }) => ({
+            tag,
             words: kind ? found(title, kind.hints) : [],
           }))
           .filter((one) => one.words.length > 0)
           .sort((a, b) => b.words.length - a.words.length)
   if (hinted.length === 0) return null
-  // Two areas named or about: neither. Two hinted at: the one with more.
+  // Two tags named or about: neither. Two hinted at: the one with more.
   if (
     hinted.length > 1 &&
     (about.length > 0 || hinted[0].words.length === hinted[1].words.length)
   )
     return null
-  return { area: hinted[0].area, phrase: hinted[0].words[0].toLowerCase() }
+  return { tag: hinted[0].tag, phrase: hinted[0].words[0].toLowerCase() }
 }

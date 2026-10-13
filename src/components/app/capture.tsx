@@ -50,12 +50,12 @@ import { useAddItem, useBoard } from '@/lib/queries'
 import { JEV_USE, gapsIn, readTitle } from '@/lib/read'
 import { shortWhenLabel } from '@/lib/when'
 import { readTitleWithJev } from '@/server/board'
-import { AreaDot } from './area'
+import { TagDot } from './tag'
 import { Picker, useIsDesktop } from './picker'
-import { AreaFields, HeadsUpFields, WhoFields } from './small-pickers'
+import { TagFields, HeadsUpFields, WhoFields } from './small-pickers'
 import { WhenFields } from './when-picker'
 import type { LucideIcon } from 'lucide-react'
-import type { AreaColor } from '@/db/schema'
+import type { TagColor } from '@/db/schema'
 import type { JevRead, ReadField } from '@/lib/read'
 import type { DateParser, When } from '@/lib/when'
 import type { ItemFields } from '@/server/board'
@@ -63,7 +63,7 @@ import type { ItemFields } from '@/server/board'
 export const EMPTY_FIELDS: ItemFields = {
   title: '',
   notes: '',
-  areaId: null,
+  tagId: null,
   assignee: null,
   dueDate: null,
   dueTime: null,
@@ -73,7 +73,7 @@ export const EMPTY_FIELDS: ItemFields = {
 
 const TITLE = 'Add a to-do'
 const DESCRIPTION =
-  'Type what needs doing. A date, a name, an area, a heads-up or "!" in the title fills in the rest.'
+  'Type what needs doing. A date, a name, a tag, a heads-up or "!" in the title fills in the rest.'
 
 const AddContext = createContext<(preset?: Partial<ItemFields>) => void>(
   () => {},
@@ -270,8 +270,8 @@ function Pill({
   roomy,
   ...props
 }: {
-  /** An area's colour, shown in place of the icon once the pill is set. */
-  dot?: AreaColor
+  /** A tag's colour, shown in place of the icon once the pill is set. */
+  dot?: TagColor
   /** Thumb-sized, for a phone. */
   roomy?: boolean
   icon: LucideIcon
@@ -288,7 +288,7 @@ function Pill({
       {...props}
       className="rounded-full aria-expanded:ring-1 aria-expanded:ring-foreground"
     >
-      {dot ? <AreaDot color={dot} /> : <Icon data-icon="inline-start" />}
+      {dot ? <TagDot color={dot} /> : <Icon data-icon="inline-start" />}
       {value}
     </Button>
   ) : (
@@ -314,12 +314,12 @@ function headsUpPill(days: Array<number>): string {
     .join(', ')
 }
 
-type Open = 'when' | 'area' | 'who' | 'headsUp' | null
+type Open = 'when' | 'tag' | 'who' | 'headsUp' | null
 
 const READ_FIELDS: Array<{ field: ReadField; icon: LucideIcon; name: string }> =
   [
     { field: 'when', icon: CalendarIcon, name: 'the date' },
-    { field: 'area', icon: TagIcon, name: 'the area' },
+    { field: 'tag', icon: TagIcon, name: 'the tag' },
     { field: 'who', icon: UserIcon, name: 'who' },
     { field: 'headsUp', icon: BellIcon, name: 'the heads-up' },
     { field: 'flag', icon: FlagIcon, name: 'must not miss' },
@@ -357,7 +357,7 @@ function CaptureBar({
     today: board.today,
     me: board.me,
     people: board.people,
-    areas: board.areas,
+    tags: board.tags,
   }
   // Asked about only what is still open. With every pill set by hand or
   // taken back there is nothing to ask, and nothing is sent. Where Jev only
@@ -385,7 +385,7 @@ function CaptureBar({
   const now: ItemFields = { ...fields, ...read.fields }
   const title = read.title
   const when: When = { dueDate: now.dueDate, dueTime: now.dueTime }
-  const area = board.areas.find((one) => one.id === now.areaId)
+  const tag = board.tags.find((one) => one.id === now.tagId)
 
   const patch = (change: Partial<ItemFields>) =>
     setFields((before) => ({ ...before, ...change }))
@@ -423,20 +423,20 @@ function CaptureBar({
       ),
     },
     {
-      key: 'area',
-      title: 'Area',
-      description: 'File it under an area.',
+      key: 'tag',
+      title: 'Tag',
+      description: 'File it under a tag.',
       pill: {
         icon: TagIcon,
-        label: 'Area',
-        value: area?.name ?? '',
-        dot: area?.color,
+        label: 'Tag',
+        value: tag?.name ?? '',
+        dot: tag?.color,
       },
       fields: (
-        <AreaFields
-          value={now.areaId}
-          onChange={(areaId) => {
-            set('area', { areaId })
+        <TagFields
+          value={now.tagId}
+          onChange={(tagId) => {
+            set('tag', { tagId })
             setOpen(null)
           }}
         />
@@ -487,7 +487,7 @@ function CaptureBar({
   // And what Jev filled in: the words it took for it, or else the value.
   const guessedValue: Record<ReadField, string> = {
     when: shortWhenLabel(when, board.today),
-    area: area?.name ?? '',
+    tag: tag?.name ?? '',
     who: board.people.find((p) => p.id === now.assignee)?.name ?? '',
     headsUp: headsUpPill(now.headsUpDays) || '1d',
     flag: 'Must not miss',

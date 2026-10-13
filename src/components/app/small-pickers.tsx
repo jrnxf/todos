@@ -1,11 +1,11 @@
-// The three one-row pickers: who, which area, and how far ahead to be warned.
+// The three one-row pickers: who, which tag, and how far ahead to be warned.
 import { useState } from 'react'
 import { PlusIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { HEADS_UP_CHOICES } from '@/lib/board'
-import { useAddArea, useBoard } from '@/lib/queries'
-import { AreaDot, AreaForm } from './area'
+import { useAddTag, useBoard } from '@/lib/queries'
+import { TagDot, TagForm } from './tag'
 
 const EITHER = 'either'
 
@@ -68,29 +68,29 @@ export function WhoFields({
   )
 }
 
-export function AreaFields({
+export function TagFields({
   value,
   onChange,
 }: {
   value: number | null
-  onChange: (areaId: number | null) => void
+  onChange: (tagId: number | null) => void
 }) {
-  const { areas } = useBoard()
-  const addArea = useAddArea()
+  const { tags } = useBoard()
+  const addTag = useAddTag()
   const [making, setMaking] = useState(false)
 
   return (
-    <Sheet title="Area">
+    <Sheet title="Tag">
       <Chips
         value={value === null ? [] : [String(value)]}
         onValueChange={([picked]: Array<string | undefined>) =>
           onChange(picked === undefined ? null : Number(picked))
         }
       >
-        {areas.map((area) => (
-          <ToggleGroupItem key={area.id} value={String(area.id)}>
-            <AreaDot color={area.color} />
-            {area.name}
+        {tags.map((tag) => (
+          <ToggleGroupItem key={tag.id} value={String(tag.id)}>
+            <TagDot color={tag.color} />
+            {tag.name}
           </ToggleGroupItem>
         ))}
         {!making && (
@@ -98,7 +98,7 @@ export function AreaFields({
             variant="outline"
             size="icon-lg"
             className="size-10"
-            aria-label="New area"
+            aria-label="New tag"
             onClick={() => setMaking(true)}
           >
             <PlusIcon />
@@ -107,13 +107,13 @@ export function AreaFields({
       </Chips>
       {making && (
         <div className="flex flex-col gap-2">
-          <h4 className="text-sm font-medium">New area</h4>
-          <AreaForm
+          <h4 className="text-sm font-medium">New tag</h4>
+          <TagForm
             submitLabel="Create and use"
             onCancel={() => setMaking(false)}
-            onSubmit={(area) => {
-              // Put the to-do in the new area as soon as it exists.
-              addArea.mutate(area, { onSuccess: (made) => onChange(made.id) })
+            onSubmit={(tag) => {
+              // Put the to-do in the new tag as soon as it exists.
+              addTag.mutate(tag, { onSuccess: (made) => onChange(made.id) })
               setMaking(false)
             }}
           />

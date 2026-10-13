@@ -1,5 +1,5 @@
 // The laptop's left sidebar: where you are, how much is in each place, the
-// areas in their colours, and who is signed in. Built from shadcn's stock
+// tags in their colours, and who is signed in. Built from shadcn's stock
 // sidebar. Phones never see it; they have the tab bar.
 import { useState } from 'react'
 import { Link, useRouterState } from '@tanstack/react-router'
@@ -54,16 +54,11 @@ import {
   SidebarSeparator,
 } from '@/components/ui/sidebar'
 import { isOpen, upNext } from '@/lib/board'
-import {
-  useAddArea,
-  useBoard,
-  useDeleteArea,
-  useUpdateArea,
-} from '@/lib/queries'
-import { AreaDot, AreaForm } from './area'
+import { useAddTag, useBoard, useDeleteTag, useUpdateTag } from '@/lib/queries'
+import { TagDot, TagForm } from './tag'
 import { useAdd } from './capture'
 import { NavUser } from './nav-user'
-import type { Area } from '@/db/schema'
+import type { Tag } from '@/db/schema'
 import type { ItemFields } from '@/server/board'
 
 export function AppSidebar({ addPreset }: { addPreset?: Partial<ItemFields> }) {
@@ -72,12 +67,12 @@ export function AppSidebar({ addPreset }: { addPreset?: Partial<ItemFields> }) {
   const location = useRouterState({ select: (state) => state.location })
   const { pathname, search } = location
 
-  const addArea = useAddArea()
-  const updateArea = useUpdateArea()
-  const deleteArea = useDeleteArea()
-  // The area form is open for a new area ('new') or to change one.
-  const [form, setForm] = useState<Area | 'new' | null>(null)
-  const [deleting, setDeleting] = useState<Area | null>(null)
+  const addTag = useAddTag()
+  const updateTag = useUpdateTag()
+  const deleteTag = useDeleteTag()
+  // The tag form is open for a new tag ('new') or to change one.
+  const [form, setForm] = useState<Tag | 'new' | null>(null)
+  const [deleting, setDeleting] = useState<Tag | null>(null)
 
   const open = board.items.filter(isOpen)
   const done = board.items.length - open.length
@@ -156,7 +151,7 @@ export function AppSidebar({ addPreset }: { addPreset?: Partial<ItemFields> }) {
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton
-                  isActive={pathname === '/list' && search.area === undefined}
+                  isActive={pathname === '/list' && search.tag === undefined}
                   render={<Link to="/list" />}
                 >
                   <ListChecksIcon />
@@ -179,28 +174,28 @@ export function AppSidebar({ addPreset }: { addPreset?: Partial<ItemFields> }) {
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel>Areas</SidebarGroupLabel>
+          <SidebarGroupLabel>Tags</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {board.areas.map((area) => (
-                <SidebarMenuItem key={area.id}>
+              {board.tags.map((tag) => (
+                <SidebarMenuItem key={tag.id}>
                   <SidebarMenuButton
-                    isActive={pathname === '/list' && search.area === area.id}
-                    render={<Link to="/list" search={{ area: area.id }} />}
+                    isActive={pathname === '/list' && search.tag === tag.id}
+                    render={<Link to="/list" search={{ tag: tag.id }} />}
                   >
-                    <AreaDot color={area.color} className="mx-1" />
-                    {area.name}
+                    <TagDot color={tag.color} className="mx-1" />
+                    {tag.name}
                   </SidebarMenuButton>
                   {/* The count gives way to the menu while the row is hovered. */}
                   <SidebarMenuBadge className="group-focus-within/menu-item:hidden group-hover/menu-item:hidden">
-                    {open.filter((todo) => todo.areaId === area.id).length}
+                    {open.filter((todo) => todo.tagId === tag.id).length}
                   </SidebarMenuBadge>
                   <DropdownMenu>
                     <DropdownMenuTrigger
                       render={
                         <SidebarMenuAction
                           showOnHover
-                          aria-label={`Change ${area.name}`}
+                          aria-label={`Change ${tag.name}`}
                         />
                       }
                     >
@@ -208,13 +203,13 @@ export function AppSidebar({ addPreset }: { addPreset?: Partial<ItemFields> }) {
                     </DropdownMenuTrigger>
                     <DropdownMenuContent side="right" align="start">
                       <DropdownMenuGroup>
-                        <DropdownMenuItem onClick={() => setForm(area)}>
+                        <DropdownMenuItem onClick={() => setForm(tag)}>
                           <PencilIcon />
                           Name and colour
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           variant="destructive"
-                          onClick={() => setDeleting(area)}
+                          onClick={() => setDeleting(tag)}
                         >
                           <Trash2Icon />
                           Delete
@@ -230,7 +225,7 @@ export function AppSidebar({ addPreset }: { addPreset?: Partial<ItemFields> }) {
                   onClick={() => setForm('new')}
                 >
                   <PlusIcon />
-                  New area
+                  New tag
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>
@@ -251,21 +246,21 @@ export function AppSidebar({ addPreset }: { addPreset?: Partial<ItemFields> }) {
       >
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>{form === 'new' ? 'New area' : 'Area'}</DialogTitle>
+            <DialogTitle>{form === 'new' ? 'New tag' : 'Tag'}</DialogTitle>
             <DialogDescription>
               A name and a colour. The colour shows as a dot wherever a to-do
-              from this area appears.
+              from this tag appears.
             </DialogDescription>
           </DialogHeader>
           {form !== null && (
-            <AreaForm
+            <TagForm
               key={form === 'new' ? 'new' : form.id}
               initial={form === 'new' ? undefined : form}
               submitLabel={form === 'new' ? 'Create' : 'Save'}
               onCancel={() => setForm(null)}
-              onSubmit={(area) => {
-                if (form === 'new') addArea.mutate(area)
-                else updateArea.mutate({ id: form.id, patch: area })
+              onSubmit={(tag) => {
+                if (form === 'new') addTag.mutate(tag)
+                else updateTag.mutate({ id: form.id, patch: tag })
                 setForm(null)
               }}
             />
@@ -283,7 +278,7 @@ export function AppSidebar({ addPreset }: { addPreset?: Partial<ItemFields> }) {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete {deleting?.name}?</AlertDialogTitle>
             <AlertDialogDescription>
-              Its to-dos stay on the list, with no area.
+              Its to-dos stay on the list, with no tag.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -291,7 +286,7 @@ export function AppSidebar({ addPreset }: { addPreset?: Partial<ItemFields> }) {
             <AlertDialogAction
               variant="destructive"
               onClick={() => {
-                if (deleting) deleteArea.mutate(deleting.id)
+                if (deleting) deleteTag.mutate(deleting.id)
                 setDeleting(null)
               }}
             >

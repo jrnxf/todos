@@ -27,7 +27,7 @@ const household = {
     { id: 'alex', name: 'Alex' },
     { id: 'sam', name: 'Sam' },
   ],
-  areas: [
+  tags: [
     { id: HOUSE, name: 'House' },
     { id: KIDS, name: 'Kids' },
     { id: PAPERWORK, name: 'Paperwork' },
@@ -136,7 +136,7 @@ describe('asking Jev', () => {
   })
 
   it('asks only about the fields still open', () => {
-    const { questions } = jevRequest(OWNERS, household, ['area', 'flag']) as {
+    const { questions } = jevRequest(OWNERS, household, ['tag', 'flag']) as {
       questions: Record<string, { criteria: Record<string, string> }>
     }
     expect(Object.keys(questions).slice(0, 2)).toEqual(['area', 'flag'])
@@ -187,7 +187,7 @@ describe('a sure answer', () => {
     expect(jev).toMatchObject({
       when: { dueDate: '2026-10-17', dueTime: '21:00' },
       who: 'sam',
-      area: HOUSE,
+      tag: HOUSE,
       flag: true,
     })
     expect(readTitle(chrono, OWNERS, { ...context, jev })).toMatchObject({
@@ -196,7 +196,7 @@ describe('a sure answer', () => {
         dueDate: '2026-10-17',
         dueTime: '21:00',
         assignee: 'sam',
-        areaId: HOUSE,
+        tagId: HOUSE,
         mustNotMiss: true,
       },
       phrases: {},
@@ -211,7 +211,7 @@ describe('a sure answer', () => {
       ),
     ).toMatchObject({
       title: 'Pay property tax',
-      fields: { headsUpDays: [7], dueDate: '2026-10-16', areaId: PAPERWORK },
+      fields: { headsUpDays: [7], dueDate: '2026-10-16', tagId: PAPERWORK },
     })
     expect(
       filled(
@@ -330,7 +330,7 @@ describe('falling back to the rules', () => {
     // The rules read that field from the words Jev left in place.
     expect(filled(OWNERS, reply(OWNERS, swap))).toMatchObject({
       title: 'visit garden center',
-      fields: { assignee: 'sam', mustNotMiss: true, areaId: HOUSE },
+      fields: { assignee: 'sam', mustNotMiss: true, tagId: HOUSE },
     })
   })
 
@@ -340,7 +340,7 @@ describe('falling back to the rules', () => {
       { area: choice('none', 0.99) },
       { area: choice('area_99', 0.99) },
     ])
-      expect(filled(OWNERS, reply(OWNERS, swap)).fields.areaId).toBeUndefined()
+      expect(filled(OWNERS, reply(OWNERS, swap)).fields.tagId).toBeUndefined()
   })
 
   it('for a heads-up that is not one of the offered ones', () => {
@@ -354,9 +354,9 @@ describe('falling back to the rules', () => {
   it('ignores an answer to a field that was not asked about', () => {
     // The person set the date and the name by hand: a reply that answers
     // them anyway changes neither.
-    const jev = jevReadFrom(reply(OWNERS), OWNERS, household, ['area', 'flag'])
+    const jev = jevReadFrom(reply(OWNERS), OWNERS, household, ['tag', 'flag'])
     expect(jev).toEqual({
-      area: HOUSE,
+      tag: HOUSE,
       flag: true,
       drops: [
         { index: 8, field: 'flag' },
@@ -446,7 +446,7 @@ describe('Jev fills the gaps', () => {
   const contrary: JevRead = {
     when: { dueDate: '2026-12-25', dueTime: '06:00' },
     who: 'alex',
-    area: PAPERWORK,
+    tag: PAPERWORK,
     headsUp: [14],
     flag: true,
     drops: [
@@ -463,26 +463,26 @@ describe('Jev fills the gaps', () => {
     })
 
   it('asks only about the fields the rules left empty', () => {
-    expect(gaps(OWNERS)).toEqual(['area', 'headsUp'])
+    expect(gaps(OWNERS)).toEqual(['tag', 'headsUp'])
     expect(gaps('Buy dog food')).toEqual([
       'when',
       'who',
-      'area',
+      'tag',
       'headsUp',
       'flag',
     ])
   })
 
   it('asks about the area unless it was named outright', () => {
-    expect(gaps('Flu shots for the kids')).toContain('area')
-    expect(gaps('Flu shots #kids')).not.toContain('area')
-    expect(gaps('Kids: flu shots')).not.toContain('area')
+    expect(gaps('Flu shots for the kids')).toContain('tag')
+    expect(gaps('Flu shots #kids')).not.toContain('tag')
+    expect(gaps('Kids: flu shots')).not.toContain('tag')
   })
 
   it('does not ask about a field set by hand or taken back', () => {
     expect(
       gaps('Buy dog food', {
-        skip: new Set<ReadField>(['when', 'area']),
+        skip: new Set<ReadField>(['when', 'tag']),
         notJevs: new Set<ReadField>(['who']),
       }),
     ).toEqual(['headsUp', 'flag'])
@@ -500,10 +500,10 @@ describe('Jev fills the gaps', () => {
     const read = filling(title)
     expect(read.fields).toEqual({
       ...rules(title).fields,
-      areaId: PAPERWORK,
+      tagId: PAPERWORK,
     })
     expect(read.title).toBe('mow the lawn')
-    expect(read.guessed).toEqual({ area: '' })
+    expect(read.guessed).toEqual({ tag: '' })
   })
 
   it('fills every field the rules left empty', () => {
@@ -513,21 +513,21 @@ describe('Jev fills the gaps', () => {
       dueDate: '2026-12-25',
       dueTime: '06:00',
       assignee: 'alex',
-      areaId: PAPERWORK,
+      tagId: PAPERWORK,
       headsUpDays: [14],
       mustNotMiss: true,
     })
   })
 
   it('takes Jev over an area named in passing, but not over one named outright', () => {
-    expect(filling('Flu shots for the kids').fields.areaId).toBe(PAPERWORK)
-    expect(filling('Flu shots #kids').fields.areaId).toBe(KIDS)
-    expect(filling('Kids: flu shots').fields.areaId).toBe(KIDS)
+    expect(filling('Flu shots for the kids').fields.tagId).toBe(PAPERWORK)
+    expect(filling('Flu shots #kids').fields.tagId).toBe(KIDS)
+    expect(filling('Kids: flu shots').fields.tagId).toBe(KIDS)
   })
 
   it('leaves a field set by hand or taken back alone', () => {
     const read = filling('Buy dog food', {
-      skip: new Set<ReadField>(['when', 'area']),
+      skip: new Set<ReadField>(['when', 'tag']),
       notJevs: new Set<ReadField>(['who']),
     })
     expect(read.fields).toEqual({ headsUpDays: [14], mustNotMiss: true })

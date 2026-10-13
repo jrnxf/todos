@@ -21,7 +21,7 @@ import {
 } from '@/lib/dates'
 import { useBoard } from '@/lib/queries'
 import { getSentAlerts } from '@/server/board'
-import { AreaDot } from './area'
+import { TagDot } from './tag'
 import { useAdd } from './capture'
 import { Rows } from './rows'
 import { SectionHeading, TodoRow } from './todo-row'
@@ -142,7 +142,7 @@ const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const CHIPS_PER_DAY = 3
 
 export function MonthGrid({ day }: { day: LocalDate }) {
-  const { today, areas } = useBoard()
+  const { today, tags } = useBoard()
   const add = useAdd()
   const dated = useDated()
 
@@ -195,7 +195,7 @@ export function MonthGrid({ day }: { day: LocalDate }) {
                 {Number(date.slice(8))}
               </button>
               {due.slice(0, CHIPS_PER_DAY).map((todo) => {
-                const area = areas.find((one) => one.id === todo.areaId)
+                const tag = tags.find((one) => one.id === todo.tagId)
                 return (
                   <Link
                     key={todo.id}
@@ -211,9 +211,7 @@ export function MonthGrid({ day }: { day: LocalDate }) {
                         : 'bg-muted',
                     )}
                   >
-                    {area && (
-                      <AreaDot color={area.color} className="size-1.5" />
-                    )}
+                    {tag && <TagDot color={tag.color} className="size-1.5" />}
                     <span className="truncate">{todo.title}</span>
                   </Link>
                 )

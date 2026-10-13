@@ -10,7 +10,7 @@ export const FIELDS = [
   'date',
   'time',
   'who',
-  'area',
+  'tag',
   'heads-up',
   'flag',
 ] as const
@@ -20,7 +20,7 @@ const READ_FIELD: Record<Exclude<Field, 'title'>, ReadField> = {
   date: 'when',
   time: 'when',
   who: 'who',
-  area: 'area',
+  tag: 'tag',
   'heads-up': 'headsUp',
   flag: 'flag',
 }
@@ -51,15 +51,15 @@ export interface Outcome {
   whole: ReadonlyArray<string>
 }
 
-type Areas = ReadonlyArray<{ id: number; name: string }>
+type Tags = ReadonlyArray<{ id: number; name: string }>
 
 /** What was wanted and what was read, as text that compares. */
 export function sides(
   expected: Expected,
   read: TitleRead,
-  areas: Areas,
+  tags: Tags,
 ): Record<Field, [wanted: string, got: string] | null> {
-  const area = areas.find((one) => one.id === read.fields.areaId)
+  const tag = tags.find((one) => one.id === read.fields.tagId)
   const plain = (title: string) =>
     title
       .toLowerCase()
@@ -72,11 +72,11 @@ export function sides(
     date: [expected.date ?? 'none', read.fields.dueDate ?? 'none'],
     time: [expected.time ?? 'none', read.fields.dueTime ?? 'none'],
     who: [expected.who ?? 'nobody', read.fields.assignee ?? 'nobody'],
-    // Not scored where the sentence could sit in two areas.
-    area:
-      expected.area === undefined
+    // Not scored where the sentence could sit in two tags.
+    tag:
+      expected.tag === undefined
         ? null
-        : [expected.area ?? 'none', area?.name ?? 'none'],
+        : [expected.tag ?? 'none', tag?.name ?? 'none'],
     'heads-up': [days(expected.headsUp), days(read.fields.headsUpDays)],
     flag: [
       expected.flag ? 'yes' : 'no',
@@ -124,12 +124,12 @@ export function tally(
   outcomes: ReadonlyArray<Outcome>,
   way: string,
   field: Field,
-  areas: Areas,
+  tags: Tags,
 ): Tally {
   const result: Tally = { hits: 0, scored: 0, misses: [] }
   for (const outcome of outcomes) {
     const read = outcome.reads[way]
-    const side = sides(outcome.expected, read, areas)[field]
+    const side = sides(outcome.expected, read, tags)[field]
     if (!side) continue
     result.scored += 1
     if (side[0] === side[1]) result.hits += 1
@@ -150,9 +150,9 @@ export function tally(
 export function misses(
   outcomes: ReadonlyArray<Outcome>,
   way: string,
-  areas: Areas,
+  tags: Tags,
 ): Array<Miss> {
-  return FIELDS.flatMap((field) => tally(outcomes, way, field, areas).misses)
+  return FIELDS.flatMap((field) => tally(outcomes, way, field, tags).misses)
 }
 
 export const rate = ({ hits, scored }: Tally) =>
@@ -227,10 +227,10 @@ const list = (names: Array<string>) =>
 export function winners(
   outcomes: ReadonlyArray<Outcome>,
   ways: ReadonlyArray<Pick<Way, 'id' | 'name'>>,
-  areas: Areas,
+  tags: Tags,
 ): Array<string> {
   return FIELDS.map((field) => {
-    const scores = ways.map((way) => tally(outcomes, way.id, field, areas))
+    const scores = ways.map((way) => tally(outcomes, way.id, field, tags))
     const scored = scores[0].scored
     const best = Math.max(...scores.map((score) => score.hits))
     const leaders = ways.filter((_way, index) => scores[index].hits === best)
@@ -249,20 +249,20 @@ export function winners(
 export function verdict(
   outcomes: ReadonlyArray<Outcome>,
   ways: ReadonlyArray<Pick<Way, 'id' | 'name'>>,
-  areas: Areas,
+  tags: Tags,
   timeLimitMs: number,
 ): string {
   if (outcomes.length === 0 || ways.length === 0) return 'Nothing was read.'
   const totals = ways.map((way) => ({
     way,
-    misses: misses(outcomes, way.id, areas).length,
+    misses: misses(outcomes, way.id, tags).length,
     spent: spend(outcomes, way.id, timeLimitMs),
   }))
   const fewest = Math.min(...totals.map((one) => one.misses))
   const asked = totals.filter((one) => one.spent.requests > 0)
   const parts = [
     `Over all ${outcomes.length} sentences, fewest misses in total: ${list(totals.filter((one) => one.misses === fewest).map((one) => one.way.name))} with ${fewest} (${totals.map((one) => `${one.way.name} ${one.misses}`).join(', ')}).`,
-    ...winners(outcomes, ways, areas),
+    ...winners(outcomes, ways, tags),
   ]
   if (asked.length > 0) {
     const quickest = asked.reduce((a, b) =>
@@ -288,17 +288,17 @@ export function verdict(
 export function headline(
   outcomes: ReadonlyArray<Outcome>,
   ways: ReadonlyArray<Pick<Way, 'id' | 'name' | 'kind'>>,
-  areas: Areas,
+  tags: Tags,
   what: string,
 ): string {
   if (outcomes.length === 0 || ways.length === 0)
     return `None of ${what} were read.`
   const totals = ways.map((way) => ({
     way,
-    misses: misses(outcomes, way.id, areas).length,
+    misses: misses(outcomes, way.id, tags).length,
   }))
   const scored = FIELDS.reduce(
-    (sum, field) => sum + tally(outcomes, ways[0].id, field, areas).scored,
+    (sum, field) => sum + tally(outcomes, ways[0].id, field, tags).scored,
     0,
   )
   const fewest = Math.min(...totals.map((one) => one.misses))
@@ -357,7 +357,7 @@ export interface Run {
     size: number
     kind: 'tuned' | 'held' | 'fresh'
   }>
-  areas: Areas
+  tags: Tags
   /** The ways that were run, in order. */
   ways: ReadonlyArray<Way>
   /** The ways that were not, and why: a key that is not set. */
@@ -384,7 +384,7 @@ export interface Run {
 }
 
 export function report(run: Run): string {
-  const { outcomes, areas, ways } = run
+  const { outcomes, tags, ways } = run
   const total = run.sets.reduce((sum, set) => sum + set.size, 0)
   const lines: Array<string> = []
   const say = (line = '') => lines.push(line)
@@ -429,7 +429,7 @@ export function report(run: Run): string {
       headline(
         of(set.name),
         ways,
-        areas,
+        tags,
         `the ${set.size} sentences of ${set.name}`,
       ),
     )
@@ -464,10 +464,10 @@ export function report(run: Run): string {
     say(`| --- | ${names.map(() => '---').join(' | ')} |`)
     for (const field of FIELDS)
       say(
-        `| ${field} | ${ways.map((way) => rate(tally(group.outcomes, way.id, field, areas))).join(' | ')} |`,
+        `| ${field} | ${ways.map((way) => rate(tally(group.outcomes, way.id, field, tags))).join(' | ')} |`,
       )
     say(
-      `| **total misses** | ${ways.map((way) => `**${misses(group.outcomes, way.id, areas).length}**`).join(' | ')} |`,
+      `| **total misses** | ${ways.map((way) => `**${misses(group.outcomes, way.id, tags).length}**`).join(' | ')} |`,
     )
   }
   if (run.cutoffs.length > 0) {
@@ -494,11 +494,11 @@ export function report(run: Run): string {
   say()
   say('## Which won, over every sentence')
   say()
-  say(verdict(outcomes, ways, areas, run.timeLimitMs))
+  say(verdict(outcomes, ways, tags, run.timeLimitMs))
   say()
   say('## Misses')
   for (const way of ways) {
-    const missed = misses(outcomes, way.id, areas)
+    const missed = misses(outcomes, way.id, tags)
     say()
     say(`### ${way.name}: ${missed.length}`)
     say()

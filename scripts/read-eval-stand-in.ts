@@ -192,8 +192,7 @@ function structured(title: string, household: Household): string {
       household.people.find((one) => one.id === read.fields.assignee)?.name ??
       null,
     area:
-      household.areas.find((one) => one.id === read.fields.areaId)?.name ??
-      null,
+      household.tags.find((one) => one.id === read.fields.tagId)?.name ?? null,
     reminder_days: read.fields.headsUpDays ?? null,
     must_not_miss: read.fields.mustNotMiss === true,
   })
