@@ -9,7 +9,8 @@
 // (scripts/read-eval-stand-in.ts), never the real services.
 import { JEV_ENDPOINT, jevReadFrom } from '@/server/jev-read'
 import type { JevRead, ReadField, TitleRead } from '@/lib/read'
-import type { Household, jevRequest } from '@/server/jev-read'
+import type { Household } from '@/server/jev-read'
+import type { Answer, Answers, Column } from './read-eval-verify'
 
 // ── Providers ───────────────────────────────────────────────────────────────
 
@@ -38,7 +39,7 @@ export const PROVIDERS = {
     usdPerMInput: 0.042,
     usdPerMOutput: 0,
     notes:
-      'A decision model: typed questions in, a probability per option out. At most 255 options a choice. Output is not charged.',
+      'A decision model: typed questions in, a probability per option out. At most 255 options a choice. Output is not charged. Jev first asks `jev-latest`, as the app does; the documented usage names the version, `jev-1.13.0`, so that its cut-offs stay those of one model.',
     checked:
       'As src/server/jev-read.ts already had them, and as the first runs of this test were charged; not read again.',
     sources: [
@@ -132,23 +133,55 @@ export type ProviderId = keyof typeof PROVIDERS
 
 // ── Ways ────────────────────────────────────────────────────────────────────
 
+const MODEL =
+  'one call returns every field and the tidied title as structured output; the rules read the sentence alone on a late or a bad reply'
+
 export interface Way {
   id: string
   name: string
   /**
-   * `rules`: nothing is sent. `first` and `gaps`: Jev as the app can use it
-   * today. `hybrid`: a decision model beside the rules. `model`: one call to
-   * a general model for all of it.
+   * `rules`: nothing is sent. `first`: Jev as the app asks it today, for
+   * every field and every word. `area`, `verify` and `parts`: a decision
+   * model asked the documented way (scripts/read-eval-verify.ts), three
+   * readings of one reply. `model`: one call to a general model for all of
+   * it.
    */
-  kind: 'rules' | 'first' | 'gaps' | 'hybrid' | 'model'
+  kind: 'rules' | 'first' | Column | 'model'
   provider?: ProviderId
   about: string
 }
 
-const HYBRID =
-  'the rules write the title; the day and time are the model’s when it is sure and the rules’ when it is not; the area is the model’s unless it was named outright; the person, the heads-up and the flag are the rules’, and the model fills the ones they left empty'
-const MODEL =
-  'one call returns every field and the tidied title as structured output; the rules read the sentence alone on a late or a bad reply'
+const ABOUT: Record<Column, string> = {
+  verify:
+    'the rules read first and write the title; the model picks the area from described options where the rules found none, and can take back a date the rules read from words that are part of a name. It never writes a date, a time or a title',
+  area: 'test only, to show the area question’s worth alone: the same reply, read for the area and nothing else',
+  parts:
+    'test only: the same reply again, and where the rules read no date, one put together in code from the parts the model names (how it is written, the month, the day, the weekday)',
+}
+const COLUMN_NAME: Record<Column, string> = {
+  verify: 'Verify',
+  area: 'Area only',
+  parts: 'Verify + date parts',
+}
+/** The decision models asked the documented way, in the report's order. */
+export const DECISION_PROVIDERS = [
+  'jev',
+  'clef',
+  'clefFlash',
+  'openai',
+] as const
+export type DecisionProvider = (typeof DECISION_PROVIDERS)[number]
+const SHORT: Record<DecisionProvider, string> = {
+  jev: 'Jev',
+  clef: 'Clef',
+  clefFlash: 'Clef Flash',
+  openai: 'OpenAI Decisions',
+}
+/** The id of a decision model's column. */
+export const columnWay = (provider: DecisionProvider, column: Column) =>
+  `${column}:${provider}`
+/** The columns read out of one reply, the one that is the proposal first. */
+export const COLUMNS: ReadonlyArray<Column> = ['verify', 'area', 'parts']
 
 /** Every way, in the order the report shows them. */
 export const WAYS: Array<Way> = [
@@ -160,48 +193,21 @@ export const WAYS: Array<Way> = [
   },
   {
     id: 'first',
-    name: 'Jev first',
+    name: 'Jev first, the old usage',
     kind: 'first',
     provider: 'jev',
     about:
-      'Jev is asked about every field and every word of the title; what it is sure of fills the field and tidies the title, and the rules read the rest',
+      'what the app does today, kept as the baseline: Jev is asked for the day among 120, the time among 96, every other field and what each word of the title is for; what it is sure of fills the field and tidies the title, and the rules read the rest',
   },
-  {
-    id: 'gaps',
-    name: 'Jev fills the gaps',
-    kind: 'gaps',
-    provider: 'jev',
-    about:
-      'the rules read first and write the title alone; Jev is asked only about a field they left empty, and about the area unless it was named outright',
-  },
-  {
-    id: 'hybrid',
-    name: 'Hybrid, Jev',
-    kind: 'hybrid',
-    provider: 'jev',
-    about: HYBRID,
-  },
-  {
-    id: 'hybridClef',
-    name: 'Hybrid, Clef',
-    kind: 'hybrid',
-    provider: 'clef',
-    about: `the hybrid with Cloudflare Clef in Jev's place`,
-  },
-  {
-    id: 'hybridClefFlash',
-    name: 'Hybrid, Clef Flash',
-    kind: 'hybrid',
-    provider: 'clefFlash',
-    about: `the hybrid with Cloudflare Clef Flash in Jev's place`,
-  },
-  {
-    id: 'hybridOpenai',
-    name: 'Hybrid, OpenAI Decisions',
-    kind: 'hybrid',
-    provider: 'openai',
-    about: `the hybrid with OpenAI's Decisions API in Jev's place`,
-  },
+  ...DECISION_PROVIDERS.flatMap((provider) =>
+    COLUMNS.map((column): Way => ({
+      id: columnWay(provider, column),
+      name: `${COLUMN_NAME[column]}, ${SHORT[provider]}`,
+      kind: column,
+      provider,
+      about: ABOUT[column],
+    })),
+  ),
   {
     id: 'haiku',
     name: 'Fast model, Haiku 4.5',
@@ -228,55 +234,11 @@ export function missing(
 
 // ── Decision models: Jev, Clef, Clef Flash, OpenAI Decisions ────────────────
 
-type Questions = ReturnType<typeof jevRequest>
-
-/**
- * The fields the hybrid asks a decision model about: the day and time
- * always, and whatever the rules left empty (the area unless it was named
- * outright). The title's words are never asked about.
- */
-export function hybridAsk(gaps: ReadonlyArray<ReadField>): Array<ReadField> {
-  return ['when', ...gaps.filter((field) => field !== 'when')]
-}
-
-/**
- * The hybrid's reading: the rules' title, and each field the rules' or the
- * model's as the hybrid has it. With no answer it is the rules' reading.
- */
-export function hybridRead(
-  rules: TitleRead,
-  gaps: ReadonlyArray<ReadField>,
-  answer: JevRead | null,
-): TitleRead {
-  if (!answer) return rules
-  const fields = { ...rules.fields }
-  const phrases = { ...rules.phrases }
-  const guessed = { ...rules.guessed }
-  if (answer.when) {
-    fields.dueDate = answer.when.dueDate
-    fields.dueTime = answer.when.dueTime
-    delete phrases.when
-    guessed.when = ''
-  }
-  const fills = (field: ReadField) => gaps.includes(field)
-  if (answer.area !== undefined && fills('area')) {
-    fields.areaId = answer.area
-    delete phrases.area
-    guessed.area = ''
-  }
-  if (answer.who !== undefined && fills('who')) {
-    fields.assignee = answer.who
-    guessed.who = ''
-  }
-  if (answer.headsUp && fills('headsUp')) {
-    fields.headsUpDays = answer.headsUp
-    guessed.headsUp = ''
-  }
-  if (answer.flag && fills('flag')) {
-    fields.mustNotMiss = true
-    guessed.flag = ''
-  }
-  return { title: rules.title, fields, phrases, guessed }
+/** A System One request: what Jev and Clef are sent as it is. */
+export interface SystemOne {
+  model: string
+  state: unknown
+  questions: Record<string, unknown>
 }
 
 export interface Call {
@@ -289,13 +251,13 @@ const text = (value: unknown) =>
   typeof value === 'string' ? value : JSON.stringify(value)
 
 /**
- * The request a decision provider is sent for the questions Jev would be
- * asked. Jev and Clef take them as they are; OpenAI takes the same questions
- * in its own shape.
+ * The request a decision provider is sent for a System One body. Jev takes
+ * it as it is, model and all; Clef takes it under its own model's name;
+ * OpenAI takes the same questions in its own shape.
  */
 export function decisionCall(
-  provider: 'jev' | 'clef' | 'clefFlash' | 'openai',
-  questions: Questions,
+  provider: DecisionProvider,
+  questions: SystemOne,
   env: Record<string, string | undefined>,
 ): Call {
   const json = { 'Content-Type': 'application/json' }
@@ -318,7 +280,7 @@ export function decisionCall(
             {
               type: 'choice' | 'noul'
               instructions: unknown
-              criteria: Record<string, unknown>
+              criteria?: Record<string, unknown>
             }
           >,
         ).map(([name, question]) =>
@@ -327,10 +289,12 @@ export function decisionCall(
                 type: 'choice',
                 name,
                 instructions: text(question.instructions),
-                choices: Object.entries(question.criteria).map(
+                choices: Object.entries(question.criteria ?? {}).map(
                   ([value, description]) => ({
                     value,
-                    description: text(description),
+                    // An option that needs no describing is its own name.
+                    description:
+                      description === null ? value : text(description),
                   }),
                 ),
               }
@@ -339,7 +303,7 @@ export function decisionCall(
                 name,
                 // A predicate has no criteria of its own: what a yes and a
                 // no mean go into the question.
-                instructions: `${text(question.instructions)} Yes: ${text(question.criteria.true)} No: ${text(question.criteria.false)}`,
+                instructions: `${text(question.instructions)} Yes: ${text(question.criteria?.true)} No: ${text(question.criteria?.false)}`,
               },
         ),
       }),
@@ -370,16 +334,10 @@ const object = (value: unknown): Record<string, unknown> =>
   value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
 
 /**
- * A decision provider's reply as the reading the app makes of Jev's: only
- * what was asked, is one of ours, and is sure enough.
+ * The answers in a decision provider's reply, in Jev's shape whoever gave
+ * them, with the tokens it counted. Null answers: it made no sense.
  */
-export function decisionReply(
-  provider: 'jev' | 'clef' | 'clefFlash' | 'openai',
-  reply: unknown,
-  title: string,
-  household: Household,
-  ask?: ReadonlyArray<ReadField>,
-): Reply<JevRead> {
+function answersIn(provider: DecisionProvider, reply: unknown) {
   // Workers AI wraps a model's reply in `result`.
   const outer = object(reply)
   const body =
@@ -418,14 +376,66 @@ export function decisionReply(
       )
   }
   return {
-    read:
+    answers:
       answers && typeof answers === 'object'
-        ? jevReadFrom({ answers }, title, household, ask)
+        ? (answers as Record<string, unknown>)
         : null,
     inputTokens: count(usage.input_tokens),
     outputTokens: count(usage.output_tokens),
     model: typeof body.model === 'string' ? body.model : '',
   }
+}
+
+/**
+ * A decision provider's reply as the reading the app makes of Jev's: only
+ * what was asked, is one of ours, and is sure enough.
+ */
+export function decisionReply(
+  provider: DecisionProvider,
+  reply: unknown,
+  title: string,
+  household: Household,
+  ask?: ReadonlyArray<ReadField>,
+): Reply<JevRead> {
+  const { answers, ...rest } = answersIn(provider, reply)
+  return {
+    read: answers ? jevReadFrom({ answers }, title, household, ask) : null,
+    ...rest,
+  }
+}
+
+const odds = (value: unknown): value is number =>
+  typeof value === 'number' && value >= 0 && value <= 1
+
+/**
+ * A decision provider's reply as raw answers: each pick with the odds of
+ * every option, each yes or no as the odds of a yes. An answer that is not
+ * well formed is left out, which every column reads as no answer.
+ */
+export function decisionAnswers(
+  provider: DecisionProvider,
+  reply: unknown,
+): Reply<Answers> {
+  const { answers, ...rest } = answersIn(provider, reply)
+  if (!answers) return { read: null, ...rest }
+  const read: Answers = {}
+  for (const [id, given] of Object.entries(answers)) {
+    const answer = object(given)
+    const probabilities = object(answer.probabilities)
+    let one: Answer | undefined
+    if (odds(answer.noul)) one = { noul: answer.noul }
+    else if (
+      typeof answer.choice === 'string' &&
+      odds(probabilities[answer.choice]) &&
+      Object.values(probabilities).every(odds)
+    )
+      one = {
+        choice: answer.choice,
+        probabilities: probabilities as Record<string, number>,
+      }
+    if (one) read[id] = one
+  }
+  return { read, ...rest }
 }
 
 // ── Fast general models: Haiku 4.5, Gemini 3.1 Flash Lite ───────────────────

@@ -158,36 +158,48 @@ each pause in typing.
 
 ### Checking how well it reads
 
-Before trusting it with dates, measure it. `bun run eval:read` reads 150
+Before trusting it with dates, measure it. `bun run eval:read` reads 200
 household sentences, each with the fill a person would expect, several ways
 on the same inputs:
 
 - **Rules alone**: the rules in the page, and nothing sent.
-- **Jev first**: what the add bar does today, as described above.
-- **Jev fills the gaps**: the rules read first and write the title alone. Jev
-  is asked only about a button they left empty, and about the area unless it
-  was named outright ("#kids", "House: ..."). No word of the title is asked
-  about, so the request is smaller, and a button the rules filled is never
-  asked about or overwritten.
-- **Hybrid**: the rules write the title; the day and time are the model's
-  when it is sure and the rules' when it is not; the area is the model's
-  unless it was named outright; the person, the heads-up and the flag are the
-  rules', and the model fills the ones they left empty. Scored with Jev, and
-  with Cloudflare Clef, Clef Flash and OpenAI's Decisions API in its place.
+- **Jev first, the old usage**: what the add bar does today, as described
+  above. It is the baseline of how Jev was first asked.
+- **Verify**, for each decision model there is a key for (Jev, Cloudflare
+  Clef, Clef Flash, OpenAI's Decisions API): the model asked the way its
+  makers document (`scripts/read-eval-verify.ts`). The rules read first and
+  write the title. The model is asked only what takes judgment: which area,
+  from options that are named and described, where the rules found none; and
+  whether the words the rules read a date from are really when the to-do is
+  due, or part of a name ("the Sunday paper"). A no takes that date away
+  again. The model never writes a date, a time or a title, and never
+  touches a field the rules read but that one date.
+- **Area only** and **Verify + date parts**: test only, read out of the same
+  reply, to show each part's worth on its own. The first reads the area and
+  nothing else. The second also asks, where the rules read no date, for the
+  parts of one (how it is written, the month, the day, the weekday) and puts
+  them together in code.
 - **Fast model**: one call to a small general model (Claude Haiku 4.5, Gemini
   3.1 Flash Lite) returns every field and the tidied title as structured
   output, and the rules read the sentence alone on a late or a bad reply.
 
-Only the first three are in the app. The hybrid and the fast model exist in
-the test alone, to be chosen between.
+Only the first two are in the app. The rest exist in the test alone, to be
+chosen between. Two ways the test used to score, Jev filling the gaps and a
+hybrid in which the model's date replaced the rules', are gone from it: both
+asked Jev to find a day among 120 and a time among 96, which its makers say
+it does badly, and the columns above replace them.
 
-It writes `data/read-eval/report.md`: the hit rate per field and the total
-misses for each way side by side, for all the sentences and for each set of
-them; one table of the speed (median, 9 in 10, slowest, and how many answers
-came later than the add bar waits), the tokens and the cost a to-do of every
-way; which won what; every miss; and where each provider's endpoint, limits
-and price were read. A report already there is kept beside it under the time
-it was written.
+It writes `data/read-eval/report.md`: the answer first, in plain words (which
+way missed fewest on the fresh sentences, and by how many); the hit rate per
+field and the total misses for each way side by side, the fresh set first,
+then each other set, then all of them; what each cut-off costs; every miss;
+one table of the speed (median, 9 in 10, slowest, and how many answers came
+later than the add bar waits), the tokens and the cost a to-do of every way;
+and where each provider's endpoint, limits and price were read. Beside it,
+`results.json` holds every raw probability the decision models gave, so
+another cut-off can be tried without paying again. Both hold the test's
+made-up household only, and no key. Files already there are kept beside the
+new ones under the time they were written.
 
 ```bash
 bun run eval:read             # the plan and the estimated cost; sends nothing
@@ -198,25 +210,52 @@ TYPESAFE_API_KEY=... ANTHROPIC_API_KEY=... bun run eval:read --yes
 Keys come from the environment and are never printed or written. A way whose
 key is not set is skipped, and the report says so:
 
-| Variable                                        | Runs                  |
-| ----------------------------------------------- | --------------------- |
-| `TYPESAFE_API_KEY`                              | The three Jev ways    |
-| `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | Clef and Clef Flash   |
-| `OPENAI_API_KEY`                                | OpenAI Decisions      |
-| `ANTHROPIC_API_KEY`                             | Claude Haiku 4.5      |
-| `GEMINI_API_KEY`                                | Gemini 3.1 Flash Lite |
+| Variable                                        | Runs                                |
+| ----------------------------------------------- | ----------------------------------- |
+| `TYPESAFE_API_KEY`                              | Jev first, and Jev's three columns  |
+| `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | Clef and Clef Flash, three columns  |
+| `OPENAI_API_KEY`                                | OpenAI Decisions, its three columns |
+| `ANTHROPIC_API_KEY`                             | Claude Haiku 4.5                    |
+| `GEMINI_API_KEY`                                | Gemini 3.1 Flash Lite               |
 
 It stops before the request that would take it past its spending cap, two
-dollars for the whole run unless `--cap-usd` says otherwise. The sentences
-and the made-up household they are read for are in
-`scripts/read-eval-cases.ts`: the 30 the test began with, written by the
-author of the rules; 70 written before the rules were opened; and 50 held
-out, written before the rules were tuned against the first 100 and never
-tuned against. The held-out set is the honest number for the rules: do not
-fix a rule because of a miss in it.
+dollars for the whole run unless `--cap-usd` says otherwise.
 
-Which of the two ways the add bar uses is one constant, `JEV_USE` in
-`src/lib/read.ts`: `'first'` today, `'gaps'` for the other.
+The sentences and the made-up household they are read for are in
+`scripts/read-eval-cases.ts`, in four sets:
+
+- the 30 the test began with, written by the author of the rules, and 70
+  written before the rules were opened. The rules were tuned against these
+  100, so they can hardly lose there;
+- 50 held out, written before that tuning and never tuned against. The audit
+  that led to the documented usage read their misses, so they no longer
+  judge it fairly;
+- 50 fresh ones, written before any of the documented requests were, and
+  before the rules or any model read them. Ten have a day, a time or a word
+  of stress inside a name. They are the honest number, and the report shows
+  them first. Do not fix a rule, a wording or a cut-off because of a miss in
+  them or in the held-out 50: write a new sentence into the first 100.
+
+How sure a decision model has to be before its answer is acted on is a
+cut-off, one for each question. The run chooses each on the first 100
+sentences alone: the least careful one that does no more harm there than the
+best, then one step more careful. The report shows what every cut-off tried
+would have done on every set. The documented requests name Jev's version
+(`jev-1.13.0`) and not `jev-latest`, since a cut-off chosen against one model
+says nothing about the next; Clef and OpenAI's Decisions API have no versions
+to name, so the model each reply names is in the report.
+
+The delays are measured from the machine that runs the test, one request at
+a time. For Clef and Clef Flash that is Cloudflare's public REST API, which
+is not what the app would see: a Worker reaches them through an AI binding
+inside Cloudflare's network. `scripts/clef-speed/README.md` has an optional
+Worker of its own, put up and taken down in three commands, that times them
+from inside.
+
+How the add bar uses Jev is one constant, `JEV_USE` in `src/lib/read.ts`:
+`'first'` today, `'gaps'` for the rules first and Jev only for what they left
+empty. Neither is the documented usage; that is in the test alone until it
+has been run and chosen.
 
 ## Each phone
 

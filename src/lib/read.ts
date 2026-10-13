@@ -43,8 +43,9 @@ const FIELDS: ReadonlyArray<ReadField> = [
 export type JevUse = 'first' | 'gaps'
 
 /**
- * Which of the two the running app uses. `bun run eval:read` scores both, the
- * rules alone and the ways that are not in the app, on the same sentences.
+ * Which of the two the running app uses. `bun run eval:read` scores this
+ * one, the rules alone and the ways that are not in the app, on the same
+ * sentences.
  */
 export const JEV_USE: JevUse = 'first'
 

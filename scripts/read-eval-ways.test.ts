@@ -17,14 +17,11 @@ import {
   fastSchema,
   geminiCall,
   geminiReply,
-  hybridAsk,
-  hybridRead,
   missing,
 } from './read-eval-ways'
-import type { TitleRead } from '@/lib/read'
 
 const TITLE = 'Sam: dentist fri 5pm'
-const ASK = hybridAsk(['area', 'headsUp', 'flag'])
+const ASK = ['when', 'area', 'headsUp', 'flag'] as const
 const questions = jevRequest(TITLE, HOUSEHOLD, ASK, false)
 const send = standInFetch(HOUSEHOLD)
 const post = async (call: { url: string; headers: object; body: string }) => {
@@ -39,15 +36,22 @@ const post = async (call: { url: string; headers: object; body: string }) => {
 const HEALTH = HOUSEHOLD.areas.find((one) => one.name === 'Health')?.id
 
 describe('the ways', () => {
-  it('are the rules, Jev three ways, three more decision models and two general ones', () => {
+  it('are the rules, the old usage, three columns a decision model and two general models', () => {
     expect(WAYS.map((way) => [way.id, way.kind, way.provider])).toEqual([
       ['rules', 'rules', undefined],
       ['first', 'first', 'jev'],
-      ['gaps', 'gaps', 'jev'],
-      ['hybrid', 'hybrid', 'jev'],
-      ['hybridClef', 'hybrid', 'clef'],
-      ['hybridClefFlash', 'hybrid', 'clefFlash'],
-      ['hybridOpenai', 'hybrid', 'openai'],
+      ['verify:jev', 'verify', 'jev'],
+      ['area:jev', 'area', 'jev'],
+      ['parts:jev', 'parts', 'jev'],
+      ['verify:clef', 'verify', 'clef'],
+      ['area:clef', 'area', 'clef'],
+      ['parts:clef', 'parts', 'clef'],
+      ['verify:clefFlash', 'verify', 'clefFlash'],
+      ['area:clefFlash', 'area', 'clefFlash'],
+      ['parts:clefFlash', 'parts', 'clefFlash'],
+      ['verify:openai', 'verify', 'openai'],
+      ['area:openai', 'area', 'openai'],
+      ['parts:openai', 'parts', 'openai'],
       ['haiku', 'model', 'haiku'],
       ['gemini', 'model', 'gemini'],
     ])
@@ -71,53 +75,6 @@ describe('the ways', () => {
       'OPENAI_API_KEY',
       'TYPESAFE_API_KEY',
     ])
-  })
-})
-
-describe('the hybrid', () => {
-  const rules: TitleRead = {
-    title: 'dentist',
-    fields: { assignee: 'sam', dueDate: '2026-10-16', dueTime: '17:00' },
-    phrases: { who: 'Sam:', when: 'fri 5pm' },
-    guessed: {},
-  }
-
-  it('always asks about the day, and about what the rules left empty', () => {
-    expect(hybridAsk(['area', 'flag'])).toEqual(['when', 'area', 'flag'])
-    expect(hybridAsk(['when', 'who'])).toEqual(['when', 'who'])
-    expect(hybridAsk([])).toEqual(['when'])
-  })
-
-  it('takes the model’s day, fills what was empty, and keeps the rules’ title', () => {
-    expect(
-      hybridRead(rules, ['area', 'headsUp', 'flag'], {
-        when: { dueDate: '2026-10-23', dueTime: null },
-        area: HEALTH,
-        flag: true,
-        drops: [],
-      }),
-    ).toEqual({
-      title: 'dentist',
-      fields: {
-        assignee: 'sam',
-        dueDate: '2026-10-23',
-        dueTime: null,
-        areaId: HEALTH,
-        mustNotMiss: true,
-      },
-      phrases: { who: 'Sam:' },
-      guessed: { when: '', area: '', flag: '' },
-    })
-  })
-
-  it('never lets the model touch a field the rules read, but the day', () => {
-    expect(
-      hybridRead(rules, ['area'], { who: 'michelle', headsUp: [7], drops: [] }),
-    ).toEqual(rules)
-  })
-
-  it('is the rules alone with no answer', () => {
-    expect(hybridRead(rules, ['area'], null)).toBe(rules)
   })
 })
 

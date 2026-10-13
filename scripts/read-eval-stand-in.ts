@@ -15,6 +15,42 @@ import type { Household, jevRequest } from '@/server/jev-read'
 type Body = Record<string, unknown>
 type Questions = ReturnType<typeof jevRequest>
 
+/**
+ * A reply to any System One request. The app's own request (it says who is
+ * typing) gets Jev's stand-in. Any other gets the dullest answer there is:
+ * `none` where it is offered and the first option where it is not, a yes to
+ * every yes or no, all of it sure. So a stand-in run of the documented usage
+ * reads as the rules alone.
+ */
+function reply(request: Questions) {
+  if ('typed_by' in (request.state as object)) return standInReply(request)
+  const questions = request.questions as Record<
+    string,
+    { type: string; criteria?: Record<string, unknown> }
+  >
+  return {
+    model: 'stand-in',
+    answers: Object.fromEntries(
+      Object.entries(questions).map(([id, question]) => {
+        if (question.type !== 'choice') return [id, { type: 'noul', noul: 0.9 }]
+        const options = Object.keys(question.criteria ?? {})
+        const choice = options.includes('none') ? 'none' : options[0]
+        const rest = 0.1 / Math.max(1, options.length - 1)
+        return [
+          id,
+          {
+            type: 'choice',
+            choice,
+            probabilities: Object.fromEntries(
+              options.map((option) => [option, option === choice ? 0.9 : rest]),
+            ),
+          },
+        ]
+      }),
+    ),
+  }
+}
+
 /** What stands in for every key, so a real one is never read or sent. */
 export const STAND_IN_ENV: Record<string, string> = Object.fromEntries(
   Object.values(PROVIDERS).flatMap((provider) =>
@@ -55,10 +91,10 @@ function clef(url: URL, body: Body) {
     )?.[1]
   must(model, `no such model at ${url.pathname}`)
   must(body.model === model, `model must be "${model}"`)
-  const reply = standInReply(systemOne(body, 64))
+  const answered = reply(systemOne(body, 64))
   return {
     result: {
-      ...reply,
+      ...answered,
       model: `@cf/cloudflare/${model}`,
       usage: { input_tokens: tokens(body), output_tokens: 0 },
     },
@@ -103,11 +139,11 @@ function openai(body: Body) {
       }
     }
   }
-  const reply = standInReply({
+  const answered = reply({
     state: JSON.parse(body.input),
     questions,
   } as unknown as Questions)
-  const answers = reply.answers as Record<
+  const answers = answered.answers as Record<
     string,
     {
       type: string
@@ -232,7 +268,7 @@ export function standInFetch(household: Household): typeof fetch {
         const body = JSON.parse(sent) as Body
         if (url.href === PROVIDERS.jev.endpoint) {
           must(bearer, 'no bearer token')
-          return Response.json(standInReply(systemOne(body, Infinity)))
+          return Response.json(reply(systemOne(body, Infinity)))
         }
         if (url.host === 'api.cloudflare.com') {
           must(bearer, 'no bearer token')
