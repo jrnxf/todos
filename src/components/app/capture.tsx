@@ -1,8 +1,20 @@
-// Adding a to-do: a title and one row of pills, sitting on the keyboard. A
-// pill is an icon until it is set, then it shows its value. Sending clears
-// the bar and leaves it open, so several to-dos go in one after another. A
-// date typed into the title ("dentist fri 5pm") is read out of it.
-import { createContext, use, useEffect, useRef, useState } from 'react'
+// Adding a to-do: a title and one row of pills. A pill is an icon until it
+// is set, then it shows its value. Sending clears the bar and leaves it open,
+// so several to-dos go in one after another. A date typed into the title
+// ("dentist fri 5pm") is read out of it.
+//
+// On a phone the bar is a sheet from the top of the screen, where neither the
+// keyboard nor the browser's own bars can cover it, and a pill opens its
+// choices inside the sheet: the cursor never leaves the title, so the
+// keyboard never goes away.
+import {
+  createContext,
+  use,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react'
 import {
   ArrowUpIcon,
   BellIcon,
@@ -24,7 +36,6 @@ import {
 import {
   Drawer,
   DrawerContent,
-  DrawerKeyboard,
   DrawerDescription,
   DrawerHeader,
   DrawerTitle,
@@ -84,12 +95,38 @@ function useDateParser(): DateParser | null {
   return parser
 }
 
+// Room kept clear above the keyboard. Safari on a phone draws its address
+// and its previous/next strip over the page there without counting them as
+// covered, so a sheet that ran to the keyboard's edge would end under them.
+const BROWSER_BAR = 96
+
+/** How much of the screen the keyboard leaves, or null where that is unknown. */
+function useVisibleHeight(): number | null {
+  return useSyncExternalStore(
+    (onChange) => {
+      window.visualViewport?.addEventListener('resize', onChange)
+      return () =>
+        window.visualViewport?.removeEventListener('resize', onChange)
+    },
+    () => window.visualViewport?.height ?? null,
+    () => null,
+  )
+}
+
+// A tap on anything in the sheet but a text box leaves the cursor where it
+// is. The cursor is what keeps the phone's keyboard up.
+function keepCursor(event: React.MouseEvent) {
+  if (!(event.target as HTMLElement).closest('input, textarea, select'))
+    event.preventDefault()
+}
+
 export function AddProvider({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false)
   const [preset, setPreset] = useState<Partial<ItemFields>>({})
   // A fresh bar every time it opens.
   const [session, setSession] = useState(0)
   const desktop = useIsDesktop()
+  const visibleHeight = useVisibleHeight()
 
   const start = (fields: Partial<ItemFields> = {}) => {
     setPreset(fields)
@@ -137,19 +174,33 @@ export function AddProvider({ children }: { children: React.ReactNode }) {
           </DialogContent>
         </Dialog>
       ) : (
-        <Drawer open={open} onOpenChange={setOpen} showSwipeHandle>
-          {/* Sits on top of the phone's keyboard, not behind it. */}
-          <DrawerKeyboard>
-            <DrawerContent className="mx-auto max-w-md data-[swipe-direction=down]:bottom-(--drawer-keyboard-inset,0px)">
-              <DrawerHeader className="sr-only">
-                <DrawerTitle>{TITLE}</DrawerTitle>
-                <DrawerDescription>{DESCRIPTION}</DrawerDescription>
-              </DrawerHeader>
-              <div className="px-4 pt-1 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-                {bar}
-              </div>
-            </DrawerContent>
-          </DrawerKeyboard>
+        <Drawer
+          open={open}
+          onOpenChange={setOpen}
+          swipeDirection="up"
+          showSwipeHandle
+        >
+          <DrawerContent
+            className="mx-auto max-w-md"
+            // No taller than what the keyboard leaves; past that the choices
+            // scroll under the title and the pills.
+            style={
+              visibleHeight
+                ? ({
+                    '--drawer-content-max-height': `${visibleHeight - BROWSER_BAR}px`,
+                  } as React.CSSProperties)
+                : undefined
+            }
+            onMouseDown={keepCursor}
+          >
+            <DrawerHeader className="sr-only">
+              <DrawerTitle>{TITLE}</DrawerTitle>
+              <DrawerDescription>{DESCRIPTION}</DrawerDescription>
+            </DrawerHeader>
+            <div className="flex min-h-0 flex-col px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-1">
+              {bar}
+            </div>
+          </DrawerContent>
         </Drawer>
       )}
     </AddContext>
@@ -161,10 +212,13 @@ function Pill({
   label,
   value,
   dot,
+  roomy,
   ...props
 }: {
   /** An area's colour, shown in place of the icon once the pill is set. */
   dot?: AreaColor
+  /** Thumb-sized, for a phone. */
+  roomy?: boolean
   icon: LucideIcon
   /** What the pill is for; read out when it shows only an icon. */
   label: string
@@ -174,10 +228,10 @@ function Pill({
   return value ? (
     <Button
       variant="secondary"
-      size="sm"
+      size={roomy ? 'lg' : 'sm'}
       aria-label={`${label}: ${value}`}
       {...props}
-      className="rounded-full"
+      className="rounded-full aria-expanded:ring-1 aria-expanded:ring-foreground"
     >
       {dot ? <AreaDot color={dot} /> : <Icon data-icon="inline-start" />}
       {value}
@@ -185,10 +239,10 @@ function Pill({
   ) : (
     <Button
       variant="outline"
-      size="icon-sm"
+      size={roomy ? 'icon-lg' : 'icon-sm'}
       aria-label={label}
       {...props}
-      className="rounded-full text-muted-foreground"
+      className="rounded-full text-muted-foreground aria-expanded:border-foreground aria-expanded:text-foreground"
     >
       <Icon />
     </Button>
@@ -217,6 +271,7 @@ function CaptureBar({
   const board = useBoard()
   const add = useAddItem()
   const parser = useDateParser()
+  const desktop = useIsDesktop()
   const titleRef = useRef<HTMLInputElement>(null)
 
   const blank = { ...EMPTY_FIELDS, ...preset }
@@ -243,6 +298,92 @@ function CaptureBar({
   const toggle = (which: Exclude<Open, null>) => (isOpen: boolean) =>
     setOpen(isOpen ? which : null)
 
+  const pickers: Array<{
+    key: Exclude<Open, null>
+    title: string
+    description: string
+    pill: React.ComponentProps<typeof Pill>
+    fields: React.ReactNode
+  }> = [
+    {
+      key: 'when',
+      title: 'When',
+      description: 'Pick a date and, if it matters, a time.',
+      pill: {
+        icon: CalendarIcon,
+        label: 'Date',
+        value: shortWhenLabel(when, board.today),
+      },
+      fields: (
+        <WhenFields
+          value={when}
+          calendar={desktop ? 'shown' : 'asked-for'}
+          onChange={(picked) => {
+            patch(picked)
+            setPickedWhen(true)
+          }}
+          onDone={() => setOpen(null)}
+        />
+      ),
+    },
+    {
+      key: 'area',
+      title: 'Area',
+      description: 'File it under an area.',
+      pill: {
+        icon: TagIcon,
+        label: 'Area',
+        value: area?.name ?? '',
+        dot: area?.color,
+      },
+      fields: (
+        <AreaFields
+          value={fields.areaId}
+          onChange={(areaId) => {
+            patch({ areaId })
+            setOpen(null)
+          }}
+        />
+      ),
+    },
+    {
+      key: 'who',
+      title: 'Who',
+      description: 'Whose to-do this is.',
+      pill: {
+        icon: UserIcon,
+        label: 'Who',
+        value: board.people.find((p) => p.id === fields.assignee)?.name ?? '',
+      },
+      fields: (
+        <WhoFields
+          value={fields.assignee}
+          onChange={(assignee) => {
+            patch({ assignee })
+            setOpen(null)
+          }}
+        />
+      ),
+    },
+    {
+      key: 'headsUp',
+      title: 'Heads-up',
+      description: 'How far ahead of the deadline to be warned.',
+      pill: {
+        icon: BellIcon,
+        label: 'Heads-up',
+        value: headsUpPill(fields.headsUpDays),
+      },
+      fields: (
+        <HeadsUpFields
+          value={fields.headsUpDays}
+          onChange={(headsUpDays) => patch({ headsUpDays })}
+        />
+      ),
+    },
+  ]
+  const shown = pickers.find((picker) => picker.key === open)
+
   const submit = () => {
     if (!title) return
     add.mutate({ ...fields, ...when, title })
@@ -255,10 +396,18 @@ function CaptureBar({
 
   return (
     <form
-      className="flex flex-col gap-2.5"
+      className="flex min-h-0 flex-col gap-2.5"
       onSubmit={(event) => {
         event.preventDefault()
         submit()
+      }}
+      // Wherever a tap on a phone left the cursor, a choice made puts it back
+      // in the title unless another text box has it.
+      onClick={() => {
+        if (desktop) return
+        const focused = document.activeElement
+        if (!focused?.matches('input, textarea, select'))
+          titleRef.current?.focus()
       }}
     >
       {added && (
@@ -301,114 +450,59 @@ function CaptureBar({
         </p>
       )}
 
-      <div className="flex flex-wrap items-center gap-1.5">
-        <Picker
-          title="When"
-          description="Pick a date and, if it matters, a time."
-          open={open === 'when'}
-          onOpenChange={toggle('when')}
-          trigger={
-            <Pill
-              icon={CalendarIcon}
-              label="Date"
-              value={shortWhenLabel(when, board.today)}
-            />
-          }
-        >
-          <WhenFields
-            value={when}
-            onChange={(picked) => {
-              patch(picked)
-              setPickedWhen(true)
-            }}
-            onDone={() => setOpen(null)}
-          />
-        </Picker>
+      {/* The send button stays beside the first row when the pills wrap. */}
+      <div className="flex items-start gap-1.5">
+        <div className="flex min-h-10 min-w-0 flex-1 flex-wrap items-center gap-1.5 lg:min-h-8">
+          {pickers.map((picker) =>
+            desktop ? (
+              <Picker
+                key={picker.key}
+                title={picker.title}
+                description={picker.description}
+                open={open === picker.key}
+                onOpenChange={toggle(picker.key)}
+                trigger={<Pill {...picker.pill} />}
+              >
+                {picker.fields}
+              </Picker>
+            ) : (
+              <Pill
+                key={picker.key}
+                {...picker.pill}
+                roomy
+                aria-expanded={open === picker.key}
+                onClick={() => toggle(picker.key)(open !== picker.key)}
+              />
+            ),
+          )}
 
-        <Picker
-          title="Area"
-          description="File it under an area."
-          open={open === 'area'}
-          onOpenChange={toggle('area')}
-          trigger={
-            <Pill
-              icon={TagIcon}
-              label="Area"
-              value={area?.name ?? ''}
-              dot={area?.color}
-            />
-          }
-        >
-          <AreaFields
-            value={fields.areaId}
-            onChange={(areaId) => {
-              patch({ areaId })
-              setOpen(null)
-            }}
+          <Pill
+            icon={FlagIcon}
+            label="Must not miss"
+            value={fields.mustNotMiss ? 'Must not miss' : ''}
+            roomy={!desktop}
+            aria-pressed={fields.mustNotMiss}
+            onClick={() => patch({ mustNotMiss: !fields.mustNotMiss })}
           />
-        </Picker>
-
-        <Picker
-          title="Who"
-          description="Whose to-do this is."
-          open={open === 'who'}
-          onOpenChange={toggle('who')}
-          trigger={
-            <Pill
-              icon={UserIcon}
-              label="Who"
-              value={
-                board.people.find((p) => p.id === fields.assignee)?.name ?? ''
-              }
-            />
-          }
-        >
-          <WhoFields
-            value={fields.assignee}
-            onChange={(assignee) => {
-              patch({ assignee })
-              setOpen(null)
-            }}
-          />
-        </Picker>
-
-        <Picker
-          title="Heads-up"
-          description="How far ahead of the deadline to be warned."
-          open={open === 'headsUp'}
-          onOpenChange={toggle('headsUp')}
-          trigger={
-            <Pill
-              icon={BellIcon}
-              label="Heads-up"
-              value={headsUpPill(fields.headsUpDays)}
-            />
-          }
-        >
-          <HeadsUpFields
-            value={fields.headsUpDays}
-            onChange={(headsUpDays) => patch({ headsUpDays })}
-          />
-        </Picker>
-
-        <Pill
-          icon={FlagIcon}
-          label="Must not miss"
-          value={fields.mustNotMiss ? 'Must not miss' : ''}
-          aria-pressed={fields.mustNotMiss}
-          onClick={() => patch({ mustNotMiss: !fields.mustNotMiss })}
-        />
+        </div>
 
         <Button
           type="submit"
-          size="icon"
-          className="ml-auto rounded-full"
+          size={desktop ? 'icon' : 'icon-lg'}
+          className="rounded-full max-lg:size-10"
           disabled={!title}
           aria-label="Add"
         >
           <ArrowUpIcon />
         </Button>
       </div>
+
+      {/* On a phone the choices open here, under the row, in the same sheet. */}
+      {!desktop && shown && (
+        <div className="min-h-0 overflow-y-auto overscroll-contain border-t pt-3 pb-1">
+          {shown.fields}
+        </div>
+      )}
     </form>
   )
 }
