@@ -91,7 +91,7 @@ export interface DateParser {
     text: string
     start: {
       date: () => Date
-      isCertain: (part: 'hour') => boolean
+      isCertain: (part: 'hour' | 'day' | 'weekday' | 'month') => boolean
     }
   }>
 }
@@ -102,6 +102,55 @@ export interface ParsedWhen extends When {
   phrase: string
   /** The title with those words taken out. */
   title: string
+}
+
+// "by fri", "due on fri": the linking word goes with the date.
+const LINK = /\b(due|by|on|at|in|before|until)\s*$/i
+// A month and nothing else. It is as often a name ("March of the Penguins",
+// "the August statement") as a deadline, so it needs a linking word.
+const MONTH_ALONE =
+  /^(jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|june?|july?|aug(ust)?|sep(t(ember)?)?|oct(ober)?|nov(ember)?|dec(ember)?)\.?(\s+of)?$/i
+// A length of time and nothing else is an amount ("2 weeks of recycling"),
+// not a deadline. "in 2 weeks" and "2 weeks from now" are not matched.
+const SPAN_ALONE =
+  /^(\d+|an?|one|two|three|four|five|six|seven|eight|nine|ten|few|couple(\s+of)?)\s+(days?|weeks?|months?|years?)$/i
+// "on the 1st", "by the 15th": a day of the month, which the parser does not
+// read. Only after a linking word and at the end of a phrase, so "on the 2nd
+// floor" is left alone.
+const DAY_OF_MONTH =
+  /\b(?:due|by|on|before|until)\s+the\s+(\d{1,2})(?:st|nd|rd|th)(?=\s*$|\s*[,;.!]|\s+at\b|\s+\d)/i
+
+/** The next date, today included, that is day `day` of its month. */
+function nextDayOfMonth(today: LocalDate, day: number): LocalDate | null {
+  if (day < 1 || day > 31) return null
+  let [year, month] = today.split('-').map(Number)
+  for (let tries = 0; tries < 12; tries++) {
+    const date = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+    // A day the month does not have rolls over and no longer matches.
+    const real = fromPickerDate(toPickerDate(date)) === date
+    if (real && date >= today) return date
+    month += 1
+    if (month > 12) {
+      month = 1
+      year += 1
+    }
+  }
+  return null
+}
+
+/** `text` without the given stretches, tidied into a title. */
+function without(text: string, cuts: Array<[number, number]>): string {
+  let title = ''
+  let from = 0
+  for (const [start, end] of [...cuts].sort((a, b) => a[0] - b[0])) {
+    title += `${text.slice(from, start).replace(LINK, '')} `
+    from = Math.max(from, end)
+  }
+  return (title + text.slice(from))
+    .replace(/\s+/g, ' ')
+    .replace(/\s+([,;:.!])/g, '$1')
+    .replace(/[\s,;:-]+$/, '')
+    .trim()
 }
 
 /**
@@ -117,28 +166,49 @@ export function parseWhen(
   // Noon, so "today" is the same calendar day in whatever zone this runs in.
   const reference = toPickerDate(today)
   reference.setHours(12)
-  const found = parser.parse(text, reference, { forwardDate: true }).at(-1)
-  if (!found) return null
+  const found = parser
+    .parse(text, reference, { forwardDate: true })
+    .filter((one) => {
+      if (SPAN_ALONE.test(one.text)) return false
+      if (!MONTH_ALONE.test(one.text)) return true
+      return LINK.test(text.slice(0, one.index))
+    })
+    .at(-1)
 
-  const before = text
-    .slice(0, found.index)
-    // "by fri", "due on fri": the linking word goes with the date.
-    .replace(/\b(due|by|on|at|before|until)\s*$/i, '')
-  const after = text.slice(found.index + found.text.length)
-  const title = `${before} ${after}`
-    .replace(/\s+/g, ' ')
-    .replace(/[\s,;:-]+$/, '')
-    .trim()
-  if (!title) return null
-
-  const at = found.start.date()
-  const hasTime = found.start.isCertain('hour')
-  return {
-    phrase: found.text,
-    title,
-    dueDate: fromPickerDate(at),
-    dueTime: hasTime
+  const at = found?.start.date()
+  const hasTime = found?.start.isCertain('hour') ?? false
+  const timeOnly =
+    hasTime &&
+    !found?.start.isCertain('day') &&
+    !found?.start.isCertain('weekday') &&
+    !found?.start.isCertain('month')
+  const dueTime =
+    at && hasTime
       ? `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`
-      : null,
+      : null
+
+  // "on the 1st at 9am": the day of the month, with the parser's time if
+  // that is all the parser found.
+  const dayOfMonth = !found || timeOnly ? DAY_OF_MONTH.exec(text) : null
+  const onDay = dayOfMonth && nextDayOfMonth(today, Number(dayOfMonth[1]))
+  if (dayOfMonth && onDay) {
+    const cuts: Array<[number, number]> = [
+      [dayOfMonth.index, dayOfMonth.index + dayOfMonth[0].length],
+    ]
+    if (found) cuts.push([found.index, found.index + found.text.length])
+    const title = without(text, cuts)
+    if (!title) return null
+    const end = Math.max(...cuts.map((cut) => cut[1]))
+    return {
+      phrase: text.slice(dayOfMonth.index, end).trim(),
+      title,
+      dueDate: onDay,
+      dueTime,
+    }
   }
+
+  if (!found || !at) return null
+  const title = without(text, [[found.index, found.index + found.text.length]])
+  if (!title) return null
+  return { phrase: found.text, title, dueDate: fromPickerDate(at), dueTime }
 }
