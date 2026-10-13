@@ -1,6 +1,6 @@
 {
-  "name": "Home",
-  "short_name": "Home",
+  "name": "todos",
+  "short_name": "todos",
   "description": "The household to-do list",
   "start_url": "/",
   "display": "standalone",

@@ -21,10 +21,10 @@ export const Route = createRootRouteWithContext<RouterContext>()({
         name: 'viewport',
         content: 'width=device-width, initial-scale=1, viewport-fit=cover',
       },
-      { title: 'Home' },
+      { title: 'todos' },
       { name: 'mobile-web-app-capable', content: 'yes' },
       { name: 'apple-mobile-web-app-capable', content: 'yes' },
-      { name: 'apple-mobile-web-app-title', content: 'Home' },
+      { name: 'apple-mobile-web-app-title', content: 'todos' },
       {
         name: 'theme-color',
         content: '#ffffff',
