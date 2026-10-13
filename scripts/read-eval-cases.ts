@@ -2,10 +2,14 @@
  * The sentences `bun run eval:read` reads, and what a person would expect each
  * one to fill.
  *
- * Two sets. The first 30 came with the first run of the test, written by the
- * author of the rules. The 70 after them were written before the rules, their
- * tests or the Jev code were opened, the way people type household to-dos
- * rather than the way a parser likes them, so no strategy had a head start.
+ * Three sets. The first 30 came with the first run of the test, written by
+ * the author of the rules. The 70 after them were written before the rules,
+ * their tests or the Jev code were opened, the way people type household
+ * to-dos rather than the way a parser likes them, so no strategy had a head
+ * start. The rules were then tuned against those 100, so the last 50 are held
+ * out: written before that tuning began and never tuned against. They are the
+ * honest number. Do not fix a rule because of a held-out miss; write a new
+ * sentence into the 100 instead, or the set stops measuring anything.
  */
 
 // A made-up household on a fixed day, so every run asks the same thing.
@@ -633,9 +637,316 @@ export const NEW_CASES: Array<Case> = [
   ['???', { title: '???', area: null }],
 ]
 
+/**
+ * Held out: written before the rules were tuned against the 100 above, and
+ * never used to tune them. The same choices as the 70 are taken where a
+ * sentence leaves one.
+ */
+export const HELD_OUT_CASES: Array<Case> = [
+  // Names: whose it is, and names that are only mentioned.
+  [
+    "michelle - call the vet about Biscuit's shots",
+    {
+      title: "call the vet about Biscuit's shots",
+      who: 'michelle',
+      area: 'Pets',
+    },
+  ],
+  [
+    'Get Michelle to sign the daycare form by wednesday',
+    { title: 'sign the daycare form', date: '2026-10-14', who: 'michelle' },
+  ],
+  [
+    "Sam's haircut saturday 11am",
+    {
+      title: "Sam's haircut",
+      date: '2026-10-17',
+      time: '11:00',
+      area: null,
+    },
+  ],
+  [
+    'Lunch with Michelle and her sister sunday at noon',
+    {
+      title: 'Lunch with Michelle and her sister',
+      date: '2026-10-18',
+      time: '12:00',
+      area: null,
+    },
+  ],
+  [
+    "I'll grab the dry cleaning thursday after work",
+    {
+      title: 'grab the dry cleaning after work',
+      date: '2026-10-15',
+      who: 'sam',
+      area: null,
+    },
+  ],
+  [
+    'Michelle should book her eye exam',
+    { title: 'book her eye exam', who: 'michelle', area: 'Health' },
+  ],
+  [
+    "pick up sam's prescription at the pharmacy tomorrow",
+    {
+      title: "pick up sam's prescription at the pharmacy",
+      date: '2026-10-14',
+      area: 'Health',
+    },
+  ],
+  ['Call mom (sam)', { title: 'Call mom', who: 'sam', area: null }],
+  [
+    'Michelle, can you get stamps on the way home',
+    { title: 'get stamps on the way home', who: 'michelle' },
+  ],
+  [
+    'Watch 10 Things I Hate About You with Michelle',
+    { title: 'Watch 10 Things I Hate About You with Michelle', area: null },
+  ],
+  [
+    'tell sam to bring the folding table up from the basement',
+    { title: 'bring the folding table up from the basement', who: 'sam' },
+  ],
+
+  // Dates and times.
+  [
+    'oil change next tuesday at 7:30am',
+    { title: 'oil change', date: '2026-10-20', time: '07:30', area: 'Car' },
+  ],
+  [
+    'Put the recycling out thurs',
+    { title: 'Put the recycling out', date: '2026-10-15', area: 'House' },
+  ],
+  [
+    'Parent teacher night 10/22 6:30pm',
+    {
+      title: 'Parent teacher night',
+      date: '2026-10-22',
+      time: '18:30',
+      area: 'Kids',
+    },
+  ],
+  [
+    'Swim lessons start nov 2 at 4',
+    {
+      title: 'Swim lessons start',
+      date: '2026-11-02',
+      time: '16:00',
+      area: 'Kids',
+    },
+  ],
+  [
+    'Return the amazon package by the 20th',
+    { title: 'Return the amazon package', date: '2026-10-20', area: null },
+  ],
+  [
+    'vet appt for Biscuit fri @ 2',
+    {
+      title: 'vet appt for Biscuit',
+      date: '2026-10-16',
+      time: '14:00',
+      area: 'Pets',
+    },
+  ],
+  [
+    'Change the furnace filter on the first of the month',
+    { title: 'Change the furnace filter', date: '2026-11-01', area: 'House' },
+  ],
+  [
+    'Trash cans to the curb tonite',
+    { title: 'Trash cans to the curb', date: '2026-10-13', area: 'House' },
+  ],
+  [
+    'Soccer practice wed 5-6pm',
+    {
+      title: 'Soccer practice',
+      date: '2026-10-14',
+      time: '17:00',
+      area: 'Kids',
+    },
+  ],
+  [
+    'Pay the electric bill a week from today',
+    { title: 'Pay the electric bill', date: '2026-10-20', area: 'Paperwork' },
+  ],
+  [
+    'noon tomorrow lunch with the Parkers',
+    {
+      title: 'lunch with the Parkers',
+      date: '2026-10-14',
+      time: '12:00',
+      area: null,
+    },
+  ],
+  [
+    'dentist thrusday 3pm',
+    { title: 'dentist', date: '2026-10-15', time: '15:00', area: 'Health' },
+  ],
+
+  // Alerts, in several wordings.
+  [
+    'Book the flu clinic for oct 21, give me a heads up 2 days before',
+    {
+      title: 'Book the flu clinic',
+      date: '2026-10-21',
+      area: 'Health',
+      headsUp: [2],
+    },
+  ],
+  [
+    'Property tax due dec 10, remind me 2 weeks and 3 days before',
+    {
+      title: 'Property tax',
+      date: '2026-12-10',
+      area: 'Paperwork',
+      headsUp: [3, 14],
+    },
+  ],
+  [
+    'Call grandma on her birthday nov 9 no reminders',
+    {
+      title: 'Call grandma on her birthday',
+      date: '2026-11-09',
+      area: null,
+      headsUp: [],
+    },
+  ],
+  [
+    'School photos nov 12, let me know the day before',
+    { title: 'School photos', date: '2026-11-12', area: 'Kids', headsUp: [1] },
+  ],
+  [
+    'Change the smoke alarm batteries sunday, no need to remind me',
+    {
+      title: 'Change the smoke alarm batteries',
+      date: '2026-10-18',
+      area: 'House',
+      headsUp: [],
+    },
+  ],
+  [
+    'Remind me the day before to pack lunches for the field trip thursday',
+    {
+      title: 'pack lunches for the field trip',
+      date: '2026-10-15',
+      who: 'sam',
+      area: 'Kids',
+      headsUp: [1],
+    },
+  ],
+  [
+    'Order the turkey 2 weeks before thanksgiving',
+    { title: 'Order the turkey 2 weeks before thanksgiving', area: null },
+  ],
+
+  // Emphasis that is a flag, and emphasis that is not.
+  ['DO NOT FORGET the passports', { title: 'the passports', flag: true }],
+  [
+    'Call the school back today - urgent',
+    {
+      title: 'Call the school back',
+      date: '2026-10-13',
+      area: 'Kids',
+      flag: true,
+    },
+  ],
+  [
+    'Buy an important documents folder',
+    { title: 'Buy an important documents folder' },
+  ],
+  [
+    "Pick up the birthday cake saturday, can't forget!",
+    {
+      title: 'Pick up the birthday cake',
+      date: '2026-10-17',
+      area: null,
+      flag: true,
+    },
+  ],
+  [
+    'Mortgage payment due the 15th!!',
+    {
+      title: 'Mortgage payment',
+      date: '2026-10-15',
+      area: 'Paperwork',
+      flag: true,
+    },
+  ],
+  [
+    'Watch the Critical Role finale',
+    { title: 'Watch the Critical Role finale', area: null },
+  ],
+  [
+    'top priority - call the bank about the fraud alert',
+    {
+      title: 'call the bank about the fraud alert',
+      area: 'Paperwork',
+      flag: true,
+    },
+  ],
+  [
+    "Don't forget to feed the fish",
+    { title: 'feed the fish', area: 'Pets', flag: true },
+  ],
+
+  // Areas named outright.
+  [
+    '#yard rake under the maple',
+    { title: 'rake under the maple', area: 'Yard' },
+  ],
+  [
+    'kids: order school pictures by friday',
+    { title: 'order school pictures', date: '2026-10-16', area: 'Kids' },
+  ],
+  [
+    'wash the car #car this weekend',
+    { title: 'wash the car', date: '2026-10-17', area: 'Car' },
+  ],
+  [
+    "Pets: Biscuit's nail trim on the 24th at 10",
+    {
+      title: "Biscuit's nail trim",
+      date: '2026-10-24',
+      time: '10:00',
+      area: 'Pets',
+    },
+  ],
+  ['(house) caulk the bathtub', { title: 'caulk the bathtub', area: 'House' }],
+
+  // Areas implied.
+  ['Fill out the FAFSA', { title: 'Fill out the FAFSA', area: 'Paperwork' }],
+  [
+    'Aerate and overseed the lawn',
+    { title: 'Aerate and overseed the lawn', area: 'Yard' },
+  ],
+
+  // Numbers, months, weekdays and times that are part of the task.
+  [
+    'Borrow Tuesdays with Morrie from the library',
+    { title: 'Borrow Tuesdays with Morrie from the library', area: null },
+  ],
+  [
+    'Find the April Fools photos for the album',
+    { title: 'Find the April Fools photos for the album', area: null },
+  ],
+  [
+    'Buy 2 tickets for the 7pm show',
+    { title: 'Buy 2 tickets for the 7pm show', area: null },
+  ],
+  [
+    'Call the 24 hour nurse line about the rash',
+    { title: 'Call the 24 hour nurse line about the rash', area: 'Health' },
+  ],
+
+  // Nothing to read at all.
+  ['groceries', { title: 'groceries', area: null }],
+]
+
 export const SETS = [
   { name: 'First 30', cases: FIRST_CASES },
   { name: 'New 70', cases: NEW_CASES },
+  { name: 'Held out 50', cases: HELD_OUT_CASES },
 ] as const
 
-export const CASES: Array<Case> = [...FIRST_CASES, ...NEW_CASES]
+export const CASES: Array<Case> = SETS.flatMap((set) => set.cases)
