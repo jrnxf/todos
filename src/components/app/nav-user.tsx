@@ -8,6 +8,7 @@ import {
   MonitorIcon,
   MoonIcon,
   SunIcon,
+  SunMoonIcon,
   UserIcon,
 } from 'lucide-react'
 import {
@@ -19,6 +20,9 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import {
@@ -86,24 +90,31 @@ export function NavUser() {
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuLabel>Theme</DropdownMenuLabel>
-              <DropdownMenuRadioGroup
-                value={theme}
-                onValueChange={(value) => setTheme(parseTheme(value))}
-              >
-                <DropdownMenuRadioItem value="light">
-                  <SunIcon />
-                  Light
-                </DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="dark">
-                  <MoonIcon />
-                  Dark
-                </DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="system">
-                  <MonitorIcon />
-                  System
-                </DropdownMenuRadioItem>
-              </DropdownMenuRadioGroup>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                  <SunMoonIcon />
+                  Theme
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  <DropdownMenuRadioGroup
+                    value={theme}
+                    onValueChange={(value) => setTheme(parseTheme(value))}
+                  >
+                    <DropdownMenuRadioItem value="light">
+                      <SunIcon />
+                      Light
+                    </DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="dark">
+                      <MoonIcon />
+                      Dark
+                    </DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="system">
+                      <MonitorIcon />
+                      System
+                    </DropdownMenuRadioItem>
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem

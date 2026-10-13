@@ -53,7 +53,7 @@ function SignInScreen() {
             todos
           </h1>
           <p className="text-muted-foreground">
-            The household list. Sign in to open it.
+            One list for the whole household.
           </p>
         </div>
       </div>
