@@ -1,7 +1,8 @@
 // Adding a to-do: a title and one row of pills. A pill is an icon until it
 // is set, then it shows its value. Sending clears the bar and leaves it open,
-// so several to-dos go in one after another. A date typed into the title
-// ("dentist fri 5pm") is read out of it.
+// so several to-dos go in one after another. What is said in the title is
+// read out of it and fills the pills ("Sam: dentist fri 5pm !"); each reading
+// can be taken back with one tap.
 //
 // On a phone the bar is a sheet from the top of the screen, where neither the
 // keyboard nor the browser's own bars can cover it, and a pill opens its
@@ -24,6 +25,7 @@ import {
   PlusIcon,
   TagIcon,
   UserIcon,
+  XIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -42,13 +44,15 @@ import {
 } from '@/components/ui/drawer'
 import { Input } from '@/components/ui/input'
 import { useAddItem, useBoard } from '@/lib/queries'
-import { parseWhen, shortWhenLabel } from '@/lib/when'
+import { readTitle } from '@/lib/read'
+import { shortWhenLabel } from '@/lib/when'
 import { AreaDot } from './area'
 import { Picker, useIsDesktop } from './picker'
 import { AreaFields, HeadsUpFields, WhoFields } from './small-pickers'
 import { WhenFields } from './when-picker'
 import type { LucideIcon } from 'lucide-react'
 import type { AreaColor } from '@/db/schema'
+import type { ReadField } from '@/lib/read'
 import type { DateParser, When } from '@/lib/when'
 import type { ItemFields } from '@/server/board'
 
@@ -65,7 +69,7 @@ export const EMPTY_FIELDS: ItemFields = {
 
 const TITLE = 'Add a to-do'
 const DESCRIPTION =
-  'Type what needs doing. A date in the title is read as the deadline.'
+  'Type what needs doing. A date, a name, an area, a heads-up or "!" in the title fills in the rest.'
 
 const AddContext = createContext<(preset?: Partial<ItemFields>) => void>(
   () => {},
@@ -261,6 +265,15 @@ function headsUpPill(days: Array<number>): string {
 
 type Open = 'when' | 'area' | 'who' | 'headsUp' | null
 
+const READ_FIELDS: Array<{ field: ReadField; icon: LucideIcon; name: string }> =
+  [
+    { field: 'when', icon: CalendarIcon, name: 'the date' },
+    { field: 'area', icon: TagIcon, name: 'the area' },
+    { field: 'who', icon: UserIcon, name: 'who' },
+    { field: 'headsUp', icon: BellIcon, name: 'the heads-up' },
+    { field: 'flag', icon: FlagIcon, name: 'must not miss' },
+  ]
+
 function CaptureBar({
   preset,
   onClose,
@@ -276,25 +289,45 @@ function CaptureBar({
 
   const blank = { ...EMPTY_FIELDS, ...preset }
   const [fields, setFields] = useState<ItemFields>(blank)
-  // Once a date is picked by hand, the title is no longer read for one.
-  const [pickedWhen, setPickedWhen] = useState(false)
-  // A phrase the parser took for a date and the person said is not one.
-  const [notADate, setNotADate] = useState<string | null>(null)
+  // Once a pill is set by hand, the title is no longer read for it.
+  const [byHand, setByHand] = useState<ReadonlySet<ReadField>>(new Set())
+  // The words of a reading the person took back. They are not read again,
+  // though different words for the same pill would be.
+  const [takenBack, setTakenBack] = useState<
+    Partial<Record<ReadField, string>>
+  >({})
   const [added, setAdded] = useState<string | null>(null)
   const [open, setOpen] = useState<Open>(null)
 
-  const parsed =
-    parser && !pickedWhen ? parseWhen(parser, fields.title, board.today) : null
-  const read = parsed && parsed.phrase !== notADate ? parsed : null
-  const when: When = read ?? {
-    dueDate: fields.dueDate,
-    dueTime: fields.dueTime,
-  }
-  const title = (read ? read.title : fields.title).trim()
-  const area = board.areas.find((one) => one.id === fields.areaId)
+  const readWith = (skip: ReadonlySet<ReadField>) =>
+    readTitle(parser, fields.title, {
+      today: board.today,
+      me: board.me,
+      people: board.people,
+      areas: board.areas,
+      skip,
+    })
+  const first = readWith(byHand)
+  const refused = READ_FIELDS.map((one) => one.field).filter(
+    (field) =>
+      first.phrases[field] !== undefined &&
+      first.phrases[field] === takenBack[field],
+  )
+  const read =
+    refused.length > 0 ? readWith(new Set([...byHand, ...refused])) : first
+  // What will be sent: the pills set by hand, under what the title says.
+  const now: ItemFields = { ...fields, ...read.fields }
+  const when: When = { dueDate: now.dueDate, dueTime: now.dueTime }
+  const title = read.title
+  const area = board.areas.find((one) => one.id === now.areaId)
 
   const patch = (change: Partial<ItemFields>) =>
-    setFields((now) => ({ ...now, ...change }))
+    setFields((before) => ({ ...before, ...change }))
+  /** A pill set by hand: it holds, whatever the title goes on to say. */
+  const set = (field: ReadField, change: Partial<ItemFields>) => {
+    patch(change)
+    setByHand((before) => new Set([...before, field]))
+  }
   const toggle = (which: Exclude<Open, null>) => (isOpen: boolean) =>
     setOpen(isOpen ? which : null)
 
@@ -318,10 +351,7 @@ function CaptureBar({
         <WhenFields
           value={when}
           calendar={desktop ? 'shown' : 'asked-for'}
-          onChange={(picked) => {
-            patch(picked)
-            setPickedWhen(true)
-          }}
+          onChange={(picked) => set('when', picked)}
           onDone={() => setOpen(null)}
         />
       ),
@@ -338,9 +368,9 @@ function CaptureBar({
       },
       fields: (
         <AreaFields
-          value={fields.areaId}
+          value={now.areaId}
           onChange={(areaId) => {
-            patch({ areaId })
+            set('area', { areaId })
             setOpen(null)
           }}
         />
@@ -353,13 +383,13 @@ function CaptureBar({
       pill: {
         icon: UserIcon,
         label: 'Who',
-        value: board.people.find((p) => p.id === fields.assignee)?.name ?? '',
+        value: board.people.find((p) => p.id === now.assignee)?.name ?? '',
       },
       fields: (
         <WhoFields
-          value={fields.assignee}
+          value={now.assignee}
           onChange={(assignee) => {
-            patch({ assignee })
+            set('who', { assignee })
             setOpen(null)
           }}
         />
@@ -372,25 +402,30 @@ function CaptureBar({
       pill: {
         icon: BellIcon,
         label: 'Heads-up',
-        value: headsUpPill(fields.headsUpDays),
+        value: headsUpPill(now.headsUpDays),
       },
       fields: (
         <HeadsUpFields
-          value={fields.headsUpDays}
-          onChange={(headsUpDays) => patch({ headsUpDays })}
+          value={now.headsUpDays}
+          onChange={(headsUpDays) => set('headsUp', { headsUpDays })}
         />
       ),
     },
   ]
   const shown = pickers.find((picker) => picker.key === open)
+  // What the title filled in, each with the words it came from.
+  const wasRead = READ_FIELDS.flatMap((one) => {
+    const phrase = read.phrases[one.field]?.replace(/^[\s,;]+/, '')
+    return phrase ? [{ ...one, phrase }] : []
+  })
 
   const submit = () => {
     if (!title) return
-    add.mutate({ ...fields, ...when, title })
+    add.mutate({ ...now, title })
     setAdded(title)
     setFields(blank)
-    setPickedWhen(false)
-    setNotADate(null)
+    setByHand(new Set())
+    setTakenBack({})
     titleRef.current?.focus()
   }
 
@@ -435,19 +470,29 @@ function CaptureBar({
         className="h-9 border-0 bg-transparent px-0 text-base font-medium shadow-none focus-visible:ring-0 md:text-base dark:bg-transparent"
       />
 
-      {read && (
-        <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
-          <CalendarIcon className="size-3.5" />
-          Read "{read.phrase}" as the date.
-          <Button
-            variant="link"
-            size="xs"
-            className="h-auto p-0"
-            onClick={() => setNotADate(read.phrase)}
-          >
-            Not a date
-          </Button>
-        </p>
+      {wasRead.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+          Read from the title
+          {wasRead.map(({ field, icon: Icon, name, phrase }) => (
+            <Button
+              key={field}
+              variant="outline"
+              size={desktop ? 'xs' : 'sm'}
+              className="max-w-full rounded-full font-normal"
+              aria-label={`"${phrase}" is not ${name}`}
+              onClick={() =>
+                setTakenBack((before) => ({
+                  ...before,
+                  [field]: read.phrases[field],
+                }))
+              }
+            >
+              <Icon data-icon="inline-start" />
+              <span className="truncate">{phrase}</span>
+              <XIcon data-icon="inline-end" />
+            </Button>
+          ))}
+        </div>
       )}
 
       {/* The send button stays beside the first row when the pills wrap. */}
@@ -479,10 +524,10 @@ function CaptureBar({
           <Pill
             icon={FlagIcon}
             label="Must not miss"
-            value={fields.mustNotMiss ? 'Must not miss' : ''}
+            value={now.mustNotMiss ? 'Must not miss' : ''}
             roomy={!desktop}
-            aria-pressed={fields.mustNotMiss}
-            onClick={() => patch({ mustNotMiss: !fields.mustNotMiss })}
+            aria-pressed={now.mustNotMiss}
+            onClick={() => set('flag', { mustNotMiss: !now.mustNotMiss })}
           />
         </div>
 

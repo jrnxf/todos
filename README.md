@@ -74,6 +74,7 @@ database, make a Google sign-in client, set the settings, deploy.
 | `src/db/schema.ts`       | The tables. Migrations under `drizzle/` are applied by wrangler |
 | `src/lib/dates.ts`       | Dates as household-local strings, never UTC instants            |
 | `src/lib/when.ts`        | Date shortcuts, and reading a date out of a title. With tests   |
+| `src/lib/read.ts`        | Reading who, area, heads-up and flag out of a title. With tests |
 | `src/alerts/rules.ts`    | Which alerts exist and when. Pure, with tests                   |
 | `src/alerts/tick.ts`     | One scheduler pass: send what fell due since the last pass      |
 | `src/alerts/notify.ts`   | The one way an alert leaves the app (Pushover today)            |

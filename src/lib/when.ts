@@ -111,9 +111,10 @@ const LINK = /\b(due|by|on|at|in|before|until)\s*$/i
 const MONTH_ALONE =
   /^(jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|june?|july?|aug(ust)?|sep(t(ember)?)?|oct(ober)?|nov(ember)?|dec(ember)?)\.?(\s+of)?$/i
 // A length of time and nothing else is an amount ("2 weeks of recycling"),
-// not a deadline. "in 2 weeks" and "2 weeks from now" are not matched.
+// or says how far ahead of something ("remind me 5 days before"): not a
+// deadline. "in 2 weeks" and "2 weeks from now" are not matched.
 const SPAN_ALONE =
-  /^(\d+|an?|one|two|three|four|five|six|seven|eight|nine|ten|few|couple(\s+of)?)\s+(days?|weeks?|months?|years?)$/i
+  /^(\d+|an?|one|two|three|four|five|six|seven|eight|nine|ten|few|couple(\s+of)?)\s+(days?|weeks?|months?|years?)(\s+(before|earlier|ahead|early|prior))?$/i
 // "on the 1st", "by the 15th": a day of the month, which the parser does not
 // read. Only after a linking word and at the end of a phrase, so "on the 2nd
 // floor" is left alone.

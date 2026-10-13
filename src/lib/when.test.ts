@@ -39,6 +39,7 @@ describe('a date typed into a title', () => {
       'Do the August statement',
       'Take 2 weeks of recycling to the depot',
       'Buy 3 days of food',
+      'Renew passport, remind me 5 days before',
       'Fix the light on the 2nd floor',
     ])
       expect(parseWhen(chrono, title, today), title).toBeNull()
