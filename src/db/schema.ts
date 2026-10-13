@@ -1,0 +1,157 @@
+import {
+  index,
+  integer,
+  primaryKey,
+  sqliteTable,
+  text,
+} from 'drizzle-orm/sqlite-core'
+
+/** The colours an area can have. Kept apart from the red and amber that mean late and soon. */
+export const AREA_COLORS = [
+  'blue',
+  'teal',
+  'green',
+  'amber',
+  'red',
+  'pink',
+  'violet',
+  'gray',
+] as const
+export type AreaColor = (typeof AREA_COLORS)[number]
+
+// What a to-do is filed under: House, Kids, Paperwork, and whatever else the
+// household makes. A thing of its own so it can carry a colour and be renamed
+// in one place.
+export const areas = sqliteTable('areas', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  name: text('name').notNull().unique(),
+  color: text('color').$type<AreaColor>().notNull(),
+})
+
+export const items = sqliteTable('items', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  title: text('title').notNull(),
+  notes: text('notes').notNull().default(''),
+  // null is "no area". Deleting an area leaves its to-dos with none.
+  areaId: integer('area_id').references(() => areas.id, {
+    onDelete: 'set null',
+  }),
+  // A person's id from the PEOPLE setting (who lives here is configuration,
+  // not a table); null means either of us.
+  assignee: text('assignee'),
+  // Household-local calendar date and wall-clock time (lib/dates.ts), not
+  // UTC instants. A time only exists alongside a date.
+  dueDate: text('due_date'),
+  dueTime: text('due_time'),
+  // Days before the deadline to send a heads-up, e.g. [3, 1].
+  headsUpDays: text('heads_up_days', { mode: 'json' })
+    .$type<Array<number>>()
+    .notNull()
+    .default([1]),
+  mustNotMiss: integer('must_not_miss', { mode: 'boolean' })
+    .notNull()
+    .default(false),
+  // UTC instants from here down.
+  doneAt: text('done_at'),
+  doneBy: text('done_by'),
+  createdAt: text('created_at').notNull(),
+  createdBy: text('created_by'),
+  // Delete is soft, so a slip of the thumb can be undone.
+  deletedAt: text('deleted_at'),
+})
+
+// One row per alert that went out. The key is what makes the scheduler safe
+// to restart: a second attempt at the same alert cannot insert, so it cannot
+// send. `itemId` is 0 for the morning digest, which belongs to no single item.
+export const alertsSent = sqliteTable(
+  'alerts_sent',
+  {
+    itemId: integer('item_id').notNull(),
+    kind: text('kind').notNull(),
+    forDate: text('for_date').notNull(),
+    person: text('person').notNull(),
+    sentAt: text('sent_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.itemId, t.kind, t.forDate, t.person] })],
+)
+
+// Small key-value store; holds the scheduler's watermark.
+export const meta = sqliteTable('meta', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+})
+
+// Sign-in. These four tables belong to Better Auth (src/server/auth.ts),
+// which reads and writes them by these property names; nothing else in the
+// app touches them. A row in `auth_user` is a Google account that got in,
+// not a member of the household: who that is, is decided by matching its
+// email against the PEOPLE_EMAILS setting (src/server/identity.ts).
+const instant = (name: string) => integer(name, { mode: 'timestamp_ms' })
+
+export const authUser = sqliteTable('auth_user', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  email: text('email').notNull().unique(),
+  emailVerified: integer('email_verified', { mode: 'boolean' })
+    .notNull()
+    .default(false),
+  image: text('image'),
+  createdAt: instant('created_at').notNull(),
+  updatedAt: instant('updated_at').notNull(),
+})
+
+export const authSession = sqliteTable(
+  'auth_session',
+  {
+    id: text('id').primaryKey(),
+    expiresAt: instant('expires_at').notNull(),
+    token: text('token').notNull().unique(),
+    createdAt: instant('created_at').notNull(),
+    updatedAt: instant('updated_at').notNull(),
+    ipAddress: text('ip_address'),
+    userAgent: text('user_agent'),
+    userId: text('user_id')
+      .notNull()
+      .references(() => authUser.id, { onDelete: 'cascade' }),
+  },
+  (t) => [index('auth_session_user_id').on(t.userId)],
+)
+
+export const authAccount = sqliteTable(
+  'auth_account',
+  {
+    id: text('id').primaryKey(),
+    accountId: text('account_id').notNull(),
+    providerId: text('provider_id').notNull(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => authUser.id, { onDelete: 'cascade' }),
+    accessToken: text('access_token'),
+    refreshToken: text('refresh_token'),
+    idToken: text('id_token'),
+    accessTokenExpiresAt: instant('access_token_expires_at'),
+    refreshTokenExpiresAt: instant('refresh_token_expires_at'),
+    scope: text('scope'),
+    password: text('password'),
+    createdAt: instant('created_at').notNull(),
+    updatedAt: instant('updated_at').notNull(),
+  },
+  (t) => [index('auth_account_user_id').on(t.userId)],
+)
+
+// Short-lived: the state of a sign-in that is halfway through Google.
+export const authVerification = sqliteTable(
+  'auth_verification',
+  {
+    id: text('id').primaryKey(),
+    identifier: text('identifier').notNull(),
+    value: text('value').notNull(),
+    expiresAt: instant('expires_at').notNull(),
+    createdAt: instant('created_at').notNull(),
+    updatedAt: instant('updated_at').notNull(),
+  },
+  (t) => [index('auth_verification_identifier').on(t.identifier)],
+)
+
+export type Todo = typeof items.$inferSelect
+export type Area = typeof areas.$inferSelect

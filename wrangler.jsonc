@@ -1,0 +1,42 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "todos",
+  // The app's own entry, not TanStack Start's default one: it adds the
+  // scheduled handler that sends the alerts.
+  "main": "./src/server.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+  // Served at todos.<account>.workers.dev. No per-version preview addresses:
+  // sign-in only ever returns to the one address in APP_URL.
+  "workers_dev": true,
+  "preview_urls": false,
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      // Your own database goes here (`wrangler d1 create`). The id is an
+      // identifier, not a credential: it opens nothing without the account's
+      // own login. The name is the app's first one; D1 cannot rename in place.
+      "database_name": "todo",
+      "database_id": "64896a29-6fb3-4668-95d1-a4ece95c5fa9",
+      // drizzle-kit writes the SQL here; wrangler applies it.
+      "migrations_dir": "drizzle",
+    },
+  ],
+
+  // The scheduler: one pass a minute (src/alerts/tick.ts).
+  "triggers": { "crons": ["* * * * *"] },
+
+  // Only what any household would share. Everything about one particular
+  // household (PEOPLE, PEOPLE_EMAILS, HOUSEHOLD_TZ, APP_URL) and every secret
+  // (BETTER_AUTH_SECRET, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
+  // PUSHOVER_APP_TOKEN, PUSHOVER_USER_KEYS) lives on the Worker, set with
+  // `wrangler secret put`, and in dev in .dev.vars. So this file says nothing
+  // about who runs it. Every setting is described in src/server/env.ts.
+  "vars": {
+    "DIGEST_TIME": "07:30",
+    "HEADS_UP_TIME": "19:00",
+    "NUDGE_MINUTES_BEFORE": "60",
+  },
+}

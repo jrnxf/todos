@@ -1,0 +1,34 @@
+# Copy to .dev.vars for local development. As it stands nothing here is a
+# secret: you are signed in as the person named below, and alerts are written
+# to the terminal instead of sent.
+
+# Who lives here, as id:Name pairs. The ids are what a to-do stores.
+PEOPLE=alex:Alex,sam:Sam
+
+# The household's IANA time zone, such as America/Chicago. Deadlines and
+# alert times are wall-clock times in it.
+HOUSEHOLD_TZ=UTC
+
+# Dev server only: be this person (an id from PEOPLE) without signing in.
+# Empty it to go through real sign-in, which then needs the four settings
+# under it.
+DEV_SIGNED_IN_AS=alex
+
+# Sign-in with Google. The Google client also needs
+# http://localhost:3001/api/auth/callback/google as a redirect URI.
+# Any 32 or more random characters: openssl rand -base64 32
+BETTER_AUTH_SECRET=
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+# id:email pairs, ids as in PEOPLE: the Google accounts allowed in.
+PEOPLE_EMAILS=
+
+# The Pushover application token.
+PUSHOVER_APP_TOKEN=
+
+# id:userkey pairs, ids as in PEOPLE.
+PUSHOVER_USER_KEYS=
+
+# In dev, links and Google's reply should point at the laptop, not the
+# deployed app.
+APP_URL=http://localhost:3001

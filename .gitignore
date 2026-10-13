@@ -1,0 +1,16 @@
+node_modules
+.DS_Store
+dist
+*.local
+.tanstack
+.output
+__unconfig*
+
+# Cloudflare: local D1 state, local secrets, and the generated binding types
+# (`bun run cf-typegen` writes them; typecheck runs it first).
+.wrangler
+.dev.vars
+worker-configuration.d.ts
+
+# Design pages for review; they can hold real names and real to-dos.
+.lavish

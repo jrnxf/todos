@@ -1,0 +1,11 @@
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+.lavish/
+# Written by drizzle-kit.
+drizzle/
+# Written by the router plugin.
+src/routeTree.gen.ts
+# Written by `wrangler types`.
+worker-configuration.d.ts
+.wrangler/
