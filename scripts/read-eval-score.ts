@@ -47,8 +47,6 @@ export interface Outcome {
   reads: Record<string, TitleRead>
   /** Null where a way sent nothing for this sentence. */
   sent: Record<string, Sent | null>
-  /** The ways whose whole reading, title included, is a model's. */
-  whole: ReadonlyArray<string>
 }
 
 type Tags = ReadonlyArray<{ id: number; name: string }>
@@ -86,16 +84,11 @@ export function sides(
 }
 
 /**
- * Who filled a field that came out wrong: the model that was asked, or the
- * rules. `whole` is a reading a model wrote all of.
+ * Who had the say in a field that came out wrong: the model that was asked,
+ * or the rules.
  */
-export function filledBy(
-  field: Field,
-  read: TitleRead,
-  whole = false,
-): 'model' | 'rules' {
-  if (whole) return 'model'
-  // A title is the model's doing once any word left it on the model's say.
+export function filledBy(field: Field, read: TitleRead): 'model' | 'rules' {
+  // A title is the model's doing once any word went back in on its say.
   if (field === 'title')
     return Object.values(read.guessed).some((words) => words)
       ? 'model'
@@ -140,7 +133,7 @@ export function tally(
         field,
         expected: side[0],
         got: side[1],
-        filledBy: filledBy(field, read, outcome.whole.includes(way)),
+        filledBy: filledBy(field, read),
       })
   }
   return result
@@ -223,71 +216,14 @@ const list = (names: Array<string>) =>
     ? names.join('')
     : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
 
-/** One sentence a field: who got it right most often. */
-export function winners(
-  outcomes: ReadonlyArray<Outcome>,
-  ways: ReadonlyArray<Pick<Way, 'id' | 'name'>>,
-  tags: Tags,
-): Array<string> {
-  return FIELDS.map((field) => {
-    const scores = ways.map((way) => tally(outcomes, way.id, field, tags))
-    const scored = scores[0].scored
-    const best = Math.max(...scores.map((score) => score.hits))
-    const leaders = ways.filter((_way, index) => scores[index].hits === best)
-    const name = field[0].toUpperCase() + field.slice(1)
-    if (leaders.length === ways.length)
-      return `${name}: level, every way at ${best} of ${scored}.`
-    const others = ways
-      .filter((way) => !leaders.includes(way))
-      .map((way) => `${way.name} ${scores[ways.indexOf(way)].hits}`)
-      .join(', ')
-    return `${name}: ${list(leaders.map((way) => way.name))} at ${best} of ${scored} (${others}).`
-  })
-}
-
-/** One plain paragraph: which way won what. */
-export function verdict(
-  outcomes: ReadonlyArray<Outcome>,
-  ways: ReadonlyArray<Pick<Way, 'id' | 'name'>>,
-  tags: Tags,
-  timeLimitMs: number,
-): string {
-  if (outcomes.length === 0 || ways.length === 0) return 'Nothing was read.'
-  const totals = ways.map((way) => ({
-    way,
-    misses: misses(outcomes, way.id, tags).length,
-    spent: spend(outcomes, way.id, timeLimitMs),
-  }))
-  const fewest = Math.min(...totals.map((one) => one.misses))
-  const asked = totals.filter((one) => one.spent.requests > 0)
-  const parts = [
-    `Over all ${outcomes.length} sentences, fewest misses in total: ${list(totals.filter((one) => one.misses === fewest).map((one) => one.way.name))} with ${fewest} (${totals.map((one) => `${one.way.name} ${one.misses}`).join(', ')}).`,
-    ...winners(outcomes, ways, tags),
-  ]
-  if (asked.length > 0) {
-    const quickest = asked.reduce((a, b) =>
-      (b.spent.delays?.median ?? Infinity) <
-      (a.spent.delays?.median ?? Infinity)
-        ? b
-        : a,
-    )
-    const cheapest = asked.reduce((a, b) =>
-      b.spent.usdPerTodo < a.spent.usdPerTodo ? b : a,
-    )
-    parts.push(
-      `Of the ways that send anything, ${quickest.way.name} answered quickest (median ${quickest.spent.delays?.median} ms) and ${cheapest.way.name} cost least (${usd(cheapest.spent.usdPerTodo)} a to-do).`,
-    )
-  }
-  return parts.join(' ')
-}
-
 /**
  * The answer, in plain words: which way missed fewest fields on one set of
- * sentences, and how far that is from the rules alone.
+ * sentences, how far that is from the rules alone, and whether any way that
+ * asks more beat the way the app asks.
  */
 export function headline(
   outcomes: ReadonlyArray<Outcome>,
-  ways: ReadonlyArray<Pick<Way, 'id' | 'name' | 'kind'>>,
+  ways: ReadonlyArray<Pick<Way, 'id' | 'name' | 'kind' | 'provider'>>,
   tags: Tags,
   what: string,
 ): string {
@@ -323,6 +259,27 @@ export function headline(
           : `The rules alone missed ${rules.misses}: no way that asks a model beat them, and the closest (${named}) missed ${best - rules.misses} more.`,
     )
   }
+  // The question the wider columns are there to answer.
+  for (const app of totals.filter((one) => one.way.kind === 'verify')) {
+    const more = totals.filter(
+      (one) =>
+        one.way.provider === app.way.provider &&
+        one.way.kind !== 'verify' &&
+        one.way.kind !== 'rules',
+    )
+    if (more.length === 0) continue
+    const best = Math.min(...more.map((one) => one.misses))
+    const named = list(
+      more.filter((one) => one.misses === best).map((one) => one.way.name),
+    )
+    parts.push(
+      best < app.misses
+        ? `Asking more than the app does won ${app.misses - best}: ${named} missed ${best}, against ${app.misses} for ${app.way.name}.`
+        : best === app.misses
+          ? `Asking more than the app does won nothing: ${app.way.name} missed ${app.misses}, and so did the best of the wider ways (${named}).`
+          : `Asking more than the app does lost: ${app.way.name} missed ${app.misses}, and the best of the wider ways (${named}) missed ${best}.`,
+    )
+  }
   return parts.join(' ')
 }
 
@@ -340,21 +297,26 @@ export interface CutoffTable {
   question: string
   /** What "acted" counts: fills, or dates taken away. */
   acts: string
+  /** What the rule of choice picks on the tuned sets. */
   chosen: number
+  /** What the column was read at: `chosen`, or the app's own fixed one. */
+  used: number
+  /** True where the app fixes the cut-off, so it is used whatever is chosen. */
+  fixed: boolean
+  /** What would have missed fewest on the sets it was not chosen on. */
+  hindsight: number
   rows: ReadonlyArray<CutoffRow>
 }
+
+export type SetKind = 'tuned' | 'seen' | 'unseen'
 
 export interface Run {
   outcomes: ReadonlyArray<Outcome>
   /**
    * Every sentence set with how many sentences it holds, and what it is for:
-   * `fresh` is shown first, and a cut-off is chosen on `tuned` alone.
+   * `unseen` is shown first, and a cut-off is chosen on `tuned` alone.
    */
-  sets: ReadonlyArray<{
-    name: string
-    size: number
-    kind: 'tuned' | 'held' | 'fresh'
-  }>
+  sets: ReadonlyArray<{ name: string; size: number; kind: SetKind }>
   tags: Tags
   /** The ways that were run, in order. */
   ways: ReadonlyArray<Way>
@@ -387,18 +349,66 @@ export function report(run: Run): string {
   const lines: Array<string> = []
   const say = (line = '') => lines.push(line)
   const names = ways.map((way) => way.name)
+  const order = { unseen: 0, seen: 1, tuned: 2 }
+  const sets = [...run.sets].sort((a, b) => order[a.kind] - order[b.kind])
+  const of = (name: string) =>
+    outcomes.filter((outcome) => outcome.set === name)
+  const kind = (wanted: SetKind) =>
+    list(sets.filter((set) => set.kind === wanted).map((set) => set.name)) ||
+    'no set'
+  const scored = (group: ReadonlyArray<Outcome>) =>
+    FIELDS.reduce(
+      (sum, field) => sum + tally(group, ways[0].id, field, tags).scored,
+      0,
+    )
 
   say('# Reading to-do titles')
   say()
   if (run.standIn) {
     say(
-      '**A stand-in run. No service was called: every reply below was made up on this machine in the shape the provider documents, with made-up delays and token counts. It shows that the test runs and what its report looks like. The hit rates of every way but Rules alone, the delays and the costs say nothing about the real services.**',
+      '**A stand-in run. No service was called: every reply below was made up on this machine, in the shape the provider documents, to agree with the rules, with made-up delays and token counts. It shows that the test runs and what its report looks like. The misses of every way but Rules alone, the delays and the costs say nothing about the real services.**',
     )
     say()
   }
   say(
     `${outcomes.length} of ${total} sentences read ${ways.length} ways on ${run.ranOn}. The household is made up and "today" is fixed at ${run.today}, a Tuesday.`,
   )
+  if (run.stopped) say(`\n**${run.stopped}**`)
+  say()
+  say('## Fields missed')
+  say()
+  say(
+    `How many fields each way got wrong, set by set, out of the number scored. A hit is a field ending up as a person would expect, filled or left empty. Every row is what the add bar would show: an answer that took longer than it waits (${run.timeLimitMs} ms) or could not be read is not used, and the rules' reading stands.`,
+  )
+  say()
+  const groups = [
+    ...sets.map((set) => ({ name: set.name, outcomes: of(set.name) })),
+    { name: `All ${outcomes.length}`, outcomes },
+  ]
+  say(
+    `| Way | ${groups.map((group) => `${group.name} (of ${scored(group.outcomes)})`).join(' | ')} |`,
+  )
+  say(`| --- | ${groups.map(() => '---').join(' | ')} |`)
+  for (const way of ways)
+    say(
+      `| ${way.name} | ${groups.map((group) => misses(group.outcomes, way.id, tags).length).join(' | ')} |`,
+    )
+  say()
+  for (const set of sets.filter((one) => one.kind === 'unseen'))
+    say(
+      headline(
+        of(set.name),
+        ways,
+        tags,
+        `the ${set.size} sentences of ${set.name}`,
+      ),
+    )
+  say()
+  say(
+    `${kind('unseen')} is the honest number: nothing was ever tuned against it, rule, wording or cut-off. ${kind('tuned')} are what the rules were tuned against, so there the rules can hardly lose. ${kind('seen')} were held out once, but their misses have since been read and the rule faults they showed fixed, so they no longer judge the rules; they are kept to set beside earlier runs.`,
+  )
+  say()
+  say('The ways:')
   say()
   for (const way of ways) {
     const provider = way.provider && run.providers[way.provider]
@@ -412,45 +422,14 @@ export function report(run: Run): string {
     say()
     for (const { way, why } of run.skipped) say(`- **${way.name}**: ${why}`)
   }
-  if (run.stopped) say(`\n**${run.stopped}**`)
-  const order = { fresh: 0, held: 1, tuned: 2 }
-  const sets = [...run.sets].sort((a, b) => order[a.kind] - order[b.kind])
-  const of = (name: string) =>
-    outcomes.filter((outcome) => outcome.set === name)
-  const fresh = sets.filter((set) => set.kind === 'fresh')
-  const tuned = sets.filter((set) => set.kind === 'tuned')
-  say()
-  say('## The answer')
-  say()
-  for (const set of fresh.length > 0 ? fresh : sets.slice(0, 1))
-    say(
-      headline(
-        of(set.name),
-        ways,
-        tags,
-        `the ${set.size} sentences of ${set.name}`,
-      ),
-    )
-  say()
-  say(
-    `${fresh.map((set) => set.name).join(' and ') || 'No set'} is the honest number: written before the documented requests were, and before the rules or any model read it. ${tuned.map((set) => set.name).join(' and ') || 'No set'} ${tuned.length === 1 ? 'is' : 'are'} what the rules were tuned against, so there the rules can hardly lose; ${sets
-      .filter((set) => set.kind === 'held')
-      .map((set) => set.name)
-      .join(
-        ' and ',
-      )} was held out from that tuning, but its misses were read before the documented requests were written.`,
-  )
   say()
   say('## Hit rate per field')
-  say()
-  say(
-    `A hit is the field ending up as a person would expect, filled or left empty. Every column is what the add bar would show: an answer that took longer than it waits (${run.timeLimitMs} ms) or could not be read is not used, and the rules read that sentence alone.`,
-  )
-  const groups = [
-    ...sets.map((set) => ({ name: set.name, outcomes: of(set.name) })),
-    { name: `All ${outcomes.length}`, outcomes },
-  ]
-  for (const group of groups) {
+  for (const group of [
+    ...groups.filter((one) =>
+      sets.some((set) => set.kind === 'unseen' && set.name === one.name),
+    ),
+    groups[groups.length - 1],
+  ]) {
     say()
     say(`### ${group.name}`)
     say()
@@ -464,18 +443,23 @@ export function report(run: Run): string {
       say(
         `| ${field} | ${ways.map((way) => rate(tally(group.outcomes, way.id, field, tags))).join(' | ')} |`,
       )
-    say(
-      `| **total misses** | ${ways.map((way) => `**${misses(group.outcomes, way.id, tags).length}**`).join(' | ')} |`,
-    )
   }
   if (run.cutoffs.length > 0) {
+    const others = sets.filter((set) => set.kind !== 'tuned')
     say()
     say('## Cut-offs')
     say()
     say(
-      `How sure an answer has to be before it is acted on, and what each choice of that costs. Each cut-off was chosen on ${tuned.map((set) => set.name).join(' and ') || 'no set'} alone: the least careful one that does no more harm there than the best, then one step more careful. The rules miss little or nothing on those sentences, so they show where a cut-off starts to do harm; what it wins shows on the other sets, which had no say in it. Every raw probability is in \`${run.results}\`, to try other cut-offs against.`,
+      `How sure an answer has to be before it is acted on, and what each choice of that costs. A cut-off is chosen on ${kind('tuned')} alone: the least careful one that does no more harm there than the best, then one step more careful. The rules miss little or nothing on those sentences, so they show where a cut-off starts to do harm, not what it wins. Under each table is the cut-off that would have missed fewest on the sets it was not chosen on (${list(others.map((set) => set.name))}). That one is hindsight: it is picked with the answers in hand, was not used for any number in this report, and is there to show how much hangs on the choice. Every raw probability is in \`${run.results}\`, to try other cut-offs against.`,
     )
     for (const table of run.cutoffs) {
+      const at = (cutoff: number) =>
+        table.rows.find((row) => row.cutoff === cutoff)
+      const missedAt = (cutoff: number) =>
+        others.reduce(
+          (sum, set) => sum + (at(cutoff)?.misses[set.name] ?? 0),
+          0,
+        )
       say()
       say(`### ${table.way}: ${table.question}`)
       say()
@@ -485,14 +469,25 @@ export function report(run: Run): string {
       say(`| --- | ${sets.map(() => '---').join(' | ')} |`)
       for (const row of table.rows)
         say(
-          `| ${row.cutoff}${row.cutoff === table.chosen ? ' (chosen)' : ''} | ${sets.map((set) => `${row.misses[set.name] ?? 0}, ${row.acted[set.name] ?? 0}`).join(' | ')} |`,
+          `| ${row.cutoff}${row.cutoff === table.used ? ' (used)' : ''} | ${sets.map((set) => `${row.misses[set.name] ?? 0}, ${row.acted[set.name] ?? 0}`).join(' | ')} |`,
         )
+      say()
+      const better = missedAt(table.hindsight) < missedAt(table.used)
+      say(
+        `${
+          !table.fixed
+            ? `Used: ${table.used}, chosen on the tuned sets.`
+            : table.used === table.chosen
+              ? `Used: ${table.used}, the cut-off the app acts on. This run would choose the same on the tuned sets.`
+              : `Used: ${table.used}, the cut-off the app acts on. This run would choose ${table.chosen} on the tuned sets.`
+        } ${
+          better
+            ? `Hindsight: ${table.hindsight} would have missed ${missedAt(table.hindsight)} fields on the other sets, where ${table.used} missed ${missedAt(table.used)}.`
+            : `Hindsight finds no cut-off that would have missed fewer on the other sets (${missedAt(table.used)}).`
+        }`,
+      )
     }
   }
-  say()
-  say('## Which won, over every sentence')
-  say()
-  say(verdict(outcomes, ways, tags, run.timeLimitMs))
   say()
   say('## Misses')
   for (const way of ways) {
@@ -504,7 +499,7 @@ export function report(run: Run): string {
       say('None.')
       continue
     }
-    say('| Set | Sentence | Field | Expected | Got | Filled by |')
+    say('| Set | Sentence | Field | Expected | Got | Whose say |')
     say('| --- | --- | --- | --- | --- | --- |')
     for (const set of sets)
       for (const miss of missed.filter((one) => one.set === set.name))
@@ -520,25 +515,23 @@ export function report(run: Run): string {
   )
   say()
   say(
-    '| Way | Requests | Median | 9 in 10 | Slowest | Late | No usable reply | Input tokens a to-do | Output tokens a to-do | Cost a to-do | Cost of the run |',
+    '| Way | Requests | Median | 9 in 10 | Slowest | Late | No usable reply | Input tokens a to-do | Cost a to-do | Cost of the run |',
   )
-  say('| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |')
+  say('| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |')
   for (const way of ways) {
     const spent = spend(outcomes, way.id, run.timeLimitMs)
     const ms = (value: number | undefined) =>
       value === undefined ? 'n/a' : `${value} ms`
     say(
-      `| ${way.name} | ${spent.requests} | ${ms(spent.delays?.median)} | ${ms(spent.delays?.nineInTen)} | ${ms(spent.delays?.slowest)} | ${spent.late} | ${spent.unusable} | ${spent.inputPerTodo} | ${spent.outputPerTodo} | ${usd(spent.usdPerTodo)} | ${usd(spent.usd)} |`,
+      `| ${way.name} | ${spent.requests} | ${ms(spent.delays?.median)} | ${ms(spent.delays?.nineInTen)} | ${ms(spent.delays?.slowest)} | ${spent.late} | ${spent.unusable} | ${spent.inputPerTodo} | ${usd(spent.usdPerTodo)} | ${usd(spent.usd)} |`,
     )
   }
   say()
   say(`The whole run, every request counted once: ${usd(run.spentUsd)}.`)
-  if (
-    ways.some((way) => way.provider === 'clef' || way.provider === 'clefFlash')
-  ) {
+  if (ways.some((way) => way.provider === 'clef')) {
     say()
     say(
-      'Clef and Clef Flash were called here over Cloudflare’s public REST API from this machine. That is not what the app would see: a Worker reaches them through an AI binding inside Cloudflare’s network, with no public hop and no token check, and Cloudflare’s own figures are medians of 209 ms and 39 ms (huggingface.co/Cloudflare/clef). Read these two delays as the public route’s, not the models’. `scripts/clef-speed/README.md` has an optional way to time them from inside Cloudflare.',
+      'Clef was called here over Cloudflare’s public REST API from this machine. That is not what the app would see: a Worker reaches it through an AI binding inside Cloudflare’s network, with no public hop and no token check, and Cloudflare’s own figure is a median of 209 ms (huggingface.co/Cloudflare/clef). Read its delay as the public route’s, not the model’s. `scripts/clef-speed/README.md` has an optional way to time it from inside Cloudflare.',
     )
   }
   const failed = ways.flatMap((way) =>

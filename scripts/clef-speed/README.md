@@ -1,7 +1,7 @@
 # Timing Clef from inside Cloudflare (optional)
 
-`bun run eval:read` reaches Clef and Clef Flash over Cloudflare's public REST
-API from your laptop. The app would not: a Worker calls them through an AI
+`bun run eval:read` reaches Clef over Cloudflare's public REST API from your
+laptop. An app would not: a Worker calls Clef and Clef Flash through an AI
 binding, inside Cloudflare's network. So the delays in the test's report are
 the public route's, and say little about what the add bar would wait.
 

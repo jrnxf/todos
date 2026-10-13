@@ -168,92 +168,104 @@ in typing.
 
 ### Checking how well it reads
 
-Before trusting it with dates, measure it. `bun run eval:read` reads 200
-household sentences, each with the fill a person would expect, several ways
-on the same inputs:
+`bun run eval:read` measures it, and asks whether the app should have Jev
+check more than it does. It reads 300 household sentences, each with the fill
+a person would expect, six ways on the same inputs:
 
 - **Rules alone**: the rules in the page, and nothing sent.
-- **Verify**, for each decision model there is a key for (Jev, Cloudflare
-  Clef, Clef Flash, OpenAI's Decisions API): the check described above. With
-  Jev it is what the add bar does, asked and read by the add bar's own code
-  (`src/lib/verify.ts`), so the test measures what the app runs.
-- **Tag only** and **Verify + date parts**: test only, read out of the same
-  reply, to show each part's worth on its own. The first reads the tag and
-  nothing else. The second also asks, where the rules read no date, for the
-  parts of one (how it is written, the month, the day, the weekday) and puts
-  them together in code.
-- **Fast model**: one call to a small general model (Claude Haiku 4.5, Gemini
-  3.1 Flash Lite) returns every field and the tidied title as structured
-  output, and the rules read the sentence alone on a late or a bad reply.
+- **Verify, Jev**: what the add bar does. The test asks the add bar's own
+  request and reads the reply with the add bar's own code
+  (`src/lib/verify.ts`), at the add bar's own cut-offs, so it measures what
+  the app runs.
+- **Verify + who, Jev**: test only. Jev is also asked, of each household
+  name in the title, whether that person is the one to do it or is only
+  mentioned ("Pick Michelle up from the airport", "Sam's haircut"). A no
+  takes back a person the rules read; a yes fills one where they read none.
+- **Verify + title, Jev**: test only. Jev is also asked, of each phrase the
+  rules took out of the title to say who, ask for a reminder or stress it,
+  whether the phrase is part of the task after all. A yes puts it back.
+- **Verify + who + title, Jev**: test only, both of those.
+- **Verify, Clef**: for comparison, the add bar's request sent to
+  Cloudflare's Clef instead.
 
-Only the rules and Verify with Jev are in the app. The rest exist in the test
-alone. The way the app first asked Jev, for the day among 120 options, the
-time among 96 and what each word of the title is for, is gone from both: its
-makers say Jev does that badly, and on these sentences it missed more than
-twice what the rules alone did.
+The wider ways ask the documented way too (`scripts/read-eval-verify.ts`):
+code finds the candidates, Jev answers yes or no about each, and nothing is
+counted or written by it. One request a sentence carries every question for
+Jev, and its four columns are read out of the one reply.
 
-It writes `data/read-eval/report.md`: the answer first, in plain words (which
-way missed fewest on the fresh sentences, and by how many); the hit rate per
-field and the total misses for each way side by side, the fresh set first,
-then each other set, then all of them; what each cut-off costs; every miss;
-one table of the speed (median, 9 in 10, slowest, and how many answers came
-later than the add bar waits), the tokens and the cost a to-do of every way;
-and where each provider's endpoint, limits and price were read. Beside it,
-`results.json` holds every raw probability the decision models gave, so
-another cut-off can be tried without paying again. Both hold the test's
-made-up household only, and no key. Files already there are kept beside the
-new ones under the time they were written.
+It writes `data/read-eval/report.md`. First comes one table: the fields each
+way missed, set by set, and under it the answer in plain words, on the unseen
+sentences: which way missed fewest, how far that is from the rules alone, and
+whether asking more than the app does won anything. Then the hit rate per
+field, what each cut-off costs, every miss, one table of the speed (median,
+9 in 10, slowest, and how many answers came later than the add bar waits),
+the tokens and the cost a to-do, and where each provider's endpoint, limits
+and price were read. Beside it, `results.json` holds every raw probability
+the models gave, so another cut-off can be tried without paying again. Both
+hold the test's made-up household only, and no key. Files already there are
+kept beside the new ones under the time they were written.
 
 ```bash
 bun run eval:read             # the plan and the estimated cost; sends nothing
 bun run eval:read --stand-in  # the whole run against stand-ins: no key, no bill
-TYPESAFE_API_KEY=... ANTHROPIC_API_KEY=... bun run eval:read --yes
+TYPESAFE_API_KEY=... bun run eval:read --yes
 ```
 
 Keys come from the environment and are never printed or written. A way whose
 key is not set is skipped, and the report says so:
 
-| Variable                                        | Runs                                |
-| ----------------------------------------------- | ----------------------------------- |
-| `TYPESAFE_API_KEY`                              | Jev's three columns                 |
-| `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | Clef and Clef Flash, three columns  |
-| `OPENAI_API_KEY`                                | OpenAI Decisions, its three columns |
-| `ANTHROPIC_API_KEY`                             | Claude Haiku 4.5                    |
-| `GEMINI_API_KEY`                                | Gemini 3.1 Flash Lite               |
+| Variable                                        | Runs               |
+| ----------------------------------------------- | ------------------ |
+| `TYPESAFE_API_KEY`                              | Jev's four columns |
+| `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | Verify, Clef       |
+
+With the keys in a file of `NAME=value` lines, a subshell loads them for the
+one run and leaves the shell you type in without them:
+
+```bash
+(set -a; source ~/.todos-eval-keys; set +a; bun run eval:read)        # the plan
+(set -a; source ~/.todos-eval-keys; set +a; bun run eval:read --yes)  # the run
+```
 
 It stops before the request that would take it past its spending cap, two
 dollars for the whole run unless `--cap-usd` says otherwise.
 
 The sentences and the made-up household they are read for are in
-`scripts/read-eval-cases.ts`, in four sets:
+`scripts/read-eval-cases.ts`, in five sets:
 
 - the 30 the test began with, written by the author of the rules, and 70
   written before the rules were opened. The rules were tuned against these
   100, so they can hardly lose there;
-- 50 held out, written before that tuning and never tuned against. The audit
-  that led to the documented usage read their misses, so they no longer
-  judge it fairly;
-- 50 fresh ones, written before any of the documented requests were, and
-  before the rules or any model read them. Ten have a day, a time or a word
-  of stress inside a name. They are the honest number, and the report shows
-  them first. Do not fix a rule, a wording or a cut-off because of a miss in
-  them or in the held-out 50: write a new sentence into the first 100.
+- 50 held out and 50 fresh, each written before the tuning or the requests
+  it was to judge. Their misses have since been read, and the rule faults
+  they showed fixed, so they no longer judge the rules. They are kept to set
+  beside earlier runs;
+- 100 unseen, written before those faults were fixed and before the wider
+  questions were. Half of them tempt a wrong person or a wrong title: a name
+  that is only mentioned, and a day, a number or a word of stress that
+  belongs to the task. They are the honest number, and the report shows them
+  first. Do not fix a rule, a wording or a cut-off because of a miss in
+  them: write a new sentence into the first 100.
 
 How sure a decision model has to be before its answer is acted on is a
-cut-off, one for each question. The run chooses each on the first 100
+cut-off, one for each question. The app does not choose them as it runs: it
+acts on the two in `CUTOFFS` (`src/lib/verify.ts`), and Jev's columns are
+read at those. Every other cut-off is chosen by the run on the first 100
 sentences alone: the least careful one that does no more harm there than the
-best, then one step more careful. The report shows what every cut-off tried
-would have done on every set. The app does not choose them as it runs: it
-acts on the two in `CUTOFFS` (`src/lib/verify.ts`), which are the ones a run
-against the real Jev chose. Clef and OpenAI's Decisions API have no versions
-to name, so the model each reply names is in the report.
+best, then one step more careful. The rules miss nothing on those sentences,
+so they show where a cut-off starts to do harm and not what it wins, which
+makes the choice a fragile one. The report shows what every cut-off tried
+would have done on every set, and under each table the cut-off that would
+have missed fewest on the other 200 sentences. That one is hindsight, picked
+with the answers in hand: it is not used for any number in the report, and
+is there to show how much hangs on the choice. Clef has no versions to name,
+so the model each reply names is in the report.
 
 The delays are measured from the machine that runs the test, one request at
-a time. For Clef and Clef Flash that is Cloudflare's public REST API, which
-is not what the app would see: a Worker reaches them through an AI binding
-inside Cloudflare's network. `scripts/clef-speed/README.md` has an optional
-Worker of its own, put up and taken down in three commands, that times them
-from inside.
+a time. For Clef that is Cloudflare's public REST API, which is not what an
+app would see: a Worker reaches it through an AI binding inside Cloudflare's
+network. `scripts/clef-speed/README.md` has an optional Worker of its own,
+put up and taken down in three commands, that times it from inside.
 
 ## Each phone
 

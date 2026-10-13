@@ -5,147 +5,131 @@
 // the app's request and reads the reply with the app's code, so it measures
 // what the add bar does.
 //
-// Added here, for the test alone:
+// Added here, for the test alone, to find out whether the app should ask
+// more. Both are asked the same documented way: code finds the candidates,
+// the model answers yes or no about each, and nothing is counted or written.
 //
-//   date_*  the parts of a date the rules did not find (how it is written,
-//           the month, the day, the weekday), put together in code
+//   who_*    is this person the one to do it, or only mentioned? Asked of
+//            every household name in the title. A no takes back a person the
+//            rules read; a yes fills one where they read none
+//   title_*  is this phrase part of what the to-do is, or does it only say
+//            who, ask for a reminder or stress it? Asked of every phrase the
+//            rules took out of the title for one of those. A yes puts it
+//            back. (The date's phrase is the app's own question.)
 //
-// One request carries all of it, and three columns are read out of the one
-// reply: the tag alone, the tag and the veto (the app's way), and those with
-// the date in parts. Nothing here sends anything.
+// One request carries all of it, and four columns are read out of the one
+// reply: the app's way, that with who, that with the title, and with both.
+// Nothing here sends anything.
 import * as chrono from 'chrono-node'
-import { addDays, weekday } from '@/lib/dates'
+import { readTitle } from '@/lib/read'
 import {
   QUESTIONS as ASKED,
   JEV_VERSION,
-  WEEKDAYS,
   verifyRequest as appRequest,
+  stateOf,
   verdictFrom,
   verifiedRead,
 } from '@/lib/verify'
-import type { LocalDate } from '@/lib/dates'
-import type { ReadContext as Household, TitleRead } from '@/lib/read'
-import type {
-  Answer,
-  Answers,
-  Cutoffs as AppCutoffs,
-  Asked,
-} from '@/lib/verify'
+import type { ReadContext as Household, ReadField, TitleRead } from '@/lib/read'
+import type { Answers, Cutoffs as AppCutoffs, Asked } from '@/lib/verify'
 
-export { JEV_VERSION, tagFrom, vetoed } from '@/lib/verify'
+export { CUTOFFS, JEV_VERSION, tagFrom, vetoed } from '@/lib/verify'
 export type { Answer, Answers, Asked } from '@/lib/verify'
 
-const NONE = 'none'
+/** The app's two questions, and the head of each of the test's own ids. */
+export const QUESTIONS = { ...ASKED, who: 'who_', title: 'title_' } as const
 
-const MONTHS = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-]
+/** The phrases the title question is asked of, by the field they were read for. */
+const TITLE_FIELDS = ['who', 'headsUp', 'flag'] as const
+type TitleField = (typeof TITLE_FIELDS)[number]
+const whoQuestion = (index: number) => `${QUESTIONS.who}${index}`
+const titleQuestion = (field: TitleField) => `${QUESTIONS.title}${field}`
 
-/** The questions a request can hold, by id. */
-export const QUESTIONS = {
-  ...ASKED,
-  mode: 'date_mode',
-  month: 'date_month',
-  day: 'date_day',
-  anchor: 'date_anchor',
-  weekday: 'date_weekday',
-  week: 'date_week',
-} as const
-const PARTS: ReadonlyArray<string> = [
-  QUESTIONS.mode,
-  QUESTIONS.month,
-  QUESTIONS.day,
-  QUESTIONS.anchor,
-  QUESTIONS.weekday,
-  QUESTIONS.week,
-]
+// What a phrase the rules took out might only be saying. The examples are
+// not, and must never be, sentences of the test.
+const ONLY: Record<TitleField, { true: string; false: string }> = {
+  who: {
+    true: '`phrase` belongs to the task: someone it is about, done to or done for, or part of a name: "Dana and Lee\'s housewarming", "Dana Scully poster for the den".',
+    false:
+      '`phrase` only says whose job the to-do is: "Dana: book the movers", "ask Dana to water the ferns", "I need to find the charger".',
+  },
+  headsUp: {
+    true: '`phrase` belongs to the task: the reminder, alert or notice is the thing to be done or dealt with: "set a reminder on the oven clock", "turn off the low battery alert".',
+    false:
+      '`phrase` only asks to be reminded ahead of the deadline, or not to be: "book the movers, remind me 2 days before", "water the ferns, no reminder".',
+  },
+  flag: {
+    true: '`phrase` names or describes a thing in the task: "the Important Papers box", "the urgent mail tray", "the Top Priority podcast".',
+    false:
+      '`phrase` only stresses that the to-do must not be missed: "book the movers, important", "URGENT water the ferns", "find the charger!!".',
+  },
+}
 
-/** The three readings made of one reply. */
-export type Column = 'tag' | 'verify' | 'parts'
+/** The four readings made of one reply. */
+export type Column = 'verify' | 'who' | 'title' | 'both'
 /** Which questions each column reads; the rest of the request is not its. */
 export function columnAsks(column: Column, id: string): boolean {
-  if (PARTS.includes(id)) return column === 'parts'
-  if (id === QUESTIONS.when) return column !== 'tag'
+  if (id.startsWith(QUESTIONS.who)) return column === 'who' || column === 'both'
+  if (id.startsWith(QUESTIONS.title))
+    return column === 'title' || column === 'both'
   return true
+}
+
+/** The household's people named in `title`, as whole words, by their place. */
+export function named(
+  title: string,
+  household: Household,
+): Array<{ index: number; id: string; name: string }> {
+  return household.people.flatMap((person, index) =>
+    new RegExp(
+      String.raw`(?<![\p{L}\p{N}])${person.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\p{L}\p{N}])`,
+      'iu',
+    ).test(title)
+      ? [{ index, id: person.id, name: person.name }]
+      : [],
+  )
 }
 
 /**
  * The rules' reading of `title`, and the request it leaves to be asked: the
- * app's, and after it the test's own questions.
+ * app's own, and after its questions the test's unless `app` alone is
+ * wanted.
  */
-export function verifyRequest(title: string, household: Household): Asked {
+export function verifyRequest(
+  title: string,
+  household: Household,
+  app = false,
+): Asked {
   const asked = appRequest(chrono, title, household)
-  const questions: Record<string, unknown> = {
-    ...asked.request?.questions,
-  }
+  if (app) return asked
+  const questions: Record<string, unknown> = { ...asked.request?.questions }
 
-  // Test only: the date in parts, where the rules read none.
-  if (asked.rules.fields.dueDate === undefined) {
-    const absent = 'It states no such thing, or it is not this kind of date.'
-    const names = (list: ReadonlyArray<string>) =>
-      Object.fromEntries([[NONE, absent], ...list.map((name) => [name, null])])
-    questions[QUESTIONS.mode] = {
-      type: 'choice',
-      instructions:
-        'How does `todo` say when it is due or takes place? A day or month that is part of a name, or that describes a thing in the task, is not when it is due.',
+  for (const person of named(title, household))
+    questions[whoQuestion(person.index)] = {
+      type: 'noul',
+      instructions: {
+        person: person.name,
+        question: 'In `todo`, is `person` the one who is to do this to-do?',
+      },
       criteria: {
-        [NONE]: 'It does not say when it is due.',
-        absolute:
-          'A calendar date: a day of the month, with or without the month ("the 3rd", "March 3", "3/3").',
-        relative:
-          'Counted from `today`: today, tonight, tomorrow, the day after tomorrow, or a day of the week.',
+        true: '`todo` is addressed or handed to `person`, so it is theirs to do: "Dana: book the movers", "ask Dana to water the ferns", "Dana can you defrost the soup", "return the ladder - Dana".',
+        false:
+          '`person` is only mentioned: someone the task is done to, for or with, or whose thing it is: "call Dana about the keys", "Dana\'s piano recital", "buy Dana a scarf", "coffee with Dana".',
       },
     }
-    questions[QUESTIONS.month] = {
-      type: 'choice',
-      instructions:
-        'If `todo` is due on a calendar date, which month does it name?',
-      criteria: names(MONTHS),
-    }
-    questions[QUESTIONS.day] = {
-      type: 'choice',
-      instructions:
-        'If `todo` is due on a calendar date, which day of the month is it?',
-      criteria: names(Array.from({ length: 31 }, (_, day) => String(day + 1))),
-    }
-    questions[QUESTIONS.anchor] = {
-      type: 'choice',
-      instructions:
-        'If `todo` is due on a day counted from `today`, which day is it?',
-      criteria: {
-        [NONE]: absent,
-        today: 'Today or tonight.',
-        tomorrow: null,
-        day_after: 'The day after tomorrow.',
-        weekday: 'A named day of the week.',
-      },
-    }
-    questions[QUESTIONS.weekday] = {
-      type: 'choice',
-      instructions:
-        'If `todo` is due on a named day of the week, which one is it?',
-      criteria: names(WEEKDAYS),
-    }
-    questions[QUESTIONS.week] = {
-      type: 'choice',
-      instructions:
-        'If `todo` is due on a named day of the week, does it say which week?',
-      criteria: {
-        unsaid: 'The day alone: "thursday", "on thursday", "by thursday".',
-        next: '"next thursday", or "thursday next week".',
-      },
-    }
+
+  for (const field of TITLE_FIELDS) {
+    const phrase = asked.rules.phrases[field]
+    if (phrase)
+      questions[titleQuestion(field)] = {
+        type: 'noul',
+        instructions: {
+          phrase,
+          question:
+            'In `todo`, is `phrase` part of what has to be done, or of the name of a thing in it?',
+        },
+        criteria: ONLY[field],
+      }
   }
 
   return {
@@ -155,10 +139,7 @@ export function verifyRequest(title: string, household: Household): Asked {
         ? null
         : {
             model: JEV_VERSION,
-            state: {
-              todo: title,
-              today: `${WEEKDAYS[weekday(household.today)]}, ${household.today}`,
-            },
+            state: stateOf(title, household),
             questions,
           },
   }
@@ -168,100 +149,95 @@ export function verifyRequest(title: string, household: Household): Asked {
 
 /** How sure an answer has to be before a column acts on it. */
 export interface Cutoffs extends AppCutoffs {
-  /** A date in parts is used when its least sure part is this sure. */
-  parts: number
+  /** A person the rules read is taken back at this probability or less. */
+  whoNo: number
+  /** A person is filled, where the rules read none, at this or more. */
+  whoYes: number
+  /** A phrase goes back in the title at this probability or more. */
+  title: number
 }
-/** Where a cut-off starts before any run has chosen one. */
-export const STARTING_CUTOFFS: Cutoffs = { tag: 0.7, veto: 0.2, parts: 0.8 }
+/** Where a cut-off starts before a run has chosen one. */
+export const STARTING_CUTOFFS: Cutoffs = {
+  tag: 0.7,
+  veto: 0.2,
+  whoNo: 0.2,
+  whoYes: 0.8,
+  title: 0.8,
+}
+const SURE = [0.95, 0.9, 0.8, 0.7, 0.6, 0.5]
+const UNSURE = [0.05, 0.1, 0.2, 0.3, 0.4, 0.5]
 /** The cut-offs tried, each from the most careful to the least. */
 export const GRIDS: Record<keyof Cutoffs, ReadonlyArray<number>> = {
-  tag: [0.95, 0.9, 0.8, 0.7, 0.6, 0.5],
-  veto: [0.05, 0.1, 0.2, 0.3, 0.4, 0.5],
-  parts: [0.95, 0.9, 0.8, 0.7, 0.6, 0.5],
+  tag: SURE,
+  veto: UNSURE,
+  whoNo: UNSURE,
+  whoYes: SURE,
+  title: SURE,
 }
 
-const picked = (answer: Answer | undefined) =>
-  answer && 'choice' in answer ? answer : undefined
-
-/**
- * How far the pick stands above an even split, 0 to 1: the confidence
- * TypeSafe documents for a Choice (docs.typesafe.ai/confidence), worked out
- * here so every provider is read alike.
- */
-export function confidence(answer: Answer | undefined): number {
-  const pick = picked(answer)
-  if (!pick) return 0
-  const options = Object.keys(pick.probabilities).length
-  const top = pick.probabilities[pick.choice] ?? 0
-  return options < 2 ? 0 : (top - 1 / options) / (1 - 1 / options)
+const yes = (answers: Answers, id: string): number | undefined => {
+  const answer = answers[id]
+  return answer && 'noul' in answer ? answer.noul : undefined
 }
 
 /**
- * The date the parts add up to, or none: an unsure part, a part left out, or
- * a day no month has. The calendar is worked here, never by the model. A day
- * of the week means the next one, and a week on when it is today's; a date
- * gone by is the next one to come, as the rules have it.
+ * What the who questions make of the rules' person: taken back, filled, or
+ * left as it is. A person is filled only where no one is left by the rules,
+ * and the model is sure of exactly one.
  */
-export function dateFromParts(
+export function whoFrom(
   answers: Answers,
-  today: LocalDate,
+  typed: string,
+  household: Household,
+  rules: TitleRead,
+  cutoffs: Pick<Cutoffs, 'whoNo' | 'whoYes'>,
+): { takeBack: boolean; fill?: string } {
+  const people = named(typed, household).map((person) => ({
+    ...person,
+    odds: yes(answers, whoQuestion(person.index)),
+  }))
+  const theirs = people.find((person) => person.id === rules.fields.assignee)
+  const takeBack = theirs?.odds !== undefined && theirs.odds <= cutoffs.whoNo
+  if (rules.fields.assignee !== undefined && !takeBack)
+    return { takeBack: false }
+  const sure = people.filter(
+    (person) =>
+      person !== theirs &&
+      person.odds !== undefined &&
+      person.odds >= cutoffs.whoYes,
+  )
+  return { takeBack, fill: sure.length === 1 ? sure[0].id : undefined }
+}
+
+/** The fields whose phrase the model says is part of the task after all. */
+export function putBack(
+  answers: Answers,
+  rules: TitleRead,
   cutoff: number,
-): LocalDate | undefined {
-  const used: Array<Answer | undefined> = []
-  const part = (id: string) => {
-    used.push(answers[id])
-    return picked(answers[id])?.choice
-  }
-  const sure = () => used.every((answer) => confidence(answer) >= cutoff)
-  const mode = part(QUESTIONS.mode)
+): Array<TitleField> {
+  return TITLE_FIELDS.filter((field) => {
+    const odds = yes(answers, titleQuestion(field))
+    return (
+      rules.phrases[field] !== undefined && odds !== undefined && odds >= cutoff
+    )
+  })
+}
 
-  if (mode === 'relative') {
-    const anchor = part(QUESTIONS.anchor)
-    if (anchor === 'today') return sure() ? today : undefined
-    if (anchor === 'tomorrow') return sure() ? addDays(today, 1) : undefined
-    if (anchor === 'day_after') return sure() ? addDays(today, 2) : undefined
-    if (anchor !== 'weekday') return undefined
-    const day = WEEKDAYS.indexOf(part(QUESTIONS.weekday) ?? '')
-    const week = part(QUESTIONS.week)
-    if (day === -1 || !sure()) return undefined
-    const ahead = (day - weekday(today) + 7) % 7 || 7
-    // "next thursday" said on a Tuesday is the Thursday of the week after.
-    return addDays(today, week === 'next' && ahead < 7 ? ahead + 7 : ahead)
-  }
-
-  if (mode === 'absolute') {
-    const month = MONTHS.indexOf(part(QUESTIONS.month) ?? '')
-    const day = Number(part(QUESTIONS.day))
-    if (!Number.isInteger(day) || day < 1 || !sure()) return undefined
-    const [year, thisMonth] = today.split('-').map(Number)
-    const real = (y: number, m: number) => {
-      const date = `${y}-${String(m).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-      const made = new Date(`${date}T00:00:00Z`)
-      return !Number.isNaN(made.getTime()) &&
-        made.toISOString().slice(0, 10) === date
-        ? date
-        : undefined
-    }
-    // The month named, this year or next; or no month, and the next month
-    // that has such a day.
-    const tries =
-      month === -1
-        ? Array.from({ length: 13 }, (_, on) => {
-            const m = thisMonth - 1 + on
-            return real(year + Math.floor(m / 12), (m % 12) + 1)
-          })
-        : [real(year, month + 1), real(year + 1, month + 1)]
-    return tries.find((date) => date !== undefined && date >= today)
-  }
-
-  return undefined
+const HOLDS: Record<ReadField, ReadonlyArray<keyof TitleRead['fields']>> = {
+  when: ['dueDate', 'dueTime'],
+  who: ['assignee'],
+  tag: ['tagId'],
+  headsUp: ['headsUpDays'],
+  flag: ['mustNotMiss'],
 }
 
 /**
  * What a column makes of a reply. `verify` is the app's own reading
- * (src/lib/verify.ts), acted on by the app's code. `tag` is that with the
- * veto left unread, and `parts` adds a date in parts where the rules read
- * none. With no answer it is the rules' reading.
+ * (src/lib/verify.ts), acted on by the app's code. The others start from it:
+ * `who` acts on the who questions, `title` on the title questions, `both`
+ * on both. A field taken back has its words put back in the title by the
+ * rules, read again and told to leave it alone; everything else they read
+ * the first time stands. With no answer it is the rules' reading.
  */
 export function columnRead(
   column: Column,
@@ -273,18 +249,38 @@ export function columnRead(
 ): TitleRead {
   if (!answers) return rules
   const verdict = verdictFrom(answers, rules, household, cutoffs)
-  if (column === 'tag') delete verdict.notWhen
   const read = verifiedRead(chrono, typed, household, rules, verdict)
+  if (column === 'verify') return read
 
-  if (column === 'parts' && rules.fields.dueDate === undefined) {
-    const date = dateFromParts(answers, household.today, cutoffs.parts)
-    if (date) {
-      read.fields.dueDate = date
-      read.fields.dueTime = null
-      read.guessed.when = ''
-    }
+  const undone = new Set<ReadField>()
+  let fill: string | undefined
+  if (column !== 'title') {
+    const who = whoFrom(answers, typed, household, rules, cutoffs)
+    if (who.takeBack) undone.add('who')
+    fill = who.fill
   }
+  if (column !== 'who')
+    for (const field of putBack(answers, rules, cutoffs.title))
+      undone.add(field)
 
+  for (const field of undone) {
+    for (const key of HOLDS[field]) delete read.fields[key]
+    read.guessed[field] = read.phrases[field] ?? ''
+    delete read.phrases[field]
+  }
+  if (undone.size > 0)
+    read.title = readTitle(chrono, typed, {
+      ...household,
+      // The date too, where the app's own question took it back.
+      skip: new Set([
+        ...undone,
+        ...(read.guessed.when === undefined ? [] : (['when'] as const)),
+      ]),
+    }).title
+  if (fill !== undefined && read.fields.assignee === undefined) {
+    read.fields.assignee = fill
+    read.guessed.who ??= ''
+  }
   return read
 }
 
@@ -301,4 +297,17 @@ export function chooseCutoff(
   const fewest = Math.min(...counts)
   const least = counts.lastIndexOf(fewest)
   return grid[Math.max(0, least - 1)]
+}
+
+/**
+ * The cut-off that misses fewest on sentences it was not chosen on, the most
+ * careful of them where several do: what hindsight would have picked. Never
+ * one to use: it is chosen with the answers in hand.
+ */
+export function hindsightCutoff(
+  grid: ReadonlyArray<number>,
+  misses: (cutoff: number) => number,
+): number {
+  const counts = grid.map(misses)
+  return grid[counts.indexOf(Math.min(...counts))]
 }

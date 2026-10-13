@@ -110,7 +110,7 @@ const NO_TAG: About = {
   examples: ['Wrap the wedding gift', 'Charge the camera'],
 }
 
-export const WEEKDAYS = [
+const WEEKDAYS = [
   'Sunday',
   'Monday',
   'Tuesday',
@@ -141,6 +141,12 @@ export interface Asked {
   /** Null when the rules left nothing to ask about. */
   request: VerifyRequest | null
 }
+
+/** What every question is asked about: the title, and what day it is. */
+export const stateOf = (title: string, context: ReadContext) => ({
+  todo: title,
+  today: `${WEEKDAYS[weekday(context.today)]}, ${context.today}`,
+})
 
 const tagOption = (name: string) => name
 function tagOptions(context: ReadContext): Array<[string, About | null]> {
@@ -213,10 +219,7 @@ export function verifyRequest(
         ? null
         : {
             model: JEV_VERSION,
-            state: {
-              todo: title,
-              today: `${WEEKDAYS[weekday(context.today)]}, ${context.today}`,
-            },
+            state: stateOf(title, context),
             questions,
           },
   }

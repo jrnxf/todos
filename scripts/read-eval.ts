@@ -1,22 +1,23 @@
-// How well is a to-do's title read, and does asking a decision model help
-// when it is asked the way its makers document? 200 household sentences, each
-// with the fill a person would expect (scripts/read-eval-cases.ts), are read
-// every way in scripts/read-eval-ways.ts and scored field by field, side by
-// side:
+// How well is a to-do's title read, and is the way the app asks Jev the best
+// way to ask it? 300 household sentences, each with the fill a person would
+// expect (scripts/read-eval-cases.ts), are read every way in
+// scripts/read-eval-ways.ts and scored field by field, side by side:
 //
 //   - the rules alone;
-//   - each decision model (Jev, Cloudflare Clef, Clef Flash, OpenAI
-//     Decisions) asked the documented way (src/lib/verify.ts): the rules
-//     read first, and the model picks the tag and can take back a date that
-//     is part of a name. With Jev that is what the app does, by the app's
-//     own code. One request a sentence, read three ways: that, the tag
-//     alone, and with the date in parts where the rules read none;
-//   - one call to a fast general model (Claude Haiku 4.5, Gemini 3.1 Flash
-//     Lite) for all of it.
+//   - Verify with Jev, which is what the app does, asked and read by the
+//     app's own code (src/lib/verify.ts) at the app's own cut-offs: the
+//     rules read first, and Jev picks the tag where they found none and can
+//     take back a date that is part of a name;
+//   - that with Jev also checking who, with Jev also checking the title, and
+//     with both (scripts/read-eval-verify.ts): test only, to see whether the
+//     app should ask more. One request a sentence carries all of it;
+//   - Verify with Cloudflare Clef, for comparison: the app's request, sent
+//     to Clef instead.
 //
-// Each request is timed. Every raw probability is written beside the report,
-// and the cut-offs the documented usage acts on are chosen from them on the
-// sentences the rules were tuned on, never on the held-out or fresh ones.
+// Each request is timed. Every raw probability is written beside the report.
+// The cut-offs the app does not fix are chosen from them on the sentences
+// the rules were tuned on, never on the others, and the report says what
+// hindsight would have chosen instead.
 //
 //   bun run eval:read                    the plan: what would be sent, to
 //                                        whom, and what it would cost. Sends
@@ -35,10 +36,7 @@
 // way whose key is not set is skipped, not failed:
 //
 //   TYPESAFE_API_KEY                             Jev
-//   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID  Clef and Clef Flash
-//   OPENAI_API_KEY                               OpenAI Decisions
-//   ANTHROPIC_API_KEY                            Claude Haiku 4.5
-//   GEMINI_API_KEY                               Gemini 3.1 Flash Lite
+//   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID  Clef
 import {
   existsSync,
   mkdirSync,
@@ -46,21 +44,23 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs'
-import Anthropic from '@anthropic-ai/sdk'
 import { TIME_LIMIT_MS } from '@/server/jev-read'
 import { CASES, HOUSEHOLD, SETS } from './read-eval-cases'
 import { cost, misses, report, usd } from './read-eval-score'
 import { STAND_IN_ENV, standInFetch } from './read-eval-stand-in'
 import {
+  CUTOFFS,
   GRIDS,
   STARTING_CUTOFFS,
-  tagFrom,
   chooseCutoff,
   columnAsks,
   columnRead,
-  dateFromParts,
+  hindsightCutoff,
+  putBack,
+  tagFrom,
   verifyRequest,
   vetoed,
+  whoFrom,
 } from './read-eval-verify'
 import {
   COLUMNS,
@@ -70,23 +70,15 @@ import {
   columnWay,
   decisionAnswers,
   decisionCall,
-  fastInstructions,
-  fastRead,
-  fastSchema,
-  geminiCall,
-  geminiReply,
   missing,
 } from './read-eval-ways'
-import type { TitleRead } from '@/lib/read'
 import type { CutoffTable, Outcome, Sent } from './read-eval-score'
-import type { Answers, Cutoffs } from './read-eval-verify'
+import type { Answers, Column, Cutoffs } from './read-eval-verify'
 import type { Call, DecisionProvider } from './read-eval-ways'
 
 const DEFAULT_CAP_USD = 2
 /** Far past the add bar's limit, so the report can say how slow slow was. */
 const EVAL_TIME_LIMIT_MS = 15_000
-/** Room for the seven fields and the title, and no more. */
-const MOST_OUTPUT_TOKENS = 512
 const DIRECTORY = 'data/read-eval'
 
 const flag = (name: string) => process.argv.includes(name)
@@ -116,91 +108,62 @@ const skipped = WAYS.filter((way) => !ways.includes(way)).map((way) => ({
   way,
   why: `${missing(way.provider ?? 'jev', env).join(' and ')} not set in the environment.`,
 }))
+/** Who is asked: each decision model once a sentence, for all its columns. */
+const senders = DECISION_PROVIDERS.filter(
+  (provider) => missing(provider, env).length === 0,
+)
 
 /**
  * What is sent for a sentence. It is built before the clock starts, so the
  * delay is the service's and not this script's.
  */
 interface Plan {
-  kind: 'verify' | 'model'
-  /** The request, but for Haiku, which goes through Anthropic's SDK. */
-  call: Call | null
+  call: Call
+  /** The questions asked, by id. */
+  questions: Record<string, unknown>
+  state: unknown
   /** Its size in characters, to guess its tokens from. */
   size: number
 }
-/**
- * Who is asked. The three columns of a decision model are one request, so
- * they are asked for once, under the model's name.
- */
-interface Sender {
-  id: string
-  name: string
-  provider: keyof typeof PROVIDERS
-  kind: Plan['kind']
-}
-const keyed = (provider: keyof typeof PROVIDERS) =>
-  missing(provider, env).length === 0
-const senders: Array<Sender> = [
-  ...DECISION_PROVIDERS.filter(keyed).map((provider): Sender => ({
-    id: `verify:${provider}`,
-    name: `${PROVIDERS[provider].name}, the documented way`,
-    provider,
-    kind: 'verify',
-  })),
-  ...(['haiku', 'gemini'] as const).filter(keyed).map((provider): Sender => ({
-    id: provider,
-    name: PROVIDERS[provider].name,
-    provider,
-    kind: 'model',
-  })),
-]
 
-const instructions = fastInstructions(HOUSEHOLD)
-const schema = fastSchema(HOUSEHOLD)
 const sentences = CASES.map(([sentence]) => {
-  const asked = verifyRequest(sentence, HOUSEHOLD)
-  const plans = new Map<string, Plan | null>()
-  const build = (sender: Sender): Plan | null => {
-    if (sender.kind === 'model')
-      return {
-        kind: 'model',
-        call:
-          sender.provider === 'gemini'
-            ? geminiCall(sentence, HOUSEHOLD, env)
-            : null,
-        size: (instructions + JSON.stringify(schema) + sentence).length,
-      }
-    const provider = sender.provider as DecisionProvider
-    // Nothing left to ask: the rules read every field.
-    if (!asked.request) return null
-    const call = decisionCall(provider, asked.request, env)
-    return { kind: 'verify', call, size: call.body.length }
+  // Jev is sent the app's questions and the test's; Clef, there to compare
+  // the app's way, the app's alone.
+  const wide = verifyRequest(sentence, HOUSEHOLD)
+  const app = verifyRequest(sentence, HOUSEHOLD, true)
+  const plans = new Map<DecisionProvider, Plan | null>()
+  /** What `provider` is sent for this sentence, or null: nothing to ask. */
+  const plan = (provider: DecisionProvider) => {
+    if (!plans.has(provider)) {
+      const request = (COLUMNS[provider].length > 1 ? wide : app).request
+      const call = request && decisionCall(provider, request, env)
+      plans.set(
+        provider,
+        request && call
+          ? {
+              call,
+              questions: request.questions,
+              state: request.state,
+              size: call.body.length,
+            }
+          : null,
+      )
+    }
+    return plans.get(provider) ?? null
   }
-  /** What `sender` sends for this sentence, or null where it sends nothing. */
-  const plan = (sender: Sender) => {
-    if (!plans.has(sender.id)) plans.set(sender.id, build(sender))
-    return plans.get(sender.id) ?? null
-  }
-  return { rules: asked.rules, asked, plan }
+  return { rules: app.rules, plan }
 })
 
 // The first run of this test was charged about one token for every 1.8
 // characters of a decision request. Guessing 1.5 errs on the dear side, so
-// the cap errs early. A general model is guessed at 2.5 characters a token
-// in, and a reply as long as it is allowed to be.
-function guess(sender: Sender, plan: Plan): number {
-  return plan.kind === 'model'
-    ? cost(
-        PROVIDERS[sender.provider],
-        Math.ceil(plan.size / 2.5),
-        MOST_OUTPUT_TOKENS,
-      )
-    : cost(PROVIDERS[sender.provider], Math.ceil(plan.size / 1.5), 0)
-}
-const planned = (sender: Sender) =>
-  sentences.flatMap((sentence) => sentence.plan(sender) ?? [])
-const guessed = (sender: Sender) =>
-  planned(sender).reduce((sum, plan) => sum + guess(sender, plan), 0)
+// the cap errs early.
+const guessTokens = (plan: Plan) => Math.ceil(plan.size / 1.5)
+const guess = (provider: DecisionProvider, plan: Plan) =>
+  cost(PROVIDERS[provider], guessTokens(plan), 0)
+const planned = (provider: DecisionProvider) =>
+  sentences.flatMap((sentence) => sentence.plan(provider) ?? [])
+const guessed = (provider: DecisionProvider) =>
+  planned(provider).reduce((sum, plan) => sum + guess(provider, plan), 0)
 const guessedUsd = senders.reduce((sum, sender) => sum + guessed(sender), 0)
 
 console.log(
@@ -209,15 +172,26 @@ console.log(
 if (standIn)
   console.log('Stand-ins:      on. No key is read and nothing is sent.')
 console.log('\nRequests:')
-console.log(`  ${'Rules alone'.padEnd(42)} nothing sent`)
-for (const sender of senders) {
-  const provider = PROVIDERS[sender.provider]
+console.log(`  ${'Rules alone'.padEnd(18)} nothing sent`)
+for (const provider of DECISION_PROVIDERS) {
+  const about = PROVIDERS[provider]
+  const lacking = missing(provider, env)
   console.log(
-    `  ${sender.name.padEnd(42)} ${provider.model}, key from ${provider.env.join(' + ')}: ${planned(sender).length} requests, about ${usd(guessed(sender))}`,
+    `  ${about.name.padEnd(18)} ${
+      lacking.length > 0
+        ? `SKIPPED, ${lacking.join(' and ')} not set in the environment.`
+        : `${about.model}, key from ${about.env.join(' + ')}: ${planned(provider).length} requests, about ${usd(guessed(provider))}, read as ${COLUMNS[
+            provider
+          ]
+            .map(
+              (column) =>
+                WAYS.find((way) => way.id === columnWay(provider, column))
+                  ?.name,
+            )
+            .join('; ')}`
+    }`,
   )
 }
-for (const { way, why } of skipped)
-  console.log(`  ${way.name.padEnd(42)} SKIPPED, ${why}`)
 console.log(`\nEstimated cost: ${usd(guessedUsd)}`)
 console.log(`Spending cap:   ${usd(capUsd)}`)
 console.log(`Report:         ${REPORT}`)
@@ -235,109 +209,58 @@ if (guessedUsd > capUsd) {
   process.exit(1)
 }
 
-const anthropic = new Anthropic({
-  apiKey: env.ANTHROPIC_API_KEY ?? '',
-  // One request, timed as it is: a retry would hide a slow or failed one.
-  maxRetries: 0,
-  timeout: EVAL_TIME_LIMIT_MS,
-  fetch: send,
-  ...(standIn ? { baseURL: 'https://api.anthropic.com' } : {}),
-})
-
 let spentUsd = 0
 let stopped = ''
 const models: Record<string, string> = {}
 
 /** One request, timed, and what could be read out of the reply. */
 async function ask(
-  sender: Sender,
-  sentence: string,
+  provider: DecisionProvider,
   plan: Plan,
-): Promise<{ sent: Sent; answer: TitleRead | Answers | null }> {
-  const provider = sender.provider
+): Promise<{ sent: Sent; answers: Answers | null }> {
   const started = performance.now()
   let status: number | string = 'no reply'
-  let answer: TitleRead | Answers | null = null
+  let answers: Answers | null = null
   let inputTokens: number | null = null
   let outputTokens: number | null = null
   try {
-    if (provider === 'haiku') {
-      const message = await anthropic.messages.create({
-        model: PROVIDERS.haiku.model,
-        max_tokens: MOST_OUTPUT_TOKENS,
-        system: instructions,
-        messages: [{ role: 'user', content: sentence }],
-        output_config: { format: { type: 'json_schema', schema } },
-      })
-      status = 200
-      inputTokens = message.usage.input_tokens
-      outputTokens = message.usage.output_tokens
-      models[provider] = message.model
-      // A reply cut short or refused is not the JSON that was asked for.
-      if (message.stop_reason === 'end_turn')
-        answer = fastRead(
-          message.content
-            .flatMap((block) => (block.type === 'text' ? block.text : []))
-            .join(''),
-          HOUSEHOLD,
-        )
-      else status = message.stop_reason ?? 'no stop reason'
-    } else if (plan.call) {
-      const call = plan.call
-      const response = await send(call.url, {
-        method: 'POST',
-        headers: call.headers,
-        body: call.body,
-        signal: AbortSignal.timeout(EVAL_TIME_LIMIT_MS),
-      })
-      status = response.status
-      if (response.ok) {
-        const reply: unknown = await response.json()
-        if (provider === 'gemini') {
-          const read = geminiReply(reply)
-          answer = fastRead(read.text, HOUSEHOLD)
-          inputTokens = read.inputTokens
-          outputTokens = read.outputTokens
-          if (read.model) models[provider] = read.model
-        } else {
-          const read = decisionAnswers(provider, reply)
-          answer = read.read
-          inputTokens = read.inputTokens
-          outputTokens = read.outputTokens
-          if (read.model) models[provider] = read.model
-        }
-      }
+    const response = await send(plan.call.url, {
+      method: 'POST',
+      headers: plan.call.headers,
+      body: plan.call.body,
+      signal: AbortSignal.timeout(EVAL_TIME_LIMIT_MS),
+    })
+    status = response.status
+    if (response.ok) {
+      const read = decisionAnswers(provider, await response.json())
+      answers = read.read
+      inputTokens = read.inputTokens
+      outputTokens = read.outputTokens
+      if (read.model) models[provider] = read.model
     }
   } catch (error) {
-    if (error instanceof Anthropic.APIConnectionTimeoutError)
-      status = 'TimeoutError'
-    else if (error instanceof Anthropic.APIError)
-      status = error.status ?? 'no reply'
-    else status = error instanceof Error ? error.name : 'error'
+    status = error instanceof Error ? error.name : 'error'
   }
   const ms = Math.round(performance.now() - started)
   // Where the service gave no count, the guess: a failed request may still
   // have been charged.
-  const guessedInput = Math.ceil(
-    plan.size / (plan.kind === 'model' ? 2.5 : 1.5),
-  )
-  const input = inputTokens ?? guessedInput
+  const input = inputTokens ?? guessTokens(plan)
   const output = outputTokens ?? 0
   return {
-    answer,
+    answers,
     sent: {
       ms,
       status,
       inputTokens: input,
       outputTokens: output,
       usd: cost(PROVIDERS[provider], input, output),
-      usable: answer !== null,
+      usable: answers !== null,
     },
   }
 }
 
 const outcomes: Array<Outcome> = []
-/** Every raw answer of a decision model asked the documented way. */
+/** Every raw answer of a decision model. */
 const raw: Array<
   Partial<Record<DecisionProvider, { sent: Sent; answers: Answers | null }>>
 > = []
@@ -352,65 +275,55 @@ const setOf = (index: number) => {
 
 run: for (const [index, [sentence, expected]] of CASES.entries()) {
   const { rules, plan } = sentences[index]
-  const reads: Outcome['reads'] = { rules }
-  const sent: Outcome['sent'] = { rules: null }
-  const whole: Array<string> = []
   const answered: (typeof raw)[number] = {}
   // Turn about, so no one always pays for the cold connection.
   const turn = index % senders.length
-  for (const sender of [...senders.slice(turn), ...senders.slice(0, turn)]) {
-    const next = plan(sender)
-    let one: Awaited<ReturnType<typeof ask>> | null = null
-    if (next) {
-      if (spentUsd + guess(sender, next) > capUsd) {
-        stopped = `Stopped before sentence ${index + 1}: the next request could pass the cap.`
-        break run
-      }
-      one = await ask(sender, sentence, next)
-      spentUsd += one.sent.usd
-      console.log(
-        `${String(index + 1).padStart(3)}/${CASES.length}  ${sender.id.padEnd(16)}  ${String(one.sent.status).padEnd(12)} ${String(one.sent.ms).padStart(5)} ms  ${sentence}`,
-      )
-      if (one.sent.status === 401 || one.sent.status === 403) {
-        stopped = `Stopped: the key for ${sender.name} was refused (${one.sent.status}).`
-        break run
-      }
+  for (const provider of [...senders.slice(turn), ...senders.slice(0, turn)]) {
+    const next = plan(provider)
+    if (!next) continue
+    if (spentUsd + guess(provider, next) > capUsd) {
+      stopped = `Stopped before sentence ${index + 1}: the next request could pass the cap.`
+      break run
+    }
+    const one = await ask(provider, next)
+    spentUsd += one.sent.usd
+    console.log(
+      `${String(index + 1).padStart(3)}/${CASES.length}  ${provider.padEnd(5)}  ${String(one.sent.status).padEnd(12)} ${String(one.sent.ms).padStart(5)} ms  ${sentence}`,
+    )
+    if (one.sent.status === 401 || one.sent.status === 403) {
+      stopped = `Stopped: the key for ${PROVIDERS[provider].name} was refused (${one.sent.status}).`
+      break run
     }
     // What the add bar would show: an answer it had stopped waiting for is
     // not used.
-    const answer = one && one.sent.ms <= TIME_LIMIT_MS ? one.answer : null
-    if (sender.kind === 'model') {
-      sent[sender.id] = one?.sent ?? null
-      reads[sender.id] = (answer as TitleRead | null) ?? rules
-      if (answer) whole.push(sender.id)
-    } else if (one)
-      // Its columns are read once every cut-off is chosen, below.
-      answered[sender.provider as DecisionProvider] = {
-        sent: one.sent,
-        answers: answer as Answers | null,
-      }
+    answered[provider] = {
+      sent: one.sent,
+      answers: one.sent.ms <= TIME_LIMIT_MS ? one.answers : null,
+    }
   }
   raw.push(answered)
-  outcomes.push({ sentence, expected, set: setOf(index), reads, sent, whole })
+  outcomes.push({
+    sentence,
+    expected,
+    set: setOf(index),
+    reads: { rules },
+    sent: { rules: null },
+  })
 }
 
-// ── The documented usage: choose each cut-off, then read the columns ────────
+// ── Choose each cut-off, then read the columns ──────────────────────────────
 
-const tunedSets: ReadonlyArray<string> = SETS.filter(
+const tuned: ReadonlyArray<string> = SETS.filter(
   (set) => set.kind === 'tuned',
 ).map((set) => set.name)
-const asked = DECISION_PROVIDERS.filter((provider) =>
-  senders.some((sender) => sender.id === `verify:${provider}`),
-)
-const chosen: Partial<Record<DecisionProvider, Cutoffs>> = {}
+const others: ReadonlyArray<string> = SETS.filter(
+  (set) => set.kind !== 'tuned',
+).map((set) => set.name)
+const used: Partial<Record<DecisionProvider, Cutoffs>> = {}
 const cutoffs: Array<CutoffTable> = []
 
 /** Every outcome's reading by one column of `provider` at `cuts`. */
-function readColumn(
-  provider: DecisionProvider,
-  column: (typeof COLUMNS)[number],
-  cuts: Cutoffs,
-) {
+function readColumn(provider: DecisionProvider, column: Column, cuts: Cutoffs) {
   return outcomes.map((outcome, index) => ({
     ...outcome,
     reads: {
@@ -426,44 +339,84 @@ function readColumn(
   }))
 }
 
-for (const provider of asked) {
-  const cuts: Cutoffs = { ...STARTING_CUTOFFS }
-  const steps = [
-    {
-      key: 'tag',
-      column: 'tag',
-      question: 'how sure of the tag, both ways round, before it is filled',
-      acts: 'filled',
-      acted: (answers: Answers, cutoff: number, index: number) =>
-        sentences[index].rules.fields.tagId === undefined &&
-        tagFrom(answers, HOUSEHOLD, cutoff) !== undefined,
-    },
-    {
-      key: 'veto',
-      column: 'verify',
-      question:
-        'how unlikely "this phrase is when it is due" has to be before the date is taken away',
-      acts: 'taken away',
-      acted: (answers: Answers, cutoff: number) => vetoed(answers, cutoff),
-    },
-    {
-      key: 'parts',
-      column: 'parts',
-      question: 'how sure of every part of a date before it is used',
-      acts: 'dated',
-      acted: (answers: Answers, cutoff: number, index: number) =>
-        sentences[index].rules.fields.dueDate === undefined &&
-        dateFromParts(answers, HOUSEHOLD.today, cutoff) !== undefined,
-    },
-  ] as const
-  // In turn: the veto is chosen with the tag's cut-off in place, and the
-  // parts with both.
-  for (const step of steps) {
+interface Step {
+  key: keyof Cutoffs
+  column: Column
+  question: string
+  acts: string
+  /** Whether the answers to sentence `index` are acted on at `cuts`. */
+  acted: (answers: Answers, cuts: Cutoffs, index: number) => boolean
+}
+const STEPS: ReadonlyArray<Step> = [
+  {
+    key: 'tag',
+    column: 'verify',
+    question: 'how sure of the tag, both ways round, before it is filled',
+    acts: 'filled',
+    acted: (answers, cuts, index) =>
+      sentences[index].rules.fields.tagId === undefined &&
+      tagFrom(answers, HOUSEHOLD, cuts.tag) !== undefined,
+  },
+  {
+    key: 'veto',
+    column: 'verify',
+    question:
+      'how unlikely "this phrase is when it is due" has to be before the date is taken away',
+    acts: 'taken away',
+    acted: (answers, cuts) => vetoed(answers, cuts.veto),
+  },
+  {
+    key: 'whoNo',
+    column: 'who',
+    question:
+      'how unlikely "this person is the one to do it" has to be before a person the rules read is taken back',
+    acts: 'taken back',
+    acted: (answers, cuts, index) =>
+      whoFrom(
+        answers,
+        outcomes[index].sentence,
+        HOUSEHOLD,
+        sentences[index].rules,
+        cuts,
+      ).takeBack,
+  },
+  {
+    key: 'whoYes',
+    column: 'who',
+    question:
+      'how sure "this person is the one to do it" has to be before a person is filled where the rules read none',
+    acts: 'filled',
+    acted: (answers, cuts, index) =>
+      whoFrom(
+        answers,
+        outcomes[index].sentence,
+        HOUSEHOLD,
+        sentences[index].rules,
+        cuts,
+      ).fill !== undefined,
+  },
+  {
+    key: 'title',
+    column: 'title',
+    question:
+      'how sure "this phrase is part of the task" has to be before a phrase the rules took out is put back',
+    acts: 'put back',
+    acted: (answers, cuts, index) =>
+      putBack(answers, sentences[index].rules, cuts.title).length > 0,
+  },
+]
+
+for (const provider of senders) {
+  // The app acts on fixed cut-offs with Jev, so Jev's columns are read at
+  // those: the test measures what the app runs. Every other cut-off is
+  // chosen here, in turn, each with those before it in place.
+  const fixed: Partial<Cutoffs> = provider === 'jev' ? CUTOFFS : {}
+  const cuts: Cutoffs = { ...STARTING_CUTOFFS, ...fixed }
+  const columns = COLUMNS[provider]
+  for (const step of STEPS.filter((one) => columns.includes(one.column))) {
     const rows = GRIDS[step.key].map((cutoff) => {
-      const read = readColumn(provider, step.column, {
-        ...cuts,
-        [step.key]: cutoff,
-      })
+      const at = { ...cuts, [step.key]: cutoff }
+      const read = readColumn(provider, step.column, at)
       const bySet = (count: (name: string) => number) =>
         Object.fromEntries(SETS.map((set) => [set.name, count(set.name)]))
       return {
@@ -483,32 +436,37 @@ for (const provider of asked) {
               return (
                 outcome.set === name &&
                 answers != null &&
-                step.acted(answers, cutoff, index)
+                step.acted(answers, at, index)
               )
             }).length,
         ),
       }
     })
-    cuts[step.key] = chooseCutoff(GRIDS[step.key], (cutoff) => {
+    const missed = (names: ReadonlyArray<string>) => (cutoff: number) => {
       const row = rows.find((one) => one.cutoff === cutoff)
-      return tunedSets.reduce((sum, name) => sum + (row?.misses[name] ?? 0), 0)
-    })
+      return names.reduce((sum, name) => sum + (row?.misses[name] ?? 0), 0)
+    }
+    const chosen = chooseCutoff(GRIDS[step.key], missed(tuned))
+    cuts[step.key] = fixed[step.key] ?? chosen
     cutoffs.push({
       way:
         WAYS.find((way) => way.id === columnWay(provider, step.column))?.name ??
         provider,
       question: step.question,
       acts: step.acts,
-      chosen: cuts[step.key],
+      chosen,
+      used: cuts[step.key],
+      fixed: fixed[step.key] !== undefined,
+      hindsight: hindsightCutoff(GRIDS[step.key], missed(others)),
       rows,
     })
   }
-  chosen[provider] = cuts
+  used[provider] = cuts
 
-  for (const column of COLUMNS) {
+  for (const column of columns) {
     const id = columnWay(provider, column)
     for (const [index, outcome] of outcomes.entries()) {
-      const request = sentences[index].asked.request
+      const plan = sentences[index].plan(provider)
       const one = raw[index][provider]
       outcome.reads[id] = columnRead(
         column,
@@ -522,10 +480,10 @@ for (const provider of asked) {
       const size = (ids: ReadonlyArray<string>) =>
         ids.reduce(
           (sum, question) =>
-            sum + JSON.stringify(request?.questions[question] ?? '').length,
-          JSON.stringify(request?.state ?? '').length,
+            sum + JSON.stringify(plan?.questions[question] ?? '').length,
+          JSON.stringify(plan?.state ?? '').length,
         )
-      const all = Object.keys(request?.questions ?? {})
+      const all = Object.keys(plan?.questions ?? {})
       const own = all.filter((question) => columnAsks(column, question))
       const share = own.length === 0 ? 0 : size(own) / size(all)
       outcome.sent[id] =
@@ -562,13 +520,12 @@ writeFileSync(
       today: HOUSEHOLD.today,
       timeLimitMs: TIME_LIMIT_MS,
       models,
-      cutoffs: chosen,
+      cutoffs: used,
       sentences: outcomes.map((outcome, index) => ({
         sentence: outcome.sentence,
         set: outcome.set,
         expected: outcome.expected,
         rules: sentences[index].rules,
-        asked: Object.keys(sentences[index].asked.request?.questions ?? {}),
         answers: Object.fromEntries(
           Object.entries(raw[index]).map(([provider, one]) => [
             provider,

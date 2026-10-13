@@ -15,14 +15,17 @@
  * were asked read every held-out miss, so that set could no longer judge the
  * requests the audit led to. The fresh 50 were written before any of those
  * requests, and before the rules or any model had read them. Ten have a day,
- * a time or a word of stress inside a name ("Saturday Night Live"). Nothing
- * is tuned against them, wording or cut-off: they are the honest number now.
+ * a time or a word of stress inside a name ("Saturday Night Live"). No
+ * wording or cut-off was tuned against them.
  *
  * A fifth set, the unseen 100, was written before the app moved to rules
- * first with a model checking, and before the rule faults the fresh 50 showed
- * were fixed. Half of them tempt a wrong person or a wrong title: a name that
- * is only mentioned, and a day, a number or a word of stress that belongs to
- * the task. Nothing is tuned against them either.
+ * first with a model checking, and before the rule faults the fresh and
+ * held-out 50 showed were fixed, which ended those two sets' time as a fair
+ * judge of the rules. Half of the 100 tempt a wrong person or a wrong title:
+ * a name that is only mentioned, and a day, a number or a word of stress that
+ * belongs to the task. Nothing is tuned against them: they are the honest
+ * number now. Do not fix a rule, a wording or a cut-off because of a miss in
+ * them; write a new sentence into the first 100 instead.
  */
 
 // A made-up household on a fixed day, so every run asks the same thing.
@@ -1242,6 +1245,12 @@ export const FRESH_CASES: Array<Case> = [
  * was asked about who or the title. The same choices as the other sets are
  * taken where a sentence leaves one; a part of the day ("morning", "night")
  * beside a day is read with the day and sets no time.
+ *
+ * One sentence was swapped after it was written and before anything read
+ * the set: it turned out to be, word for word, an example in the request the
+ * models are sent (src/lib/verify.ts). Three more are close to an example
+ * there ("Deadhead the roses", "Top off the windshield washer fluid", "Trim
+ * Biscuit's nails") and were left as they were.
  */
 export const UNSEEN_CASES: Array<Case> = [
   // Names: whose it is, and names that are only mentioned.
@@ -1781,7 +1790,10 @@ export const UNSEEN_CASES: Array<Case> = [
   ],
 
   // Tags implied.
-  ['Descale the kettle', { title: 'Descale the kettle', tag: 'House' }],
+  [
+    'Tighten the loose banister',
+    { title: 'Tighten the loose banister', tag: 'House' },
+  ],
   ['Deadhead the roses', { title: 'Deadhead the roses', tag: 'Yard' }],
   [
     'Top off the windshield washer fluid',
@@ -1806,14 +1818,17 @@ export const UNSEEN_CASES: Array<Case> = [
 
 /**
  * `tuned`: the rules were tuned against it, so a cut-off may be chosen on it
- * too. `held`: never tuned against. `fresh`: never tuned against, and written
- * before the requests it judges; the report shows it first.
+ * too. `seen`: held out once, but its misses have since been read and the
+ * rule faults they showed fixed, so it no longer judges the rules; no
+ * cut-off is chosen on it. `unseen`: nothing was ever tuned against it, rule,
+ * wording or cut-off; the report shows it first.
  */
 export const SETS = [
   { name: 'First 30', cases: FIRST_CASES, kind: 'tuned' },
   { name: 'New 70', cases: NEW_CASES, kind: 'tuned' },
-  { name: 'Held out 50', cases: HELD_OUT_CASES, kind: 'held' },
-  { name: 'Fresh 50', cases: FRESH_CASES, kind: 'fresh' },
+  { name: 'Held out 50', cases: HELD_OUT_CASES, kind: 'seen' },
+  { name: 'Fresh 50', cases: FRESH_CASES, kind: 'seen' },
+  { name: 'Unseen 100', cases: UNSEEN_CASES, kind: 'unseen' },
 ] as const
 
 export const CASES: Array<Case> = SETS.flatMap((set) => set.cases)
