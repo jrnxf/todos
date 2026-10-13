@@ -2,6 +2,8 @@ package-lock.json
 pnpm-lock.yaml
 yarn.lock
 .lavish/
+# Local agent settings; not part of the repo.
+.claude/
 # Written by drizzle-kit.
 drizzle/
 # Written by the router plugin.
