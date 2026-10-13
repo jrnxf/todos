@@ -1,76 +1,47 @@
-// How well does Jev read a to-do's title? Thirty household sentences, each
-// with the fill a person would expect, are sent to the real service the way
-// the add bar sends them, and the answers are scored field by field next to
-// what the rules alone read.
+// How well is a to-do's title read? A hundred household sentences, each with
+// the fill a person would expect (scripts/read-eval-cases.ts), are read three
+// ways and scored field by field, side by side:
+//
+//   Rules alone          the rules in the page; nothing is sent.
+//   Jev first            Jev is asked about every field and every word, the
+//                        way the add bar asks today.
+//   Jev fills the gaps   the rules read first; Jev is asked only about what
+//                        they left empty, and never about the title.
 //
 //   bun run eval:read                    the plan: what would be sent, and
 //                                        what it would cost. Sends nothing.
 //   bun run eval:read --yes              runs it, and writes
 //                                        data/read-eval/report.md
-//   bun run eval:read --yes --cap-usd 0.02
+//   bun run eval:read --yes --cap-usd 0.2
 //
 // It spends money, a little: it never runs without --yes, and stops before
 // the request that would take it past the cap. The key is read from the
 // TYPESAFE_API_KEY environment variable and is never printed or written.
-import { mkdirSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  renameSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs'
 import * as chrono from 'chrono-node'
-import { readTitle } from '@/lib/read'
-import { CASES, HOUSEHOLD } from './read-eval-cases'
+import { gapsIn, readTitle } from '@/lib/read'
 import {
   JEV_ENDPOINT,
   TIME_LIMIT_MS,
   jevReadFrom,
   jevRequest,
 } from '@/server/jev-read'
-import type { JevRead, TitleRead } from '@/lib/read'
-import type { Expected } from './read-eval-cases'
+import { CASES, HOUSEHOLD, SETS } from './read-eval-cases'
+import { USD_PER_TOKEN, WAY_NAMES, report, usd } from './read-eval-score'
+import type { JevRead, ReadField } from '@/lib/read'
+import type { JevWay, Outcome, Sent } from './read-eval-score'
 
-/** Jev 1.13: charged per input token (docs.typesafe.ai/models). */
-const USD_PER_TOKEN = 0.042 / 1_000_000
-const DEFAULT_CAP_USD = 0.05
+const DEFAULT_CAP_USD = 0.5
 /** Far past the add bar's limit, so the report can say how slow slow was. */
 const EVAL_TIME_LIMIT_MS = 15_000
-const REPORT = 'data/read-eval/report.md'
-
-const FIELDS = [
-  'title',
-  'date',
-  'time',
-  'who',
-  'area',
-  'heads-up',
-  'flag',
-] as const
-type Field = (typeof FIELDS)[number]
-
-/** What was wanted and what was read, as text that compares. */
-function sides(expected: Expected, read: TitleRead) {
-  const area = HOUSEHOLD.areas.find((one) => one.id === read.fields.areaId)
-  const plain = (title: string) =>
-    title
-      .toLowerCase()
-      .replace(/[\s,;:.]+$/, '')
-      .trim()
-  const days = (list: Array<number> | undefined) =>
-    list ? `[${list.join(', ')}]` : 'unsaid'
-  const all: Record<Field, [wanted: string, got: string] | null> = {
-    title: [plain(expected.title), plain(read.title)],
-    date: [expected.date ?? 'none', read.fields.dueDate ?? 'none'],
-    time: [expected.time ?? 'none', read.fields.dueTime ?? 'none'],
-    who: [expected.who ?? 'nobody', read.fields.assignee ?? 'nobody'],
-    // Not scored where the sentence could sit in two areas.
-    area:
-      expected.area === undefined
-        ? null
-        : [expected.area ?? 'none', area?.name ?? 'none'],
-    'heads-up': [days(expected.headsUp), days(read.fields.headsUpDays)],
-    flag: [
-      expected.flag ? 'yes' : 'no',
-      read.fields.mustNotMiss ? 'yes' : 'no',
-    ],
-  }
-  return all
-}
+const DIRECTORY = 'data/read-eval'
+const REPORT = `${DIRECTORY}/report.md`
 
 const flag = (name: string) => process.argv.includes(name)
 function option(name: string): string | undefined {
@@ -80,20 +51,46 @@ function option(name: string): string | undefined {
 
 const capUsd = Number(option('--cap-usd') ?? DEFAULT_CAP_USD)
 if (!Number.isFinite(capUsd) || capUsd <= 0) {
-  console.error('--cap-usd takes an amount in dollars, such as 0.05.')
+  console.error('--cap-usd takes an amount in dollars, such as 0.2.')
   process.exit(1)
 }
 const endpoint = process.env.TYPESAFE_API_URL || JEV_ENDPOINT
-const requests = CASES.map(([sentence]) =>
-  JSON.stringify(jevRequest(sentence, HOUSEHOLD)),
-)
-// About three characters a token: an over-estimate, so the cap errs early.
-const guess = (body: string) => Math.ceil(body.length / 3)
-const guessedTokens = requests.reduce((sum, body) => sum + guess(body), 0)
-const usd = (tokens: number) => `$${(tokens * USD_PER_TOKEN).toFixed(4)}`
 
-console.log(`Sentences:       ${CASES.length}, one request each`)
+/** What each way would send for a sentence; null where it sends nothing. */
+interface Plan {
+  ask: ReadonlyArray<ReadField> | undefined
+  body: string
+}
+const JEV_WAYS = ['first', 'gaps'] as const satisfies ReadonlyArray<JevWay>
+const plans = CASES.map(([sentence]): Record<JevWay, Plan | null> => {
+  const gaps = gapsIn(chrono, sentence, HOUSEHOLD)
+  return {
+    first: {
+      ask: undefined,
+      body: JSON.stringify(jevRequest(sentence, HOUSEHOLD)),
+    },
+    gaps:
+      gaps.length === 0
+        ? null
+        : {
+            ask: gaps,
+            body: JSON.stringify(jevRequest(sentence, HOUSEHOLD, gaps, false)),
+          },
+  }
+})
+// The first run of this test was charged about one token for every 1.8
+// characters sent. Guessing 1.5 errs on the dear side, so the cap errs early.
+const guess = (body: string) => Math.ceil(body.length / 1.5)
+const guessed = (way: JevWay) =>
+  plans.reduce((sum, plan) => sum + (plan[way] ? guess(plan[way].body) : 0), 0)
+const guessedTokens = guessed('first') + guessed('gaps')
+
+console.log(`Sentences:       ${CASES.length}, read three ways`)
 console.log(`Sent to:         ${endpoint}`)
+for (const way of JEV_WAYS)
+  console.log(
+    `${`${WAY_NAMES[way]}:`.padEnd(21)}${plans.filter((plan) => plan[way]).length} requests, about ${guessed(way)} input tokens, ${usd(guessed(way))}`,
+  )
 console.log(
   `Estimated cost:  ${usd(guessedTokens)} (about ${guessedTokens} input tokens at $0.042 a million)`,
 )
@@ -114,31 +111,15 @@ if (guessedTokens * USD_PER_TOKEN > capUsd) {
   process.exit(1)
 }
 
-interface Outcome {
-  sentence: string
-  expected: Expected
-  /** Jev's reading, or null: an error, or no reply inside the eval's limit. */
-  jev: JevRead | null
-  ms: number
-  status: number | string
-  tokens: number
-}
-
-const outcomes: Array<Outcome> = []
 let spentTokens = 0
 let stopped = ''
 let model = ''
 
-for (const [index, [sentence, expected]] of CASES.entries()) {
-  const body = requests[index]
-  if ((spentTokens + guess(body)) * USD_PER_TOKEN > capUsd) {
-    stopped = `Stopped before sentence ${index + 1}: the next request could pass the cap.`
-    break
-  }
+async function send(sentence: string, plan: Plan): Promise<Sent> {
   const started = performance.now()
   let jev: JevRead | null = null
   let status: number | string = 'no reply'
-  let tokens = guess(body)
+  let tokens = guess(plan.body)
   try {
     const response = await fetch(endpoint, {
       method: 'POST',
@@ -146,7 +127,7 @@ for (const [index, [sentence, expected]] of CASES.entries()) {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
-      body,
+      body: plan.body,
       signal: AbortSignal.timeout(EVAL_TIME_LIMIT_MS),
     })
     status = response.status
@@ -157,119 +138,89 @@ for (const [index, [sentence, expected]] of CASES.entries()) {
       } = await response.json()
       model = reply.model ?? model
       tokens = reply.usage?.input_tokens ?? tokens
-      jev = jevReadFrom(reply, sentence, HOUSEHOLD)
+      jev = jevReadFrom(reply, sentence, HOUSEHOLD, plan.ask)
     }
   } catch (error) {
     status = error instanceof Error ? error.name : 'error'
   }
-  const ms = Math.round(performance.now() - started)
-  spentTokens += tokens
-  outcomes.push({ sentence, expected, jev, ms, status, tokens })
-  console.log(
-    `${String(index + 1).padStart(2)}/${CASES.length}  ${String(status).padEnd(8)} ${String(ms).padStart(5)} ms  ${sentence}`,
-  )
-  if (status === 401) {
-    stopped = 'Stopped: the key was refused (401).'
-    break
+  return { ms: Math.round(performance.now() - started), status, tokens, jev }
+}
+
+const outcomes: Array<Outcome> = []
+const setOf = (index: number) => {
+  let before = 0
+  for (const set of SETS) {
+    before += set.cases.length
+    if (index < before) return set.name
   }
+  return ''
 }
 
-// Three readings of each sentence: the rules alone, the add bar (Jev first,
-// but only an answer inside its time limit), and Jev however long it took.
-const WAYS = ['Rules alone', 'Add bar', 'Jev, any delay'] as const
-const readings = outcomes.map((outcome) => {
-  const reads = (jev: JevRead | null) =>
-    readTitle(chrono, outcome.sentence, { ...HOUSEHOLD, jev })
-  return [
-    reads(null),
-    reads(outcome.ms <= TIME_LIMIT_MS ? outcome.jev : null),
-    reads(outcome.jev),
-  ]
-})
-
-const lines: Array<string> = []
-const say = (line = '') => lines.push(line)
-const answered = outcomes.filter((outcome) => outcome.jev)
-const delays = outcomes.map((outcome) => outcome.ms).sort((a, b) => a - b)
-const at = (share: number) =>
-  delays[Math.min(delays.length - 1, Math.floor(delays.length * share))]
-
-say('# Reading to-do titles with Jev')
-say()
-say(
-  `${outcomes.length} of ${CASES.length} sentences sent to \`${endpoint}\`${model ? `, answered by \`${model}\`` : ''}, on ${new Date().toISOString().slice(0, 10)}. The household is made up and "today" is fixed at ${HOUSEHOLD.today}, a Tuesday.`,
-)
-if (stopped) say(`\n**${stopped}**`)
-say()
-say('## Hit rate per field')
-say()
-say(
-  'A hit is the field ending up as a person would expect, filled or left empty. "Add bar" is what the app shows: Jev first where it was sure and answered in time, the rules for the rest.',
-)
-say()
-say(`| Field | ${WAYS.join(' | ')} |`)
-say(`| --- | ${WAYS.map(() => '---').join(' | ')} |`)
-const misses: Array<string> = []
-for (const field of FIELDS) {
-  const cells = WAYS.map((_way, way) => {
-    let hits = 0
-    let scored = 0
-    outcomes.forEach((outcome, index) => {
-      const side = sides(outcome.expected, readings[index][way])[field]
-      if (!side) return
-      scored += 1
-      if (side[0] === side[1]) hits += 1
-      else if (way === 1) {
-        const from =
-          field !== 'title' &&
-          readings[index][way].guessed[
-            field === 'date' || field === 'time'
-              ? 'when'
-              : field === 'heads-up'
-                ? 'headsUp'
-                : field
-          ] !== undefined
-            ? 'Jev'
-            : 'rules'
-        misses.push(
-          `| ${outcome.sentence} | ${field} | ${side[0]} | ${side[1]} | ${field === 'title' ? '' : from} |`,
-        )
-      }
-    })
-    return scored === 0
-      ? 'n/a'
-      : `${hits}/${scored} (${Math.round((100 * hits) / scored)}%)`
+sentences: for (const [index, [sentence, expected]] of CASES.entries()) {
+  const sent: Outcome['sent'] = { first: null, gaps: null }
+  // Turn about, so neither way always pays for a cold connection.
+  for (const way of index % 2 === 0 ? JEV_WAYS : [...JEV_WAYS].reverse()) {
+    const plan = plans[index][way]
+    if (!plan) continue
+    if ((spentTokens + guess(plan.body)) * USD_PER_TOKEN > capUsd) {
+      stopped = `Stopped before sentence ${index + 1}: the next request could pass the cap.`
+      break sentences
+    }
+    const one = await send(sentence, plan)
+    sent[way] = one
+    spentTokens += one.tokens
+    console.log(
+      `${String(index + 1).padStart(3)}/${CASES.length}  ${way.padEnd(5)}  ${String(one.status).padEnd(8)} ${String(one.ms).padStart(5)} ms  ${sentence}`,
+    )
+    if (one.status === 401) {
+      stopped = 'Stopped: the key was refused (401).'
+      break sentences
+    }
+  }
+  // What the add bar would show: an answer it had stopped waiting for is
+  // not used.
+  const inTime = (way: JevWay) =>
+    sent[way] && sent[way].ms <= TIME_LIMIT_MS ? sent[way].jev : null
+  outcomes.push({
+    sentence,
+    expected,
+    set: setOf(index),
+    reads: {
+      rules: readTitle(chrono, sentence, HOUSEHOLD),
+      first: readTitle(chrono, sentence, {
+        ...HOUSEHOLD,
+        jev: inTime('first'),
+        jevUse: 'first',
+      }),
+      gaps: readTitle(chrono, sentence, {
+        ...HOUSEHOLD,
+        jev: inTime('gaps'),
+        jevUse: 'gaps',
+      }),
+    },
+    sent,
   })
-  say(`| ${field} | ${cells.join(' | ')} |`)
 }
-say()
-say('## Misses in the add bar')
-say()
-if (misses.length === 0) say('None.')
-else {
-  say('| Sentence | Field | Expected | Got | Filled by |')
-  say('| --- | --- | --- | --- | --- |')
-  misses.forEach((miss) => say(miss))
-}
-say()
-say('## Delay')
-say()
-say(
-  `Median ${at(0.5)} ms, 9 in 10 within ${at(0.9)} ms, slowest ${delays.at(-1)} ms. ${outcomes.filter((outcome) => outcome.ms > TIME_LIMIT_MS).length} of ${outcomes.length} took longer than the add bar waits (${TIME_LIMIT_MS} ms) and would have been read by the rules. ${outcomes.length - answered.length} got no usable reply at all.`,
-)
-const failed = outcomes.filter((outcome) => !outcome.jev)
-if (failed.length > 0) {
-  say()
-  failed.forEach((outcome) => say(`- ${outcome.status}: ${outcome.sentence}`))
-}
-say()
-say('## Cost')
-say()
-say(
-  `${spentTokens} input tokens, ${usd(spentTokens)} at $0.042 a million (output is free), under a cap of $${capUsd.toFixed(4)}. That is ${usd(spentTokens / Math.max(1, outcomes.length))} a to-do.`,
-)
-say()
 
-mkdirSync('data/read-eval', { recursive: true })
-writeFileSync(REPORT, `${lines.join('\n')}`)
+mkdirSync(DIRECTORY, { recursive: true })
+// An earlier report is kept beside the new one, to read the two together.
+if (existsSync(REPORT)) {
+  const written = statSync(REPORT).mtime.toISOString().slice(0, 19)
+  renameSync(REPORT, `${DIRECTORY}/report-${written.replace(/:/g, '')}.md`)
+}
+writeFileSync(
+  REPORT,
+  report({
+    outcomes,
+    sets: SETS.map((set) => ({ name: set.name, size: set.cases.length })),
+    areas: HOUSEHOLD.areas,
+    endpoint,
+    model,
+    ranOn: new Date().toISOString().slice(0, 10),
+    today: HOUSEHOLD.today,
+    timeLimitMs: TIME_LIMIT_MS,
+    capUsd,
+    stopped,
+  }),
+)
 console.log(`\n${stopped ? `${stopped}\n` : ''}Wrote ${REPORT}`)

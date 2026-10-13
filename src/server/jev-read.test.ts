@@ -5,7 +5,7 @@
 // these have never called the real one.
 import * as chrono from 'chrono-node'
 import { describe, expect, it, vi } from 'vitest'
-import { readTitle } from '@/lib/read'
+import { gapsIn, readTitle } from '@/lib/read'
 import {
   DAYS_AHEAD,
   DROP_FLOOR,
@@ -15,7 +15,7 @@ import {
   readWithJev,
 } from './jev-read'
 import { standInReply } from './jev-stand-in'
-import type { ReadContext, ReadField } from '@/lib/read'
+import type { JevRead, ReadContext, ReadField } from '@/lib/read'
 
 const HOUSE = 1
 const KIDS = 2
@@ -433,5 +433,108 @@ describe('the title', () => {
         from = at + 1
       }
     }
+  })
+})
+
+// The other way of using Jev: the rules read first, and Jev is asked only
+// about what they left empty. What the rules read is theirs for good.
+describe('Jev fills the gaps', () => {
+  const gaps = (title: string, more: Partial<ReadContext> = {}) =>
+    gapsIn(chrono, title, { ...context, ...more })
+  /** Jev sure of everything, and all of it different from what was typed. */
+  const contrary: JevRead = {
+    when: { dueDate: '2026-12-25', dueTime: '06:00' },
+    who: 'alex',
+    area: PAPERWORK,
+    headsUp: [14],
+    flag: true,
+    drops: [
+      { index: 0, field: 'who' },
+      { index: 1, field: 'when' },
+    ],
+  }
+  const filling = (title: string, more: Partial<ReadContext> = {}) =>
+    readTitle(chrono, title, {
+      ...context,
+      jev: contrary,
+      jevUse: 'gaps',
+      ...more,
+    })
+
+  it('asks only about the fields the rules left empty', () => {
+    expect(gaps(OWNERS)).toEqual(['area', 'headsUp'])
+    expect(gaps('Buy dog food')).toEqual([
+      'when',
+      'who',
+      'area',
+      'headsUp',
+      'flag',
+    ])
+  })
+
+  it('asks about the area unless it was named outright', () => {
+    expect(gaps('Flu shots for the kids')).toContain('area')
+    expect(gaps('Flu shots #kids')).not.toContain('area')
+    expect(gaps('Kids: flu shots')).not.toContain('area')
+  })
+
+  it('does not ask about a field set by hand or taken back', () => {
+    expect(
+      gaps('Buy dog food', {
+        skip: new Set<ReadField>(['when', 'area']),
+        notJevs: new Set<ReadField>(['who']),
+      }),
+    ).toEqual(['headsUp', 'flag'])
+  })
+
+  it('sends no question about a field the rules read, nor about any word', () => {
+    const asked = Object.keys(
+      jevRequest(OWNERS, household, gaps(OWNERS), false).questions,
+    )
+    expect(asked).toEqual(['area', 'alert'])
+  })
+
+  it('never overwrites what the rules read, and leaves the title to them', () => {
+    const title = 'Sam: mow the lawn saturday at 9pm, no reminder !!'
+    const read = filling(title)
+    expect(read.fields).toEqual({
+      ...rules(title).fields,
+      areaId: PAPERWORK,
+    })
+    expect(read.title).toBe('mow the lawn')
+    expect(read.guessed).toEqual({ area: '' })
+  })
+
+  it('fills every field the rules left empty', () => {
+    const read = filling('Buy dog food')
+    expect(read.title).toBe('Buy dog food')
+    expect(read.fields).toEqual({
+      dueDate: '2026-12-25',
+      dueTime: '06:00',
+      assignee: 'alex',
+      areaId: PAPERWORK,
+      headsUpDays: [14],
+      mustNotMiss: true,
+    })
+  })
+
+  it('takes Jev over an area named in passing, but not over one named outright', () => {
+    expect(filling('Flu shots for the kids').fields.areaId).toBe(PAPERWORK)
+    expect(filling('Flu shots #kids').fields.areaId).toBe(KIDS)
+    expect(filling('Kids: flu shots').fields.areaId).toBe(KIDS)
+  })
+
+  it('leaves a field set by hand or taken back alone', () => {
+    const read = filling('Buy dog food', {
+      skip: new Set<ReadField>(['when', 'area']),
+      notJevs: new Set<ReadField>(['who']),
+    })
+    expect(read.fields).toEqual({ headsUpDays: [14], mustNotMiss: true })
+  })
+
+  it('reads by the rules alone when Jev has no answer', () => {
+    expect(
+      readTitle(chrono, OWNERS, { ...context, jev: null, jevUse: 'gaps' }),
+    ).toEqual(rules(OWNERS))
   })
 })

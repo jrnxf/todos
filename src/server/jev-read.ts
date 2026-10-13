@@ -4,7 +4,9 @@
 // field is asked that way: the day as a pick among the coming days, the time
 // among quarter hours, the person, the area and the heads-up among ours, the
 // flag as a yes or no, and each word of the title as a pick of what it says.
-// All of it goes in one request.
+// All of it goes in one request. Where Jev only fills the gaps the rules left
+// (`JEV_USE` in src/lib/read.ts), the words are not asked about and the title
+// is the rules' alone.
 //
 // It is optional. Without the TYPESAFE_API_KEY setting nothing is ever sent
 // and the rules in src/lib/read.ts read the title alone.
@@ -86,12 +88,14 @@ const SAYS: Record<ReadField, string> = {
 /**
  * What is sent: the to-do's title, today's date, the first names (so "Sam's
  * boots" reads as a person and not a thing) and the area names. Nothing else
- * leaves. Only the fields in `ask` are asked about.
+ * leaves. Only the fields in `ask` are asked about, and the title's words
+ * only with `words`.
  */
 export function jevRequest(
   title: string,
   household: Household,
   ask: ReadonlyArray<ReadField> = READ_FIELDS,
+  words = true,
 ) {
   const asks = (field: ReadField) => ask.includes(field)
   const typedBy = household.people.find((one) => one.id === household.me)
@@ -194,7 +198,7 @@ export function jevRequest(
   // The title is tidied word by word. Each word is asked about on its own,
   // so Jev never writes a title: it can only say what a word that was typed
   // is for.
-  if (ask.length > 0)
+  if (words && ask.length > 0)
     titleWords(title).forEach((word, index) => {
       questions[wordQuestion(index)] = {
         type: 'choice',
@@ -332,6 +336,8 @@ export async function readWithJev(
     apiKey: string
     /** The fields still open; one set by hand or taken back is not asked. */
     ask?: ReadonlyArray<ReadField>
+    /** Whether to ask what each word of the title is for. On unless said. */
+    words?: boolean
     endpoint?: string
     timeLimitMs?: number
     /** Stands in for the network in tests. */
@@ -349,7 +355,9 @@ export async function readWithJev(
           Authorization: `Bearer ${options.apiKey}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(jevRequest(title, household, ask)),
+        body: JSON.stringify(
+          jevRequest(title, household, ask, options.words ?? true),
+        ),
         signal: AbortSignal.timeout(options.timeLimitMs ?? TIME_LIMIT_MS),
       },
     )

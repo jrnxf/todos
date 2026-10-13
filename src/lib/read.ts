@@ -7,15 +7,44 @@
 // nothing here guesses: each thing is read only where it is said outright,
 // and whatever was read can be taken back (`skip`).
 //
-// With a TypeSafe key the server also asks Jev (src/server/jev-read.ts). What
-// Jev is sure of comes first; these rules read the rest, and all of it when
-// there is no answer.
+// With a TypeSafe key the server also asks Jev (src/server/jev-read.ts), in
+// one of two ways (`JEV_USE`). Jev first: what Jev is sure of comes first and
+// these rules read the rest. Jev fills the gaps: these rules read first, and
+// Jev is asked only about what they left empty. Either way the rules read all
+// of it when there is no answer.
 import { HEADS_UP_CHOICES } from './board'
 import { parseWhen } from './when'
 import type { LocalDate, LocalTime } from './dates'
 import type { DateParser } from './when'
 
 export type ReadField = 'when' | 'who' | 'area' | 'headsUp' | 'flag'
+
+const FIELDS: ReadonlyArray<ReadField> = [
+  'when',
+  'who',
+  'area',
+  'headsUp',
+  'flag',
+]
+
+/**
+ * How Jev's answer is used.
+ *
+ * `first`: Jev is asked about every open field and about each word of the
+ * title; what it is sure of fills the field and tidies the title, and the
+ * rules read the rest.
+ *
+ * `gaps`: the rules read first and write the title alone. Jev is asked only
+ * about a field they left empty, and about the area unless it was named
+ * outright ("#kids", "House: ..."). It never touches a field the rules read.
+ */
+export type JevUse = 'first' | 'gaps'
+
+/**
+ * Which of the two the running app uses. `bun run eval:read` scores both, and
+ * the rules alone, on the same sentences.
+ */
+export const JEV_USE: JevUse = 'first'
 
 export interface ReadContext {
   today: LocalDate
@@ -27,6 +56,8 @@ export interface ReadContext {
   skip?: ReadonlySet<ReadField>
   /** What Jev was sure of for this very text, if it was asked and answered. */
   jev?: JevRead | null
+  /** How that answer is used; `JEV_USE` unless the eval says otherwise. */
+  jevUse?: JevUse
   /** Fields Jev may not fill, though the rules still read them. */
   notJevs?: ReadonlySet<ReadField>
 }
@@ -132,6 +163,27 @@ export function readTitle(
   text: string,
   context: ReadContext,
 ): TitleRead {
+  return reading(parser, text, context).read
+}
+
+/**
+ * The fields to ask Jev about when it fills the gaps: those the rules left
+ * empty in `text`, and the area unless it was named outright. Never one set
+ * by hand or taken back.
+ */
+export function gapsIn(
+  parser: DateParser | null,
+  text: string,
+  context: ReadContext,
+): Array<ReadField> {
+  return reading(parser, text, { ...context, jev: null }).gaps
+}
+
+function reading(
+  parser: DateParser | null,
+  text: string,
+  context: ReadContext,
+): { read: TitleRead; gaps: Array<ReadField> } {
   const unread: TitleRead = {
     title: text.trim(),
     fields: {},
@@ -141,15 +193,18 @@ export function readTitle(
   const fields: TitleRead['fields'] = {}
   const phrases: TitleRead['phrases'] = {}
   const guessed: TitleRead['guessed'] = {}
-  const jev = context.jev
+  const use = context.jevUse ?? JEV_USE
+  // Jev's answer where it comes first; where it fills the gaps it waits for
+  // the rules to have read.
+  const jev = use === 'first' ? context.jev : null
+  const open = (field: ReadField) =>
+    !context.skip?.has(field) && !context.notJevs?.has(field)
   let rest = text
 
   // Jev first: what it was sure of fills the field, and the words that only
   // said it leave the title. A field set by hand or taken back is not its to
   // fill.
   if (jev) {
-    const open = (field: ReadField) =>
-      !context.skip?.has(field) && !context.notJevs?.has(field)
     if (jev.when && open('when')) {
       fields.dueDate = jev.when.dueDate
       fields.dueTime = jev.when.dueTime
@@ -229,6 +284,7 @@ export function readTitle(
   }
 
   // An area said as a tag or a heading: "#kids", "House: ...".
+  let named = false
   if (reads('area')) {
     const area = context.areas.find((one) => {
       const n = escaped(one.name)
@@ -237,7 +293,10 @@ export function readTitle(
         take('area', new RegExp(String.raw`^\s*${n}\s*:\s+`, 'i'))
       )
     })
-    if (area) fields.areaId = area.id
+    if (area) {
+      fields.areaId = area.id
+      named = true
+    }
   }
 
   const when =
@@ -253,7 +312,9 @@ export function readTitle(
   // Nothing but things to read is not a to-do: "Tomorrow" stays "Tomorrow".
   // Jev's reading is the first to go: the rules alone may leave a title.
   if (!title)
-    return jev ? readTitle(parser, text, { ...context, jev: null }) : unread
+    return jev
+      ? reading(parser, text, { ...context, jev: null })
+      : { read: unread, gaps: [] }
 
   // Or an area named in passing, which stays in the title: "Flu shots for
   // the kids" is in Kids.
@@ -266,5 +327,44 @@ export function readTitle(
     }
   }
 
-  return { title, fields, phrases, guessed }
+  // What the rules left empty. The area is one of them unless it was named
+  // outright: one named in passing is a hint, and Jev may know better.
+  const left: Record<ReadField, boolean> = {
+    when: fields.dueDate === undefined,
+    who: fields.assignee === undefined,
+    area: !named,
+    headsUp: fields.headsUpDays === undefined,
+    flag: fields.mustNotMiss === undefined,
+  }
+  const gaps = FIELDS.filter((field) => open(field) && left[field])
+
+  // Jev fills the gaps: only those, and never a word of the title.
+  const filler = use === 'gaps' ? context.jev : null
+  if (filler) {
+    const fills = (field: ReadField) => gaps.includes(field)
+    if (filler.when && fills('when')) {
+      fields.dueDate = filler.when.dueDate
+      fields.dueTime = filler.when.dueTime
+      guessed.when = ''
+    }
+    if (filler.who !== undefined && fills('who')) {
+      fields.assignee = filler.who
+      guessed.who = ''
+    }
+    if (filler.area !== undefined && fills('area')) {
+      fields.areaId = filler.area
+      delete phrases.area
+      guessed.area = ''
+    }
+    if (filler.headsUp && fills('headsUp')) {
+      fields.headsUpDays = filler.headsUp
+      guessed.headsUp = ''
+    }
+    if (filler.flag && fills('flag')) {
+      fields.mustNotMiss = true
+      guessed.flag = ''
+    }
+  }
+
+  return { read: { title, fields, phrases, guessed }, gaps }
 }

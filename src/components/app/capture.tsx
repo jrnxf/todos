@@ -47,7 +47,7 @@ import {
 } from '@/components/ui/drawer'
 import { Input } from '@/components/ui/input'
 import { useAddItem, useBoard } from '@/lib/queries'
-import { readTitle } from '@/lib/read'
+import { JEV_USE, gapsIn, readTitle } from '@/lib/read'
 import { shortWhenLabel } from '@/lib/when'
 import { readTitleWithJev } from '@/server/board'
 import { AreaDot } from './area'
@@ -353,25 +353,26 @@ function CaptureBar({
   const [open, setOpen] = useState<Open>(null)
 
   const typed = fields.title.trim()
+  const household = {
+    today: board.today,
+    me: board.me,
+    people: board.people,
+    areas: board.areas,
+  }
   // Asked about only what is still open. With every pill set by hand or
-  // taken back there is nothing to ask, and nothing is sent.
+  // taken back there is nothing to ask, and nothing is sent. Where Jev only
+  // fills the gaps, what the rules read is not asked about either.
   const jev = useJevRead(
     typed,
-    READ_FIELDS.map((one) => one.field).filter(
-      (field) => !byHand.has(field) && !notJevs.has(field),
-    ),
+    JEV_USE === 'gaps'
+      ? gapsIn(parser, typed, { ...household, skip: byHand, notJevs })
+      : READ_FIELDS.map((one) => one.field).filter(
+          (field) => !byHand.has(field) && !notJevs.has(field),
+        ),
     board.jev,
   )
   const readWith = (skip: ReadonlySet<ReadField>) =>
-    readTitle(parser, typed, {
-      today: board.today,
-      me: board.me,
-      people: board.people,
-      areas: board.areas,
-      skip,
-      jev,
-      notJevs,
-    })
+    readTitle(parser, typed, { ...household, skip, jev, notJevs })
   const first = readWith(byHand)
   const refused = READ_FIELDS.map((one) => one.field).filter(
     (field) =>

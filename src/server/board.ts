@@ -8,6 +8,7 @@ import { channelFor, notify } from '@/alerts/notify'
 import { getDb, schema } from '@/db/client'
 import { AREA_COLORS } from '@/db/schema'
 import { addDays, localNow } from '@/lib/dates'
+import { JEV_USE } from '@/lib/read'
 import { SIGNED_OUT } from '@/lib/signed-out'
 import { env } from './env'
 import { READ_FIELDS, readWithJev } from './jev-read'
@@ -190,7 +191,12 @@ export const readTitleWithJev = createServerFn({ method: 'POST' })
     return readWithJev(
       data.title,
       { today: localNow(env.timeZone).date, me, people: env.people, areas },
-      { apiKey, ask: data.ask, endpoint: env.typesafe.url },
+      {
+        apiKey,
+        ask: data.ask,
+        words: JEV_USE === 'first',
+        endpoint: env.typesafe.url,
+      },
     )
   })
 

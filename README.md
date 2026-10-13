@@ -76,7 +76,7 @@ database, make a Google sign-in client, set the settings, deploy.
 | `src/lib/dates.ts`       | Dates as household-local strings, never UTC instants            |
 | `src/lib/when.ts`        | Date shortcuts, and reading a date out of a title. With tests   |
 | `src/lib/read.ts`        | Reading who, area, heads-up and flag out of a title. With tests |
-| `scripts/read-eval.ts`   | `bun run eval:read`: scores Jev's reading on 30 sentences       |
+| `scripts/read-eval.ts`   | `bun run eval:read`: scores three ways to read 100 sentences    |
 | `src/alerts/rules.ts`    | Which alerts exist and when. Pure, with tests                   |
 | `src/alerts/tick.ts`     | One scheduler pass: send what fell due since the last pass      |
 | `src/alerts/notify.ts`   | The one way an alert leaves the app (Pushover today)            |

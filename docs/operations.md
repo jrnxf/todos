@@ -158,19 +158,36 @@ each pause in typing.
 
 ### Checking how well it reads
 
-Before trusting it with dates, measure it. `bun run eval:read` sends 30
-household sentences, each with the fill a person would expect, and writes the
-hit rate per field, every miss, the delay and the cost to
-`data/read-eval/report.md`, next to what the rules alone get.
+Before trusting it with dates, measure it. `bun run eval:read` reads 100
+household sentences, each with the fill a person would expect, three ways on
+the same inputs:
+
+- **Rules alone**: the rules in the page, and nothing sent.
+- **Jev first**: what the add bar does today, as described above.
+- **Jev fills the gaps**: the rules read first and write the title alone. Jev
+  is asked only about a button they left empty, and about the area unless it
+  was named outright ("#kids", "House: ..."). No word of the title is asked
+  about, so the request is smaller, and a button the rules filled is never
+  asked about or overwritten.
+
+It writes `data/read-eval/report.md`: the hit rate per field for each of the
+three side by side, for all the sentences and for each set of them, every
+miss, the delay and the cost of each, and which won each field. A report
+already there is kept beside it under the time it was written.
 
 ```bash
 bun run eval:read          # the plan and the estimated cost; sends nothing
 TYPESAFE_API_KEY=... bun run eval:read --yes
 ```
 
-It stops before the request that would take it past its spending cap, five
+It stops before the request that would take it past its spending cap, fifty
 cents unless `--cap-usd` says otherwise. The sentences and the made-up
-household they are read for are in `scripts/read-eval.ts`.
+household they are read for are in `scripts/read-eval-cases.ts`: the 30 the
+test began with, written by the author of the rules, and 70 written before
+the rules were opened.
+
+Which of the two ways the add bar uses is one constant, `JEV_USE` in
+`src/lib/read.ts`: `'first'` today, `'gaps'` for the other.
 
 ## Each phone
 
