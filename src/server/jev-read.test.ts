@@ -344,10 +344,11 @@ describe('falling back to the rules', () => {
   })
 
   it('for a heads-up that is not one of the offered ones', () => {
+    // Jev can only pick an offered one; the rules read any number of days.
     const title = 'Renew passport friday, remind me 5 days before'
     const read = filled(title, reply(title))
-    expect(read.fields.headsUpDays).toBeUndefined()
-    expect(read.title).toMatch(/^Renew passport,? remind me 5 days before$/)
+    expect(read.fields.headsUpDays).toEqual([5])
+    expect(read.title).toBe('Renew passport')
   })
 
   it('ignores an answer to a field that was not asked about', () => {

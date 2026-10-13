@@ -91,7 +91,9 @@ export interface DateParser {
     text: string
     start: {
       date: () => Date
-      isCertain: (part: 'hour' | 'day' | 'weekday' | 'month') => boolean
+      isCertain: (
+        part: 'hour' | 'meridiem' | 'day' | 'weekday' | 'month',
+      ) => boolean
     }
   }>
 }
@@ -104,10 +106,14 @@ export interface ParsedWhen extends When {
   title: string
 }
 
-// "by fri", "due on fri": the linking word goes with the date.
-const LINK = /\b(due|by|on|at|in|before|until)\s*$/i
+// "by fri", "due on fri", "booked for fri": the linking word goes with the
+// date.
+const LINK = /\b(due|by|on|at|in|for|before|until)\s*$/i
+// The linking words that say a deadline. "for" does not: "tickets for
+// August: Osage County".
+const DUE = /\b(due|by|on|at|in|before|until)\s*$/i
 // A month and nothing else. It is as often a name ("March of the Penguins",
-// "the August statement") as a deadline, so it needs a linking word.
+// "the August statement") as a deadline, so it needs one of those.
 const MONTH_ALONE =
   /^(jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|june?|july?|aug(ust)?|sep(t(ember)?)?|oct(ober)?|nov(ember)?|dec(ember)?)\.?(\s+of)?$/i
 // A length of time and nothing else is an amount ("2 weeks of recycling"),
@@ -115,11 +121,92 @@ const MONTH_ALONE =
 // deadline. "in 2 weeks" and "2 weeks from now" are not matched.
 const SPAN_ALONE =
   /^(\d+|an?|one|two|three|four|five|six|seven|eight|nine|ten|few|couple(\s+of)?)\s+(days?|weeks?|months?|years?)(\s+(before|earlier|ahead|early|prior))?$/i
-// "on the 1st", "by the 15th": a day of the month, which the parser does not
-// read. Only after a linking word and at the end of a phrase, so "on the 2nd
-// floor" is left alone.
+// A part of the day and nothing else names no day: "date night", "the
+// morning routine". "tonight" and "this evening" do.
+const PART_OF_DAY = /^(the\s+)?(night|morning|afternoon|evening)s?$/i
+// "on the 1st", "by the 15th", "the 5th": a day of the month, which the
+// parser does not read. Only at the end of a phrase, so "on the 2nd floor"
+// is left alone.
 const DAY_OF_MONTH =
-  /\b(?:due|by|on|before|until)\s+the\s+(\d{1,2})(?:st|nd|rd|th)(?=\s*$|\s*[,;.!]|\s+at\b|\s+\d)/i
+  /\b(?:(?:due|by|on|for|before|until)\s+)?the\s+(\d{1,2})(?:st|nd|rd|th)(?=\s*$|\s*[,;.!]|\s+at\b|\s+\d)/i
+// "next week" names no day; it is read as the week's Monday.
+const NEXT_WEEK = /\bnext\s+week\b/i
+// A weekday said as the one this week, which on that weekday is today.
+const THIS_ONE = /\b(this|today|tonight)\b/i
+// An hour said with "am", "pm" or a word for it: nothing to work out.
+const HALF_SAID = /\d\s*[ap]\.?m\b|\b(noon|midnight|midday)\b/i
+// What makes a bare hour the evening's, or the morning's: "dinner at 7" is
+// 19:00 and "breakfast at 7" is 07:00.
+const EVENING =
+  /\b(dinner|supper|tonight|evening|night|drinks|happy hour|movie|concert|bedtime|sunset)\b/i
+const MORNING =
+  /\b(breakfast|brunch|morning|sunrise|before (school|work)|school bus)\b/i
+
+// The day words people mistype most, and the shorthand the parser does not
+// know. Each is read as the word it stands for; the title keeps what was
+// typed.
+const RESPELL: Partial<Record<string, string>> = {}
+for (const [word, typed] of Object.entries({
+  monday: 'munday mondya mondy moday',
+  tuesday: 'tuseday teusday tuesdy tusday tueday tuesay',
+  wednesday:
+    'wensday wendsday wednsday wedensday wenesday wednessday wedsday wednesay wendesday wedneday',
+  thursday: 'thrusday thurday thursdy thusday thurdsay thursay thirsday',
+  friday: 'firday fridya frieday fryday frday',
+  saturday: 'saterday satruday saturdy satuday saturady sataurday satday',
+  sunday: 'sunady sundy suday',
+  tomorrow:
+    'tommorow tommorrow tomorow tomorro tomarrow tommorro tomrrow tomorrw tmrw tmrrw tmw tmr tomm 2morrow 2moro',
+  tonight: 'tonite tonigth tongiht tonigt 2nite',
+  today: 'tody todya 2day',
+  january: 'januray janurary januarry',
+  february: 'febuary feburary febrary februrary',
+  september: 'septmber setember septemeber',
+  october: 'ocotber octobor ocober',
+  november: 'novemeber novmber novembr',
+  december: 'decemeber decmber decembr',
+}))
+  for (const one of typed.split(' ')) RESPELL[one] = word
+
+/**
+ * `text` with the mistyped day words spelled out, and where each character
+ * of it sits in what was typed.
+ */
+function respelled(text: string): { text: string; typedAt: Array<number> } {
+  let spelled = ''
+  const typedAt: Array<number> = []
+  let from = 0
+  const copy = (to: number) => {
+    for (let at = from; at < to; at++) typedAt.push(at)
+    spelled += text.slice(from, to)
+    from = to
+  }
+  for (const found of text.matchAll(/[\p{L}\d]+/gu)) {
+    const word = RESPELL[found[0].toLowerCase()]
+    if (!word) continue
+    copy(found.index)
+    from = found.index + found[0].length
+    // The word's first letter is where the typed one starts; the rest of it
+    // is where the typed one ends.
+    typedAt.push(found.index, ...Array<number>(word.length - 1).fill(from))
+    spelled += word
+  }
+  copy(text.length)
+  typedAt.push(text.length)
+  return { text: spelled, typedAt }
+}
+
+/**
+ * The hour a bare "at 7" means. People leave "pm" off the afternoon and the
+ * evening far more than off the morning: 1 to 6 is the afternoon, 7 to 11
+ * the morning, unless the to-do says which ("dinner at 7").
+ */
+function hourMeant(hour: number, text: string): number {
+  if (hour < 1 || hour > 11) return hour
+  if (MORNING.test(text)) return hour
+  if (EVENING.test(text)) return hour + 12
+  return hour <= 6 ? hour + 12 : hour
+}
 
 /** The next date, today included, that is day `day` of its month. */
 function nextDayOfMonth(today: LocalDate, day: number): LocalDate | null {
@@ -161,47 +248,78 @@ function without(text: string, cuts: Array<[number, number]>): string {
  */
 export function parseWhen(
   parser: DateParser,
-  text: string,
+  typed: string,
   today: LocalDate,
 ): ParsedWhen | null {
+  const { text, typedAt } = respelled(typed)
+  /** A stretch of `text`, as the stretch of what was typed. */
+  const cut = (start: number, end: number): [number, number] => [
+    typedAt[start],
+    typedAt[end],
+  ]
   // Noon, so "today" is the same calendar day in whatever zone this runs in.
   const reference = toPickerDate(today)
   reference.setHours(12)
+  // A word in a run of capitalised ones is part of a name ("Friday Night
+  // Lights"), unless the whole title is typed that way.
+  const plainWords = /(?<=\S\s+)\p{Ll}/u.test(text)
   const found = parser
     .parse(text, reference, { forwardDate: true })
     .filter((one) => {
-      if (SPAN_ALONE.test(one.text)) return false
+      const before = text.slice(0, one.index)
+      const after = text.slice(one.index + one.text.length)
+      if (SPAN_ALONE.test(one.text) || PART_OF_DAY.test(one.text)) return false
+      // "Friday's field trip", "Tuesdays with Morrie": about the day, not due
+      // on it.
+      if (/^(['’]s\b|\p{L})/u.test(after)) return false
+      // "the day before": not a day at all.
+      if (fromPickerDate(one.start.date()) < today) return false
+      if (
+        plainWords &&
+        before.trim() &&
+        !DUE.test(before) &&
+        /^\p{Lu}/u.test(one.text) &&
+        /^\s+\p{Lu}/u.test(after)
+      )
+        return false
       if (!MONTH_ALONE.test(one.text)) return true
-      return LINK.test(text.slice(0, one.index))
+      return DUE.test(before)
     })
     .at(-1)
 
   const at = found?.start.date()
   const hasTime = found?.start.isCertain('hour') ?? false
-  const timeOnly =
-    hasTime &&
-    !found?.start.isCertain('day') &&
-    !found?.start.isCertain('weekday') &&
-    !found?.start.isCertain('month')
-  const dueTime =
-    at && hasTime
-      ? `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`
-      : null
+  const hasDay =
+    (found?.start.isCertain('day') ||
+      found?.start.isCertain('weekday') ||
+      found?.start.isCertain('month')) ??
+    false
+  const timeOnly = hasTime && !hasDay
+  let dueTime: LocalTime | null = null
+  if (found && at && hasTime) {
+    const said = found.start.isCertain('meridiem') || HALF_SAID.test(found.text)
+    const hour = said ? at.getHours() : hourMeant(at.getHours(), text)
+    dueTime = `${String(hour).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`
+  }
 
   // "on the 1st at 9am": the day of the month, with the parser's time if
   // that is all the parser found.
   const dayOfMonth = !found || timeOnly ? DAY_OF_MONTH.exec(text) : null
   const onDay = dayOfMonth && nextDayOfMonth(today, Number(dayOfMonth[1]))
   if (dayOfMonth && onDay) {
-    const cuts: Array<[number, number]> = [
-      [dayOfMonth.index, dayOfMonth.index + dayOfMonth[0].length],
+    const cuts = [
+      cut(dayOfMonth.index, dayOfMonth.index + dayOfMonth[0].length),
     ]
-    if (found) cuts.push([found.index, found.index + found.text.length])
-    const title = without(text, cuts)
+    if (found) cuts.push(cut(found.index, found.index + found.text.length))
+    const title = without(typed, cuts)
     if (!title) return null
-    const end = Math.max(...cuts.map((cut) => cut[1]))
     return {
-      phrase: text.slice(dayOfMonth.index, end).trim(),
+      phrase: typed
+        .slice(
+          Math.min(...cuts.map((one) => one[0])),
+          Math.max(...cuts.map((one) => one[1])),
+        )
+        .trim(),
       title,
       dueDate: onDay,
       dueTime,
@@ -209,7 +327,22 @@ export function parseWhen(
   }
 
   if (!found || !at) return null
-  const title = without(text, [[found.index, found.index + found.text.length]])
+  const [start, end] = cut(found.index, found.index + found.text.length)
+  const title = without(typed, [[start, end]])
   if (!title) return null
-  return { phrase: found.text, title, dueDate: fromPickerDate(at), dueTime }
+  let dueDate = fromPickerDate(at)
+  // A time and no day is today: the parser cannot know what time it is now.
+  if (timeOnly) dueDate = today
+  // "next week" is its Monday.
+  else if (NEXT_WEEK.test(found.text) && !found.start.isCertain('weekday'))
+    dueDate = addDays(today, (8 - weekday(today)) % 7 || 7)
+  // A weekday typed on that same weekday is next week's.
+  else if (
+    dueDate === today &&
+    found.start.isCertain('weekday') &&
+    !found.start.isCertain('day') &&
+    !THIS_ONE.test(found.text)
+  )
+    dueDate = addDays(today, 7)
+  return { phrase: typed.slice(start, end), title, dueDate, dueTime }
 }

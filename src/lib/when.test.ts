@@ -85,6 +85,117 @@ describe('a date typed into a title', () => {
     })
   })
 
+  it('reads a day of the month said without a linking word', () => {
+    expect(
+      parseWhen(chrono, 'Get the car inspected the 5th', today),
+    ).toMatchObject({ title: 'Get the car inspected', dueDate: '2026-11-05' })
+  })
+
+  it('takes "for" with the date, and leaves no linking word behind', () => {
+    expect(
+      parseWhen(
+        chrono,
+        'Schedule furnace service for november 5 at 10am',
+        today,
+      ),
+    ).toMatchObject({
+      title: 'Schedule furnace service',
+      dueDate: '2026-11-05',
+      dueTime: '10:00',
+    })
+  })
+
+  // Two readings nobody has ruled on; these are what the read test expects.
+  it('reads a weekday typed on that weekday as next week', () => {
+    expect(parseWhen(chrono, 'Take out the trash monday', today)).toMatchObject(
+      { dueDate: '2026-10-19' },
+    )
+    expect(
+      parseWhen(chrono, 'Take out the trash this monday', today),
+    ).toMatchObject({ dueDate: '2026-10-12' })
+    expect(parseWhen(chrono, 'Take out the trash today', today)).toMatchObject({
+      dueDate: '2026-10-12',
+    })
+  })
+
+  it('reads "next week" as the coming Monday', () => {
+    expect(parseWhen(chrono, 'Plan the party next week', today)).toMatchObject({
+      title: 'Plan the party',
+      dueDate: '2026-10-19',
+    })
+    expect(
+      parseWhen(chrono, 'Plan the party next week', '2026-10-15'),
+    ).toMatchObject({ dueDate: '2026-10-19' })
+    expect(
+      parseWhen(chrono, 'Plan the party next week', '2026-10-18'),
+    ).toMatchObject({ dueDate: '2026-10-19' })
+  })
+
+  it('does not take a day that is part of a name, or whose something it is', () => {
+    for (const title of [
+      'Watch Friday Night Lights with the kids',
+      "Email the teacher about Friday's field trip",
+      'Buy tickets for August: Osage County',
+      'Read Mondays are the worst to the kids',
+      'Kids dentist checkup, heads up the day before',
+    ])
+      expect(parseWhen(chrono, title, today), title).toBeNull()
+    // Typed with capitals throughout, a capital says nothing.
+    expect(
+      parseWhen(chrono, 'Call The Dentist Friday Morning Early', today),
+    ).toMatchObject({ dueDate: '2026-10-16' })
+  })
+
+  it.each([
+    ['Dinner at the Nguyens at 7 saturday', '19:00'],
+    ['Anniversary dinner reservation friday at 7:30', '19:30'],
+    ['pick up kids from practice at 3 friday', '15:00'],
+    ['dentist at 9 friday', '09:00'],
+    ['Breakfast with dad sunday at 7', '07:00'],
+    ['School drop off before work friday at 6', '06:00'],
+    ['Flu shot oct 20 9:15', '09:15'],
+    ['Call the vet friday at 14:30', '14:30'],
+    ['Lunch friday at noon', '12:00'],
+    ['Flight friday at 6am', '06:00'],
+  ])('works out the half of the day in %j', (title, dueTime) => {
+    expect(parseWhen(chrono, title, today)).toMatchObject({ dueTime })
+  })
+
+  it('reads a time with no day as today', () => {
+    expect(parseWhen(chrono, 'pick up kids at 3', today)).toMatchObject({
+      title: 'pick up kids',
+      dueDate: today,
+      dueTime: '15:00',
+    })
+  })
+
+  it.each([
+    ['wensday 6pm parent teacher conference', 'parent teacher conference', 2],
+    [
+      'take the dog to the groomer tommorow at 10',
+      'take the dog to the groomer',
+      1,
+    ],
+    ['Flu shots thrusday', 'Flu shots', 3],
+    ['Trash to the curb tonite', 'Trash to the curb', 0],
+    ['Renew the passes by febuary 2', 'Renew the passes', 113],
+  ])('reads the mistyped day in %j', (typed, title, days) => {
+    const read = parseWhen(chrono, typed, today)
+    expect(read).toMatchObject({ title })
+    expect(read?.dueDate).toBe(
+      new Date(Date.UTC(2026, 9, 12 + days)).toISOString().slice(0, 10),
+    )
+  })
+
+  it('keeps a mistyped word that is not the date as it was typed', () => {
+    expect(parseWhen(chrono, 'tmrw plans for satruday friday', today)).toEqual({
+      phrase: 'friday',
+      title: 'tmrw plans for satruday',
+      dueDate: '2026-10-16',
+      dueTime: null,
+    })
+  })
+
   it('leaves a title alone when there is no date, or nothing but a date', () => {
     expect(parseWhen(chrono, 'Fix closet door', today)).toBeNull()
     expect(parseWhen(chrono, 'Tomorrow', today)).toBeNull()

@@ -130,6 +130,14 @@ export function HeadsUpFields({
   value: Array<number>
   onChange: (days: Array<number>) => void
 }) {
+  // One read out of a title ("remind me 2 days before") may not be among the
+  // choices: it is shown beside them, so it can be seen and taken off.
+  const choices = [
+    ...HEADS_UP_CHOICES,
+    ...value
+      .filter((days) => !HEADS_UP_CHOICES.some((one) => one.days === days))
+      .map((days) => ({ days, label: `${days} days` })),
+  ].sort((a, b) => a.days - b.days)
   return (
     <Sheet
       title="Heads-up"
@@ -142,7 +150,7 @@ export function HeadsUpFields({
           onChange(picked.map(Number).sort((a, b) => a - b))
         }
       >
-        {HEADS_UP_CHOICES.map((choice) => (
+        {choices.map((choice) => (
           <ToggleGroupItem key={choice.days} value={String(choice.days)}>
             {choice.label}
           </ToggleGroupItem>

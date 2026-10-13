@@ -9,6 +9,11 @@ import type { JevRead, ReadContext, ReadField } from './read'
 const HOUSE = 1
 const KIDS = 2
 const PAPERWORK = 3
+const YARD = 4
+const PETS = 5
+const HEALTH = 6
+const CAR = 7
+const ERRANDS = 8
 const context: ReadContext = {
   today: '2026-10-13', // a Tuesday
   me: 'alex',
@@ -20,6 +25,12 @@ const context: ReadContext = {
     { id: HOUSE, name: 'House' },
     { id: KIDS, name: 'Kids' },
     { id: PAPERWORK, name: 'Paperwork' },
+    { id: YARD, name: 'Yard' },
+    { id: PETS, name: 'Pets' },
+    { id: HEALTH, name: 'Health' },
+    { id: CAR, name: 'Car' },
+    // One the rules know nothing about.
+    { id: ERRANDS, name: 'Errands' },
   ],
 }
 const read = (text: string, skip?: Array<ReadField>) =>
@@ -36,6 +47,12 @@ describe('whose a to-do is', () => {
     // A name that opens the title: it is theirs.
     ['Sam visit garden center', 'sam', 'visit garden center'],
     ['sam call the school tomorrow', 'sam', 'call the school'],
+    // The asking is not the task.
+    ['sam can you take out the trash', 'sam', 'take out the trash'],
+    ['Sam, could you please book the sitter', 'sam', 'book the sitter'],
+    // A name the date stood in front of.
+    ['thurs - sam - get the oil changed', 'sam', 'get the oil changed'],
+    ["I've got to return the drill", 'alex', 'return the drill'],
   ])('reads %j', (text, assignee, title) => {
     expect(read(text)).toMatchObject({ title, fields: { assignee } })
   })
@@ -47,6 +64,10 @@ describe('whose a to-do is', () => {
     "Sam's boots need new laces",
     'Samosas for the party',
     'Visit Sam at the garden center',
+    // A name that opens a list of names, or a sentence about them.
+    'Sam and Alex anniversary dinner reservation',
+    'Sam & Alex date night',
+    'Sam is out of town',
   ])('leaves %j with nobody', (text) => {
     expect(read(text)).toMatchObject({ title: text, fields: {} })
     expect(read(text).fields.assignee).toBeUndefined()
@@ -72,9 +93,54 @@ describe('the area', () => {
     })
   })
 
-  it('is not guessed', () => {
-    expect(read('Pay property tax').fields.areaId).toBeUndefined()
-    expect(read('Housekeeping deposit').fields.areaId).toBeUndefined()
+  it('is read from a heading with a dash', () => {
+    expect(read('Car - rotate the tires')).toMatchObject({
+      title: 'rotate the tires',
+      fields: { areaId: CAR },
+    })
+    expect(read('order flea medicine #pets, must do')).toMatchObject({
+      title: 'order flea medicine',
+      fields: { areaId: PETS, mustNotMiss: true },
+    })
+    // Not a heading: the word runs on.
+    expect(read('House-warming gift for the Lees').title).toBe(
+      'House-warming gift for the Lees',
+    )
+  })
+
+  it.each([
+    ['Pay property tax', PAPERWORK],
+    ['Mow the lawn', YARD],
+    ['Replace smoke detector batteries', HOUSE],
+    ['clean the litter box', PETS],
+    ['Refill my allergy prescription', HEALTH],
+    ['Put the winter tires on', CAR],
+    ['Call the school about pickup', KIDS],
+    // What the area is about beats what is being done for it.
+    ["Pick up the dog's medicine", PETS],
+    ['Renew car registration', CAR],
+  ])('is hinted at by %j, which stays whole', (text, areaId) => {
+    expect(read(text)).toMatchObject({ title: text, fields: { areaId } })
+  })
+
+  it.each([
+    'Housekeeping deposit',
+    'Buy a birthday present',
+    'Call 311 about the pothole',
+    // Two areas as strongly as each other: neither.
+    'Pay the daycare invoice',
+    'Take the kids and the dog to the park',
+  ])('is left empty for %j', (text) => {
+    expect(read(text).fields.areaId).toBeUndefined()
+  })
+
+  it('is hinted at only for an area the household has', () => {
+    expect(
+      readTitle(chrono, 'Mow the lawn', {
+        ...context,
+        areas: [{ id: ERRANDS, name: 'Errands' }],
+      }).fields.areaId,
+    ).toBeUndefined()
   })
 })
 
@@ -96,9 +162,45 @@ describe('the heads-up', () => {
     })
   })
 
-  it('is left in the title when it is not one of the choices', () => {
-    const text = 'Renew passport, remind me 5 days before'
-    expect(read(text)).toMatchObject({ title: text, fields: {} })
+  it.each([
+    ['Renew the dog license, ping me a week before', [7]],
+    ['Get the car inspected, alert me 2 days ahead', [2]],
+    ['Mail the wedding gift, reminder 2 days before', [2]],
+    ['Kids dentist checkup heads up the day before', [1]],
+    ['Book the cabin, remind me a week before and the day before', [1, 7]],
+    ['Renew passport, give me a heads up a month in advance', [30]],
+    ['Renew passport, let me know 5 days before', [5]],
+  ])('is read from %j', (text, headsUpDays) => {
+    const got = read(text)
+    expect(got.fields.headsUpDays).toEqual(headsUpDays)
+    expect(got.title).not.toMatch(/before|ahead|advance|,/)
+  })
+
+  it.each([
+    'Send the rent check dont remind me',
+    "Send the rent check, don't remind me",
+    'Send the rent check no alerts',
+    'Send the rent check, no need to remind us',
+  ])('is switched off by %j', (text) => {
+    expect(read(text)).toMatchObject({
+      title: 'Send the rent check',
+      fields: { headsUpDays: [] },
+    })
+  })
+
+  it('is not read from how far ahead of something else', () => {
+    for (const text of [
+      'Order the cake 2 weeks before the party',
+      'Remind Sam 2 days before the trip',
+      'Set up a fraud alert',
+    ])
+      expect(read(text).fields.headsUpDays, text).toBeUndefined()
+  })
+
+  it('is left in the title when it is longer than can be kept', () => {
+    const text = 'Renew passport, remind me 400 days before'
+    expect(read(text)).toMatchObject({ title: text })
+    expect(read(text).fields.headsUpDays).toBeUndefined()
   })
 })
 
@@ -109,8 +211,25 @@ describe('the flag', () => {
     ['Renew passports must not miss', 'Renew passports'],
     ["Mortgage payment, don't forget", 'Mortgage payment'],
     ['Submit FSA receipts urgent', 'Submit FSA receipts'],
+    ['Pick up the prescription asap', 'Pick up the prescription'],
+    ['high priority: fix the leaking roof', 'fix the leaking roof'],
+    ['Urgent - call the bank', 'call the bank'],
+    ['URGENT call the insurance company', 'call the insurance company'],
+    ['order flea medicine, must do', 'order flea medicine'],
+    ['Renew passports, important, remind me a week before', 'Renew passports'],
   ])('is read from %j', (text, title) => {
     expect(read(text)).toMatchObject({ title, fields: { mustNotMiss: true } })
+  })
+
+  // A stress word in the run of the sentence describes something.
+  it.each([
+    'Urgent care follow-up call',
+    'Read the important notice from the HOA',
+    'Watch the Critical Role finale',
+    'URGENT CARE FOLLOW-UP',
+  ])('is not read from %j, which stays whole', (text) => {
+    expect(read(text).title).toBe(text)
+    expect(read(text).fields.mustNotMiss).toBeUndefined()
   })
 
   it('is not read from a sentence that just ends with one', () => {
@@ -150,7 +269,9 @@ describe('a whole title', () => {
       title: 'Sam: call the school',
       fields: { dueDate: '2026-10-14' },
     })
-    expect(read('Sam: call the school tomorrow', ['who', 'when'])).toEqual({
+    expect(
+      read('Sam: call the school tomorrow', ['who', 'when', 'area']),
+    ).toEqual({
       title: 'Sam: call the school tomorrow',
       fields: {},
       phrases: {},
@@ -227,10 +348,13 @@ describe("Jev's reading", () => {
   })
 
   it('leaves to the rules each field it did not answer', () => {
-    // Only the area came back: who, when and the flag are read as before.
+    // Only the area came back: who, when and the flag are read as before,
+    // and the area the rules would have hinted at is not.
+    const { area: _hinted, ...phrases } = read(text).phrases
     expect(withJev(text, { area: HOUSE, drops: [] })).toEqual({
       ...read(text),
       fields: { ...read(text).fields, areaId: HOUSE },
+      phrases,
       guessed: { area: '' },
     })
     // The day came back and the rest did not.

@@ -12,7 +12,7 @@
 // these rules read the rest. Jev fills the gaps: these rules read first, and
 // Jev is asked only about what they left empty. Either way the rules read all
 // of it when there is no answer.
-import { HEADS_UP_CHOICES } from './board'
+import { hintedArea } from './area-hints'
 import { parseWhen } from './when'
 import type { LocalDate, LocalTime } from './dates'
 import type { DateParser } from './when'
@@ -108,27 +108,72 @@ export interface TitleRead {
   guessed: Partial<Record<ReadField, string>>
 }
 
-const OFFERED = new Set(HEADS_UP_CHOICES.map((choice) => choice.days))
 const COUNT: Partial<Record<string, number>> = {
   a: 1,
   an: 1,
+  the: 1,
   one: 1,
   two: 2,
   three: 3,
+  four: 4,
+  five: 5,
+  six: 6,
+  seven: 7,
+  ten: 10,
 }
-const SPAN = String.raw`(?:\d+|an?|one|two|three)\s+(?:day|week)s?`
+const UNIT_DAYS: Partial<Record<string, number>> = {
+  day: 1,
+  night: 1,
+  week: 7,
+  month: 30,
+}
+/** The longest heads-up the server keeps, and how many of them. */
+const MOST_DAYS = 365
+const MOST_HEADS_UPS = 8
+// "2 days", "a week", "the day": how far ahead.
+const SPAN = String.raw`(?:(?:\d+|an?|one|two|three|four|five|six|seven|ten)\s+(?:day|week|month)s?|the\s+(?:day|night|week|month))`
+const AHEAD = String.raw`(?:before(?:hand)?|ahead(?:\s+of\s+time)?|early|earlier|in\s+advance|prior|out)`
+// "remind me", "heads up", "ping us", "let me know", "give me a heads up".
+const ASK = String.raw`(?:(?:give|send)\s+(?:me|us)\s+an?\s+)?(?:(?:remind(?:er)?|heads[- ]?up|alert|warn(?:ing)?|nudge|ping|notify)(?:\s+(?:me|us))?|(?:tell|let)\s+(?:me|us)(?:\s+know)?)`
+// One or several, each with or without its "before": "a week before and the
+// day before", "3 days and 1 day before". Not "2 days before the party":
+// that is ahead of something else, not of the deadline.
 const HEADS_UP = new RegExp(
-  String.raw`[,;]?\s*\b(?:remind(?:er)?(?:\s+(?:me|us))?|heads[- ]?up|alert(?:\s+(?:me|us))?|warn(?:\s+(?:me|us))?|nudge(?:\s+(?:me|us))?)\s+(${SPAN}(?:\s*(?:,|and|&)\s*${SPAN})*)\s+(?:before|ahead|early|in advance)\b`,
+  String.raw`[,;]?\s*\b(?:and\s+)?${ASK}\s+((?:${SPAN}(?:\s+${AHEAD})?\s*(?:,\s*and|,|and|&)\s*)*${SPAN}\s+${AHEAD})\b(?!\s+(?:the|my|our|his|her|their|its|that|this|we|i|he|she|they|it)\b)`,
   'i',
 )
-const NO_HEADS_UP = /[,;]?\s*\bno (reminder|heads[- ]?up|alert)s?\b/i
+const NO_HEADS_UP =
+  /[,;]?\s*\b(?:(?:no|without(?:\s+an?)?)\s+(?:reminder|heads[- ]?up|alert|notification|nudge|ping)s?|(?:don'?t|do\s+not|no\s+need\s+to|never)\s+(?:remind|alert|ping|nudge|notify|warn)(?:\s+(?:me|us))?)\b/i
 // "!" on its own at the end, or "!!". Not the "!" that ends an ordinary
 // sentence: the flag alerts everyone until the to-do is done.
 const FLAG_MARK = /(\s+!+|!!+)\s*$/
-const FLAG_WORDS =
-  /[,;]?\s*\b(must not miss|can'?t miss|do not forget|don'?t forget|important|urgent|critical)\b[:!,]?(\s+to\b)?/i
+// Said as a phrase, wherever it is.
+const FLAG_PHRASE =
+  /[,;]?\s*(?:[-–]\s+)?\b(must not miss|can'?t miss|cannot miss|do not forget|don'?t forget|can'?t forget|must not forget|asap)\b[:!,]?(\s+to\b)?/i
+// A word that stresses only where it is set apart: "Urgent: call the bank",
+// "Renew the passports, important". In the run of the sentence it describes
+// something ("Urgent care", "the important notice") and is the task's.
+const STRESS = String.raw`(?:very\s+|super\s+)?(?:important|urgent|critical|(?:high|top)\s+priority|must[- ]do|time[- ]sensitive)`
+const FLAG_OPENS = new RegExp(String.raw`^\s*${STRESS}\s*[:!–-]+\s+`, 'i')
+const FLAG_CLOSES = new RegExp(
+  String.raw`(?:[,;]|\s[-–(])?\s*\b${STRESS}\)?[!.]*\s*$`,
+  'i',
+)
+const FLAG_BETWEEN = new RegExp(String.raw`[,;]\s*${STRESS}\s*(?=[,;])`, 'i')
+// Shouted, in a title that is not: "URGENT call the insurance company".
+const FLAG_SHOUTED =
+  /(?:[,;]|\s[-–])?\s*\b(URGENT|IMPORTANT|CRITICAL|(?:HIGH|TOP) PRIORITY|MUST DO)\b[:!,]?(?=.*\p{Ll})/u
+const FLAG_WORDS = [
+  FLAG_PHRASE,
+  FLAG_OPENS,
+  FLAG_CLOSES,
+  FLAG_BETWEEN,
+  FLAG_SHOUTED,
+]
 const MINE =
-  /^\s*(remind me to|i need to|i should|i have to|i must|i'll|i will)\s+/i
+  /^\s*(remind me to|note to self:?|i need to|i should|i ought to|i have to|i've got to|i gotta|i must|i'll|i will|i'm going to|i am going to)\s+/i
+// "Michelle can you take out the trash": the asking is not the task.
+const ASKING = String.raw`(?:(?:can|could|will|would)\s+you\s+(?:please\s+)?|please\s+)`
 
 const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
@@ -142,19 +187,25 @@ function tidy(text: string): string {
 
 // Where a name means "this is theirs". A name in passing does not: "Call Sam"
 // and "Sam's eye appointment" are about Sam, not Sam's to do. A name that
-// opens the title does: "Sam visit the garden center".
+// opens the title does: "Sam visit the garden center". Unless it opens a
+// list of names or a sentence about them: "Sam and Michelle anniversary
+// dinner".
 function whose(name: string): Array<RegExp> {
   const n = escaped(name)
   return [
     new RegExp(String.raw`(^|\s)@${n}\b`, 'i'),
-    new RegExp(String.raw`^\s*${n}\s*[:,-]\s+`, 'i'),
+    new RegExp(String.raw`^\s*${n}\s*[:,-]\s+${ASKING}?`, 'i'),
+    new RegExp(String.raw`^\s*${n}\s+${ASKING}`, 'i'),
     new RegExp(
       String.raw`^\s*${n}\s+(to|should|needs to|has to|must|can)\s+`,
       'i',
     ),
     new RegExp(String.raw`^\s*(ask|tell|have|get|remind)\s+${n}\s+to\s+`, 'i'),
     new RegExp(String.raw`\s*[-–(]\s*${n}\)?\s*$`, 'i'),
-    new RegExp(String.raw`^\s*${n}\s+`, 'i'),
+    new RegExp(
+      String.raw`^\s*${n}\s+(?!(?:and|or|vs|is|was|are|were)\b|[&+/-])`,
+      'i',
+    ),
   ]
 }
 
@@ -251,46 +302,64 @@ function reading(
     return found
   }
 
-  if (reads('flag') && (take('flag', FLAG_MARK) ?? take('flag', FLAG_WORDS)))
-    fields.mustNotMiss = true
+  /** Whoever the title is handed to, their name taken out of what is left. */
+  const theirs = () =>
+    context.people.find((one) =>
+      whose(one.name).some((pattern) => take('who', pattern)),
+    )
+
+  const marked = reads('flag') && take('flag', FLAG_MARK) !== null
+  if (marked) fields.mustNotMiss = true
 
   if (reads('headsUp')) {
     if (take('headsUp', NO_HEADS_UP)) fields.headsUpDays = []
     else {
       const days = [
         ...(HEADS_UP.exec(rest)?.[1] ?? '').matchAll(
-          /(\d+|an?|one|two|three)\s+(day|week)/gi,
+          /(\d+|an?|the|one|two|three|four|five|six|seven|ten)\s+(day|night|week|month)/gi,
         ),
       ].map(
         ([, count, unit]) =>
           (COUNT[count.toLowerCase()] ?? Number(count)) *
-          (unit.toLowerCase() === 'week' ? 7 : 1),
+          (UNIT_DAYS[unit.toLowerCase()] ?? 1),
       )
-      // Only what the picker offers; anything else stays in the title.
-      if (days.length > 0 && days.every((n) => OFFERED.has(n))) {
+      const each = [...new Set(days)].sort((a, b) => a - b)
+      // Only what can be kept; anything else stays in the title.
+      if (
+        each.length > 0 &&
+        each.length <= MOST_HEADS_UPS &&
+        each.every((n) => n >= 1 && n <= MOST_DAYS)
+      ) {
         take('headsUp', HEADS_UP)
-        fields.headsUpDays = [...new Set(days)].sort((a, b) => a - b)
+        fields.headsUpDays = each
       }
     }
   }
 
+  // After the heads-up, so a stress that closed the task still closes it:
+  // "Renew the passports, important, remind me a week before".
+  if (
+    reads('flag') &&
+    !marked &&
+    FLAG_WORDS.some((pattern) => take('flag', pattern))
+  )
+    fields.mustNotMiss = true
+
   if (reads('who')) {
-    const person = context.people.find((one) =>
-      whose(one.name).some((pattern) => take('who', pattern)),
-    )
+    const person = theirs()
     if (person) fields.assignee = person.id
     else if (take('who', MINE) ?? take('who', /\s*[-–(]\s*me\)?\s*$/i))
       fields.assignee = context.me
   }
 
-  // An area said as a tag or a heading: "#kids", "House: ...".
+  // An area said as a tag or a heading: "#kids", "House: ...", "Car - ...".
   let named = false
   if (reads('area')) {
     const area = context.areas.find((one) => {
       const n = escaped(one.name)
       return (
         take('area', new RegExp(String.raw`(^|\s)#${n}\b`, 'i')) ??
-        take('area', new RegExp(String.raw`^\s*${n}\s*:\s+`, 'i'))
+        take('area', new RegExp(String.raw`^\s*${n}(?:\s*:|\s+[-–])\s+`, 'i'))
       )
     })
     if (area) {
@@ -308,7 +377,14 @@ function reading(
     fields.dueTime = when.dueTime
     phrases.when = when.phrase
   }
-  const title = tidy(when ? when.title : rest)
+  rest = tidy(when ? when.title : rest)
+  // A name the date stood in front of: "thurs - Michelle - get the oil
+  // changed".
+  if (when && reads('who') && fields.assignee === undefined) {
+    const person = theirs()
+    if (person) fields.assignee = person.id
+  }
+  const title = tidy(rest)
   // Nothing but things to read is not a to-do: "Tomorrow" stays "Tomorrow".
   // Jev's reading is the first to go: the rules alone may leave a title.
   if (!title)
@@ -316,19 +392,18 @@ function reading(
       ? reading(parser, text, { ...context, jev: null })
       : { read: unread, gaps: [] }
 
-  // Or an area named in passing, which stays in the title: "Flu shots for
-  // the kids" is in Kids.
+  // Or an area the title only points to, in words that stay in it: "Flu
+  // shots for the kids" is in Kids, "Mow the lawn" in Yard.
   if (reads('area') && fields.areaId === undefined) {
-    const words = new Set(title.toLowerCase().split(/[^\p{L}\p{N}]+/u))
-    const area = context.areas.find((one) => words.has(one.name.toLowerCase()))
-    if (area) {
-      fields.areaId = area.id
-      phrases.area = area.name.toLowerCase()
+    const hinted = hintedArea(title, context.areas)
+    if (hinted) {
+      fields.areaId = hinted.area.id
+      phrases.area = hinted.phrase
     }
   }
 
   // What the rules left empty. The area is one of them unless it was named
-  // outright: one named in passing is a hint, and Jev may know better.
+  // outright: one the title only points to is a hint, and Jev may know better.
   const left: Record<ReadField, boolean> = {
     when: fields.dueDate === undefined,
     who: fields.assignee === undefined,
