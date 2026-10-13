@@ -100,6 +100,11 @@ export function formatWeekday(date: LocalDate): string {
   return format(date, { weekday: 'short' })
 }
 
+/** "Thursday" */
+export function formatLongWeekday(date: LocalDate): string {
+  return format(date, { weekday: 'long' })
+}
+
 /** "Oct 30" */
 export function formatMonthDay(date: LocalDate): string {
   return format(date, { month: 'short', day: 'numeric' })

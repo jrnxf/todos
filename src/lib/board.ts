@@ -1,6 +1,13 @@
 // How the screens slice the household list. Pure: given the items and
 // today's date, every view derives from here.
-import { addDays, diffDays, formatDay, formatTime, weekday } from './dates'
+import {
+  addDays,
+  diffDays,
+  formatDay,
+  formatLongWeekday,
+  formatTime,
+  weekday,
+} from './dates'
 import type { Todo } from '@/db/schema'
 import type { LocalDate } from './dates'
 
@@ -13,7 +20,7 @@ export const HEADS_UP_CHOICES = [
 
 /** A deadline this many days out or fewer is drawn as close. */
 const SOON_DAYS = 3
-/** "This week" on Up next: the next seven days after today. */
+/** "Week ahead" on Up next and Today: the next seven days after today. */
 const WEEK_DAYS = 7
 
 export function isOpen(item: Todo): boolean {
@@ -91,6 +98,16 @@ export function dueLabel(item: Todo, today: LocalDate): DueLabel | null {
     return { text: `${day}${time} · ${until}`, tone: 'soon', timed }
   }
   return { text: `${day}${time}`, tone: 'plain', timed }
+}
+
+/**
+ * A day still to come, as a sentence would name it: "tomorrow", "Friday"
+ * inside the week, "Tue, Oct 20" from the same weekday next week on.
+ */
+export function comingDay(date: LocalDate, today: LocalDate): string {
+  const days = diffDays(date, today)
+  if (days === 1) return 'tomorrow'
+  return days < WEEK_DAYS ? formatLongWeekday(date) : formatDay(date)
 }
 
 /** "3 days, 1 day before", or "None". */

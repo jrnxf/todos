@@ -41,7 +41,7 @@ function UpNextScreen() {
 
       <Section title="Overdue" todos={groups.overdue} />
       <Section title="Today" todos={groups.today} />
-      <Section title="This week" todos={groups.week} />
+      <Section title="Week ahead" todos={groups.week} />
       <Section title="Later" todos={groups.later} />
 
       {dated === 0 && (
