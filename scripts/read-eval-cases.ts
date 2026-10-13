@@ -7,9 +7,16 @@
  * their tests or the Jev code were opened, the way people type household
  * to-dos rather than the way a parser likes them, so no strategy had a head
  * start. The rules were then tuned against those 100, so the last 50 are held
- * out: written before that tuning began and never tuned against. They are the
- * honest number. Do not fix a rule because of a held-out miss; write a new
- * sentence into the 100 instead, or the set stops measuring anything.
+ * out: written before that tuning began and never tuned against. Do not fix a
+ * rule because of a held-out miss; write a new sentence into the 100 instead,
+ * or the set stops measuring anything.
+ *
+ * A fourth set, the fresh 50, came later. An audit of how the decision models
+ * were asked read every held-out miss, so that set could no longer judge the
+ * requests the audit led to. The fresh 50 were written before any of those
+ * requests, and before the rules or any model had read them. Ten have a day,
+ * a time or a word of stress inside a name ("Saturday Night Live"). Nothing
+ * is tuned against them, wording or cut-off: they are the honest number now.
  */
 
 // A made-up household on a fixed day, so every run asks the same thing.
@@ -943,10 +950,297 @@ export const HELD_OUT_CASES: Array<Case> = [
   ['groceries', { title: 'groceries', area: null }],
 ]
 
+export const FRESH_CASES: Array<Case> = [
+  // Names: whose it is, and names that are only mentioned.
+  [
+    'Sam - renew the library cards before they expire',
+    { title: 'renew the library cards before they expire', who: 'sam' },
+  ],
+  [
+    'ask Michelle to drop off the donation bags friday',
+    {
+      title: 'drop off the donation bags',
+      date: '2026-10-16',
+      who: 'michelle',
+      area: null,
+    },
+  ],
+  [
+    "Michelle's physical on the 29th at 8:15am",
+    {
+      title: "Michelle's physical",
+      date: '2026-10-29',
+      time: '08:15',
+      area: 'Health',
+    },
+  ],
+  [
+    'I need to call the insurance company about the claim',
+    {
+      title: 'call the insurance company about the claim',
+      who: 'sam',
+      area: 'Paperwork',
+    },
+  ],
+  [
+    'michelle: take Biscuit to the groomer thursday at 4pm',
+    {
+      title: 'take Biscuit to the groomer',
+      date: '2026-10-15',
+      time: '16:00',
+      who: 'michelle',
+      area: 'Pets',
+    },
+  ],
+  [
+    'note to self: cancel the gym membership',
+    { title: 'cancel the gym membership', who: 'sam' },
+  ],
+
+  // Dates and times.
+  [
+    'Dishwasher repair wednesday 1pm',
+    {
+      title: 'Dishwasher repair',
+      date: '2026-10-14',
+      time: '13:00',
+      area: 'House',
+    },
+  ],
+  [
+    'renew car registration by nov 30',
+    { title: 'renew car registration', date: '2026-11-30', area: 'Car' },
+  ],
+  [
+    'flu shot tmrw 9:15',
+    { title: 'flu shot', date: '2026-10-14', time: '09:15', area: 'Health' },
+  ],
+  [
+    'Mail the rent check on the 1st',
+    { title: 'Mail the rent check', date: '2026-11-01' },
+  ],
+  [
+    'Pick up the kids early friday 2:30pm',
+    {
+      title: 'Pick up the kids early',
+      date: '2026-10-16',
+      time: '14:30',
+      area: 'Kids',
+    },
+  ],
+  [
+    'sign up for spring soccer before december 5',
+    { title: 'sign up for spring soccer', date: '2026-12-05', area: 'Kids' },
+  ],
+  [
+    'Take the minivan in for new tires monday at 8',
+    {
+      title: 'Take the minivan in for new tires',
+      date: '2026-10-19',
+      time: '08:00',
+      area: 'Car',
+    },
+  ],
+  [
+    'Water the tomatoes tonight',
+    { title: 'Water the tomatoes', date: '2026-10-13', area: 'Yard' },
+  ],
+  [
+    'Plumber coming 10/21 at 11am',
+    {
+      title: 'Plumber coming',
+      date: '2026-10-21',
+      time: '11:00',
+      area: 'House',
+    },
+  ],
+  [
+    'day after tomorrow: return library books',
+    { title: 'return library books', date: '2026-10-15', area: null },
+  ],
+
+  // Alerts, and a span of days that is not one.
+  [
+    'Passport photos nov 6, remind me 3 days before',
+    {
+      title: 'Passport photos',
+      date: '2026-11-06',
+      area: 'Paperwork',
+      headsUp: [3],
+    },
+  ],
+  [
+    "Biscuit's heartworm pill on the 1st, heads up the day before",
+    {
+      title: "Biscuit's heartworm pill",
+      date: '2026-11-01',
+      area: 'Pets',
+      headsUp: [1],
+    },
+  ],
+  [
+    'Dinner at the Hendersons saturday 6pm, no reminder',
+    {
+      title: 'Dinner at the Hendersons',
+      date: '2026-10-17',
+      time: '18:00',
+      area: null,
+      headsUp: [],
+    },
+  ],
+  [
+    'Car inspection due nov 20 - ping me a week before and 2 days before',
+    {
+      title: 'Car inspection',
+      date: '2026-11-20',
+      area: 'Car',
+      headsUp: [2, 7],
+    },
+  ],
+  [
+    'Start the thank you notes 3 days before the party',
+    { title: 'Start the thank you notes 3 days before the party', area: null },
+  ],
+
+  // Emphasis that is a flag, and emphasis that is not.
+  [
+    'URGENT: fix the gate latch before Biscuit gets out',
+    { title: 'fix the gate latch before Biscuit gets out', flag: true },
+  ],
+  [
+    'Refill the inhaler prescription, do not forget',
+    { title: 'Refill the inhaler prescription', area: 'Health', flag: true },
+  ],
+  [
+    'Submit the FSA receipts by friday!!',
+    {
+      title: 'Submit the FSA receipts',
+      date: '2026-10-16',
+      area: 'Paperwork',
+      flag: true,
+    },
+  ],
+  [
+    'Kindergarten registration closes thursday - must not miss',
+    {
+      title: 'Kindergarten registration closes',
+      date: '2026-10-15',
+      area: 'Kids',
+      flag: true,
+    },
+  ],
+  [
+    'Schedule a non-urgent checkup for Sam',
+    { title: 'Schedule a non-urgent checkup for Sam', area: 'Health' },
+  ],
+  [
+    'asap - get the brake light replaced',
+    { title: 'get the brake light replaced', area: 'Car', flag: true },
+  ],
+  [
+    'Important: sign the permission slip tonight',
+    {
+      title: 'sign the permission slip',
+      date: '2026-10-13',
+      area: 'Kids',
+      flag: true,
+    },
+  ],
+
+  // Areas named outright.
+  [
+    '#health schedule the mammogram',
+    { title: 'schedule the mammogram', area: 'Health' },
+  ],
+  [
+    'Yard: order firewood for delivery on the 23rd',
+    { title: 'order firewood for delivery', date: '2026-10-23', area: 'Yard' },
+  ],
+  [
+    'paperwork - shred the old bank statements',
+    { title: 'shred the old bank statements', area: 'Paperwork' },
+  ],
+  [
+    'defrost the freezer #house saturday',
+    { title: 'defrost the freezer', date: '2026-10-17', area: 'House' },
+  ],
+
+  // Areas implied, some with no word that gives them away.
+  [
+    'Pack the diaper bag for daycare',
+    { title: 'Pack the diaper bag for daycare', area: 'Kids' },
+  ],
+  [
+    'Get the snow tires put on',
+    { title: 'Get the snow tires put on', area: 'Car' },
+  ],
+  [
+    'Clean out the hamster cage',
+    { title: 'Clean out the hamster cage', area: 'Pets' },
+  ],
+  ['Rotate the mattress', { title: 'Rotate the mattress', area: 'House' }],
+  ['Split the hostas', { title: 'Split the hostas', area: 'Yard' }],
+  ['Dispute the hospital bill', { title: 'Dispute the hospital bill' }],
+  [
+    'Order new contact lenses',
+    { title: 'Order new contact lenses', area: 'Health' },
+  ],
+  ['Bleed the radiators', { title: 'Bleed the radiators', area: 'House' }],
+
+  // A day, a time or a word of stress inside a name: none of it is to be
+  // read.
+  [
+    'Watch Saturday Night Live with Michelle',
+    { title: 'Watch Saturday Night Live with Michelle', area: null },
+  ],
+  [
+    'Order Taco Tuesday supplies',
+    { title: 'Order Taco Tuesday supplies', area: null },
+  ],
+  [
+    'Rewatch 500 Days of Summer',
+    { title: 'Rewatch 500 Days of Summer', area: null },
+  ],
+  [
+    'Return the Critical Thinking workbook to school',
+    { title: 'Return the Critical Thinking workbook to school', area: 'Kids' },
+  ],
+  [
+    'Buy the 9 to 5 soundtrack on vinyl',
+    { title: 'Buy the 9 to 5 soundtrack on vinyl', area: null },
+  ],
+  [
+    'Borrow the Sunday Suppers cookbook',
+    { title: 'Borrow the Sunday Suppers cookbook', area: null },
+  ],
+  [
+    'Drop off film at One Hour Photo',
+    { title: 'Drop off film at One Hour Photo', area: null },
+  ],
+  [
+    'Reserve seats for the midnight premiere',
+    { title: 'Reserve seats for the midnight premiere', area: null },
+  ],
+  [
+    'Set up the First Friday art walk carpool',
+    { title: 'Set up the First Friday art walk carpool', area: null },
+  ],
+  [
+    'Renew the Urgent Care Plus membership',
+    { title: 'Renew the Urgent Care Plus membership' },
+  ],
+]
+
+/**
+ * `tuned`: the rules were tuned against it, so a cut-off may be chosen on it
+ * too. `held`: never tuned against. `fresh`: never tuned against, and written
+ * before the requests it judges; the report shows it first.
+ */
 export const SETS = [
-  { name: 'First 30', cases: FIRST_CASES },
-  { name: 'New 70', cases: NEW_CASES },
-  { name: 'Held out 50', cases: HELD_OUT_CASES },
+  { name: 'First 30', cases: FIRST_CASES, kind: 'tuned' },
+  { name: 'New 70', cases: NEW_CASES, kind: 'tuned' },
+  { name: 'Held out 50', cases: HELD_OUT_CASES, kind: 'held' },
+  { name: 'Fresh 50', cases: FRESH_CASES, kind: 'fresh' },
 ] as const
 
 export const CASES: Array<Case> = SETS.flatMap((set) => set.cases)
