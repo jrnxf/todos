@@ -1,5 +1,5 @@
 // How well is a to-do's title read, and is the way the app asks Jev the best
-// way to ask it? 300 household sentences, each with the fill a person would
+// way to ask it? 400 household sentences, each with the fill a person would
 // expect (scripts/read-eval-cases.ts), are read every way in
 // scripts/read-eval-ways.ts and scored field by field, side by side:
 //

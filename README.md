@@ -77,7 +77,7 @@ database, make a Google sign-in client, set the settings, deploy.
 | `src/lib/read.ts`        | Reading who, tag, heads-up and flag out of a title. With tests  |
 | `src/lib/verify.ts`      | What a decision model is asked about that reading, and no more  |
 | `src/server/jev-read.ts` | The optional check of that reading by TypeSafe's Jev            |
-| `scripts/read-eval.ts`   | `bun run eval:read`: scores the ways to read 300 test sentences |
+| `scripts/read-eval.ts`   | `bun run eval:read`: scores the ways to read 400 test sentences |
 | `src/alerts/rules.ts`    | Which alerts exist and when. Pure, with tests                   |
 | `src/alerts/tick.ts`     | One scheduler pass: send what fell due since the last pass      |
 | `src/alerts/notify.ts`   | The one way an alert leaves the app (Pushover today)            |

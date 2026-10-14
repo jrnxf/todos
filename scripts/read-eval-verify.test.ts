@@ -50,17 +50,18 @@ const MICHELLE = 'who_0'
 const SAM = 'who_1'
 
 describe('the sentences', () => {
-  it('are 300, in five sets, none of them twice', () => {
+  it('are 400, in six sets, none of them twice', () => {
     expect(SETS.map((set) => [set.name, set.cases.length, set.kind])).toEqual([
       ['First 30', 30, 'tuned'],
       ['New 70', 70, 'tuned'],
       ['Held out 50', 50, 'seen'],
       ['Fresh 50', 50, 'seen'],
-      ['Unseen 100', 100, 'unseen'],
+      ['Unseen 100', 100, 'tuned'],
+      ['Untouched 100', 100, 'unseen'],
     ])
     expect(
       new Set(CASES.map(([sentence]) => sentence.toLowerCase())).size,
-    ).toBe(300)
+    ).toBe(400)
   })
 })
 

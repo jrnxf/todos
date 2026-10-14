@@ -26,6 +26,11 @@
  * belongs to the task. Nothing is tuned against them: they are the honest
  * number now. Do not fix a rule, a wording or a cut-off because of a miss in
  * them; write a new sentence into the first 100 instead.
+ *
+ * That held until the owner had the rules fixed for the unseen 100's own
+ * misses, which made it a tuned set. A sixth set, the untouched 100, was
+ * written first, before any rule was changed or any miss read again, and is
+ * the honest number now.
  */
 
 // A made-up household on a fixed day, so every run asks the same thing.
@@ -1817,6 +1822,511 @@ export const UNSEEN_CASES: Array<Case> = [
 ]
 
 /**
+ * Untouched: written after the unseen 100's misses were read and before the
+ * rules were changed because of them, so the unseen 100 is now a tuned set.
+ * The same shape and mix as the unseen 100, with its own traps: a name that
+ * is only mentioned or only starts like one ("Samantha", "Sam's Club"), a
+ * day, an hour or a holiday that belongs to the task, and a tag's name used
+ * as a word. The same choices as the other sets are taken where a sentence
+ * leaves one, and a run of exclamation marks is stress, as "!!" is. Nothing
+ * is tuned against them: do not fix a rule, a wording or a cut-off because
+ * of a miss in them; write a new sentence into a tuned set instead.
+ */
+export const UNTOUCHED_CASES: Array<Case> = [
+  // Names: whose it is, and names that are only mentioned.
+  [
+    'get Sam to sweep the porch saturday',
+    { title: 'sweep the porch', date: '2026-10-17', who: 'sam', tag: 'House' },
+  ],
+  [
+    'Michelle is going to pick up the dry cleaning thursday',
+    {
+      title: 'pick up the dry cleaning',
+      date: '2026-10-15',
+      who: 'michelle',
+      tag: null,
+    },
+  ],
+  [
+    'could Michelle grab milk on the way home',
+    { title: 'grab milk on the way home', who: 'michelle', tag: null },
+  ],
+  [
+    'Text Michelle the address for the party',
+    { title: 'Text Michelle the address for the party', tag: null },
+  ],
+  [
+    'Michelle Obama book club pick due friday',
+    { title: 'Michelle Obama book club pick', date: '2026-10-16', tag: null },
+  ],
+  [
+    'Sam needs to return the library books by wednesday',
+    { title: 'return the library books', date: '2026-10-14', who: 'sam' },
+  ],
+  [
+    'pick up Michelle from the train tomorrow at 6:15pm',
+    {
+      title: 'pick up Michelle from the train',
+      date: '2026-10-14',
+      time: '18:15',
+      tag: null,
+    },
+  ],
+  [
+    'Michelle: book the vet for Biscuit',
+    { title: 'book the vet for Biscuit', who: 'michelle', tag: 'Pets' },
+  ],
+  [
+    'me - call the bank about the fraud alert',
+    { title: 'call the bank about the fraud alert', who: 'sam' },
+  ],
+  [
+    'We should repaint the hallway',
+    { title: 'repaint the hallway', tag: 'House' },
+  ],
+  [
+    'Sam will drop the rent check off monday',
+    { title: 'drop the rent check off', date: '2026-10-19', who: 'sam' },
+  ],
+  [
+    'Can Michelle call the school about the bus',
+    { title: 'call the school about the bus', who: 'michelle', tag: 'Kids' },
+  ],
+  [
+    'Sam Elliott documentary on saturday night',
+    { title: 'Sam Elliott documentary', date: '2026-10-17', tag: null },
+  ],
+  [
+    'Fax Dr. Sam Lee the referral form',
+    { title: 'Fax Dr. Sam Lee the referral form' },
+  ],
+  [
+    'Ask Sam to fix the garage door opener',
+    { title: 'fix the garage door opener', who: 'sam', tag: 'House' },
+  ],
+  [
+    "Michelle's birthday nov 2",
+    { title: "Michelle's birthday", date: '2026-11-02', tag: null },
+  ],
+  [
+    'Sam to call the insurance guy back',
+    { title: 'call the insurance guy back', who: 'sam' },
+  ],
+  [
+    'I have to pick up the prescription after work',
+    {
+      title: 'pick up the prescription after work',
+      who: 'sam',
+      tag: 'Health',
+    },
+  ],
+  [
+    'remind Michelle to sign the field trip form tomorrow',
+    {
+      title: 'sign the field trip form',
+      date: '2026-10-14',
+      who: 'michelle',
+      tag: 'Kids',
+    },
+  ],
+  [
+    "Samantha's sleepover saturday",
+    { title: "Samantha's sleepover", date: '2026-10-17' },
+  ],
+  [
+    'Michelle, please renew the car registration',
+    { title: 'renew the car registration', who: 'michelle', tag: 'Car' },
+  ],
+  [
+    'Buy flowers for Michelle on friday',
+    { title: 'Buy flowers for Michelle', date: '2026-10-16', tag: null },
+  ],
+  [
+    'sam - schedule the furnace tune-up next week',
+    {
+      title: 'schedule the furnace tune-up',
+      date: '2026-10-19',
+      who: 'sam',
+      tag: 'House',
+    },
+  ],
+  [
+    "Return Sam's shoes to the store",
+    { title: "Return Sam's shoes to the store", tag: null },
+  ],
+  [
+    'Michelle should handle the HOA dues by the 30th',
+    {
+      title: 'handle the HOA dues',
+      date: '2026-10-30',
+      who: 'michelle',
+      tag: 'Paperwork',
+    },
+  ],
+  [
+    "I'll take Biscuit to the groomer wednesday at 10",
+    {
+      title: 'take Biscuit to the groomer',
+      date: '2026-10-14',
+      time: '10:00',
+      who: 'sam',
+      tag: 'Pets',
+    },
+  ],
+  [
+    "Michelle's car needs an oil change",
+    { title: "Michelle's car needs an oil change", tag: 'Car' },
+  ],
+  [
+    'Sam & Michelle date night saturday',
+    { title: 'Sam & Michelle date night', date: '2026-10-17', tag: null },
+  ],
+
+  // A day, a number, a name or a word of stress that belongs to the task:
+  // none of it is to be read.
+  [
+    'Buy tickets for the 8pm movie',
+    { title: 'Buy tickets for the 8pm movie', tag: null },
+  ],
+  [
+    'Pick up the Friday Night Lights DVD from the library',
+    {
+      title: 'Pick up the Friday Night Lights DVD from the library',
+      tag: null,
+    },
+  ],
+  [
+    'Watch Monday Night Football with the neighbors',
+    { title: 'Watch Monday Night Football with the neighbors', tag: null },
+  ],
+  [
+    'Order the 3 pack of furnace filters',
+    { title: 'Order the 3 pack of furnace filters', tag: 'House' },
+  ],
+  [
+    'Find the Christmas Eve recipe',
+    { title: 'Find the Christmas Eve recipe', tag: null },
+  ],
+  [
+    'Return the Easter basket to Grandma',
+    { title: 'Return the Easter basket to Grandma', tag: null },
+  ],
+  [
+    'Sign up for the Saturday morning swim class',
+    { title: 'Sign up for the Saturday morning swim class' },
+  ],
+  [
+    'Book the 10 am slot at the DMV',
+    { title: 'Book the 10 am slot at the DMV' },
+  ],
+  [
+    'Renew the Car and Driver subscription',
+    { title: 'Renew the Car and Driver subscription', tag: null },
+  ],
+  [
+    'Watch the House of the Dragon finale',
+    { title: 'Watch the House of the Dragon finale', tag: null },
+  ],
+  [
+    'Buy a Yard House gift card for Dad',
+    { title: 'Buy a Yard House gift card for Dad', tag: null },
+  ],
+  [
+    'Take the 4th grade field trip forms to school',
+    { title: 'Take the 4th grade field trip forms to school', tag: 'Kids' },
+  ],
+  [
+    'Listen to the Health Hour podcast episode about sleep',
+    {
+      title: 'Listen to the Health Hour podcast episode about sleep',
+      tag: null,
+    },
+  ],
+  [
+    'Write a thank you card for the June wedding',
+    { title: 'Write a thank you card for the June wedding', tag: null },
+  ],
+  ['Get 2 dozen eggs', { title: 'Get 2 dozen eggs', tag: null }],
+  [
+    'Call about the August electric bill',
+    { title: 'Call about the August electric bill' },
+  ],
+  [
+    'Put the Tuesday trash schedule on the fridge',
+    { title: 'Put the Tuesday trash schedule on the fridge', tag: 'House' },
+  ],
+  [
+    "Get a quote from Sam's Club for tires",
+    { title: "Get a quote from Sam's Club for tires", tag: 'Car' },
+  ],
+  [
+    'Hang the 24 hour clock in the kitchen',
+    { title: 'Hang the 24 hour clock in the kitchen', tag: 'House' },
+  ],
+  [
+    'Return the Fourth of July decorations to the attic',
+    { title: 'Return the Fourth of July decorations to the attic' },
+  ],
+  [
+    'Look up the 2pm matinee prices',
+    { title: 'Look up the 2pm matinee prices', tag: null },
+  ],
+  [
+    'Mark the Day of the Dead parade on the calendar',
+    { title: 'Mark the Day of the Dead parade on the calendar', tag: null },
+  ],
+
+  // Dates and times.
+  [
+    'Dentist on the 29th at 3',
+    { title: 'Dentist', date: '2026-10-29', time: '15:00', tag: 'Health' },
+  ],
+  [
+    'Soccer pickup thurs 5:30',
+    {
+      title: 'Soccer pickup',
+      date: '2026-10-15',
+      time: '17:30',
+      tag: 'Kids',
+    },
+  ],
+  [
+    'Water softener salt delivery weds',
+    { title: 'Water softener salt delivery', date: '2026-10-14', tag: 'House' },
+  ],
+  [
+    'Haircut appointment on saturday the 24th at 11am',
+    {
+      title: 'Haircut appointment',
+      date: '2026-10-24',
+      time: '11:00',
+      tag: null,
+    },
+  ],
+  [
+    'Pick up the rental car tomorrow afternoon',
+    { title: 'Pick up the rental car', date: '2026-10-14', tag: 'Car' },
+  ],
+  [
+    'Return the rented carpet cleaner before the 20th',
+    { title: 'Return the rented carpet cleaner', date: '2026-10-20' },
+  ],
+  [
+    'Parent teacher conference nov 5 4:45pm',
+    {
+      title: 'Parent teacher conference',
+      date: '2026-11-05',
+      time: '16:45',
+      tag: 'Kids',
+    },
+  ],
+  [
+    'Schedule a mammogram in 2 weeks',
+    { title: 'Schedule a mammogram', date: '2026-10-27', tag: 'Health' },
+  ],
+  [
+    'Drinks with the neighbors fri at 6',
+    {
+      title: 'Drinks with the neighbors',
+      date: '2026-10-16',
+      time: '18:00',
+      tag: null,
+    },
+  ],
+  [
+    'Order the Halloween costumes by sunday evening',
+    { title: 'Order the Halloween costumes', date: '2026-10-18' },
+  ],
+  [
+    'School photo day 10/22',
+    { title: 'School photo day', date: '2026-10-22', tag: 'Kids' },
+  ],
+  [
+    'renew vehicle registration dec 1',
+    { title: 'renew vehicle registration', date: '2026-12-01', tag: 'Car' },
+  ],
+  [
+    'Flu clinic at 9:30 tuesday',
+    { title: 'Flu clinic', date: '2026-10-20', time: '09:30', tag: 'Health' },
+  ],
+  [
+    'Book the campsite next week',
+    { title: 'Book the campsite', date: '2026-10-19', tag: null },
+  ],
+  [
+    "Sunday 10am brunch at the Lees'",
+    {
+      title: "brunch at the Lees'",
+      date: '2026-10-18',
+      time: '10:00',
+      tag: null,
+    },
+  ],
+  [
+    'Cancel the free trial before the 1st',
+    { title: 'Cancel the free trial', date: '2026-11-01' },
+  ],
+  [
+    'Ultrasound appt 11/3 at 8:15am',
+    {
+      title: 'Ultrasound appt',
+      date: '2026-11-03',
+      time: '08:15',
+      tag: 'Health',
+    },
+  ],
+  [
+    'Pay the water bill this weekend',
+    { title: 'Pay the water bill', date: '2026-10-17' },
+  ],
+
+  // Alerts, and a reminder that is the task.
+  [
+    'Renew the passport by jan 15, remind me 3 weeks before',
+    {
+      title: 'Renew the passport',
+      date: '2027-01-15',
+      tag: 'Paperwork',
+      headsUp: [21],
+    },
+  ],
+  [
+    'Recital dec 5 at 6pm, remind me the day before',
+    { title: 'Recital', date: '2026-12-05', time: '18:00', headsUp: [1] },
+  ],
+  [
+    'Pick up the turkey nov 24, heads up 3 days before',
+    {
+      title: 'Pick up the turkey',
+      date: '2026-11-24',
+      tag: null,
+      headsUp: [3],
+    },
+  ],
+  [
+    'Water the plants tomorrow, no alerts',
+    { title: 'Water the plants', date: '2026-10-14', headsUp: [] },
+  ],
+  [
+    'Car inspection due nov 30, remind me a week and 2 days before',
+    {
+      title: 'Car inspection',
+      date: '2026-11-30',
+      tag: 'Car',
+      headsUp: [2, 7],
+    },
+  ],
+  [
+    'Remind me to call grandma sunday',
+    { title: 'call grandma', date: '2026-10-18', who: 'sam', tag: null },
+  ],
+  [
+    'Move the reminder magnets off the fridge',
+    { title: 'Move the reminder magnets off the fridge' },
+  ],
+  [
+    'Michelle: allergy shot oct 30 at 5:15pm, alert 1 day before',
+    {
+      title: 'allergy shot',
+      date: '2026-10-30',
+      time: '17:15',
+      who: 'michelle',
+      tag: 'Health',
+      headsUp: [1],
+    },
+  ],
+
+  // Emphasis that is a flag, and emphasis that is not.
+  [
+    'IMPORTANT: renew the homeowners insurance',
+    { title: 'renew the homeowners insurance', flag: true },
+  ],
+  [
+    'call the vet back asap',
+    { title: 'call the vet back', tag: 'Pets', flag: true },
+  ],
+  [
+    'Buy the Important Papers folder',
+    { title: 'Buy the Important Papers folder' },
+  ],
+  [
+    "Must not forget: Grace's permission slip",
+    { title: "Grace's permission slip", tag: 'Kids', flag: true },
+  ],
+  [
+    'Read the Urgent Matters chapter for book club',
+    { title: 'Read the Urgent Matters chapter for book club', tag: null },
+  ],
+  [
+    'Fix the leaky faucet!!!',
+    { title: 'Fix the leaky faucet', tag: 'House', flag: true },
+  ],
+  [
+    'priority: pick up the marriage license copy',
+    {
+      title: 'pick up the marriage license copy',
+      tag: 'Paperwork',
+      flag: true,
+    },
+  ],
+  [
+    "Don't forget Biscuit's heartworm pill tonight",
+    {
+      title: "Biscuit's heartworm pill",
+      date: '2026-10-13',
+      tag: 'Pets',
+      flag: true,
+    },
+  ],
+
+  // Tags named outright.
+  ['#kids buy new crayons', { title: 'buy new crayons', tag: 'Kids' }],
+  [
+    'Yard: aerate the lawn saturday',
+    { title: 'aerate the lawn', date: '2026-10-17', tag: 'Yard' },
+  ],
+  [
+    '[health] refill the allergy meds',
+    { title: 'refill the allergy meds', tag: 'Health' },
+  ],
+  [
+    'fix the porch light #House',
+    { title: 'fix the porch light', tag: 'House' },
+  ],
+  [
+    'Car - rotate the tires nov 7',
+    { title: 'rotate the tires', date: '2026-11-07', tag: 'Car' },
+  ],
+  [
+    'paperwork: shred the old bank statements',
+    { title: 'shred the old bank statements', tag: 'Paperwork' },
+  ],
+
+  // Tags implied.
+  ['Clean the dryer vent', { title: 'Clean the dryer vent', tag: 'House' }],
+  [
+    'Reseed the bare patch by the driveway',
+    { title: 'Reseed the bare patch by the driveway', tag: 'Yard' },
+  ],
+  ['Get the tires rotated', { title: 'Get the tires rotated', tag: 'Car' }],
+  ['Mail the W-9 form', { title: 'Mail the W-9 form', tag: 'Paperwork' }],
+  [
+    'Refill the blood pressure prescription',
+    { title: 'Refill the blood pressure prescription', tag: 'Health' },
+  ],
+  ["Pack the kids' lunches", { title: "Pack the kids' lunches", tag: 'Kids' }],
+  ['Buy cat litter', { title: 'Buy cat litter', tag: 'Pets' }],
+  [
+    'Winterize the sprinkler system',
+    { title: 'Winterize the sprinkler system', tag: 'Yard' },
+  ],
+
+  // Nothing to read at all.
+  ['Plan the week', { title: 'Plan the week', tag: null }],
+  ['misc', { title: 'misc', tag: null }],
+]
+
+/**
  * `tuned`: the rules were tuned against it, so a cut-off may be chosen on it
  * too. `seen`: held out once, but its misses have since been read and the
  * rule faults they showed fixed, so it no longer judges the rules; no
@@ -1828,7 +2338,8 @@ export const SETS = [
   { name: 'New 70', cases: NEW_CASES, kind: 'tuned' },
   { name: 'Held out 50', cases: HELD_OUT_CASES, kind: 'seen' },
   { name: 'Fresh 50', cases: FRESH_CASES, kind: 'seen' },
-  { name: 'Unseen 100', cases: UNSEEN_CASES, kind: 'unseen' },
+  { name: 'Unseen 100', cases: UNSEEN_CASES, kind: 'tuned' },
+  { name: 'Untouched 100', cases: UNTOUCHED_CASES, kind: 'unseen' },
 ] as const
 
 export const CASES: Array<Case> = SETS.flatMap((set) => set.cases)

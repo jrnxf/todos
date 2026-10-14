@@ -169,7 +169,7 @@ in typing.
 ### Checking how well it reads
 
 `bun run eval:read` measures it, and asks whether the app should have Jev
-check more than it does. It reads 300 household sentences, each with the fill
+check more than it does. It reads 400 household sentences, each with the fill
 a person would expect, six ways on the same inputs:
 
 - **Rules alone**: the rules in the page, and nothing sent.
@@ -231,7 +231,7 @@ It stops before the request that would take it past its spending cap, two
 dollars for the whole run unless `--cap-usd` says otherwise.
 
 The sentences and the made-up household they are read for are in
-`scripts/read-eval-cases.ts`, in five sets:
+`scripts/read-eval-cases.ts`, in six sets:
 
 - the 30 the test began with, written by the author of the rules, and 70
   written before the rules were opened. The rules were tuned against these
@@ -243,9 +243,12 @@ The sentences and the made-up household they are read for are in
 - 100 unseen, written before those faults were fixed and before the wider
   questions were. Half of them tempt a wrong person or a wrong title: a name
   that is only mentioned, and a day, a number or a word of stress that
-  belongs to the task. They are the honest number, and the report shows them
-  first. Do not fix a rule, a wording or a cut-off because of a miss in
-  them: write a new sentence into the first 100.
+  belongs to the task. The rules were later fixed for their misses, so they
+  are now tuned as well;
+- 100 untouched, written before those fixes, with the same mix and traps of
+  their own. They are the honest number, and the report shows them first.
+  Do not fix a rule, a wording or a cut-off because of a miss in them: write
+  a new sentence into a tuned set.
 
 How sure a decision model has to be before its answer is acted on is a
 cut-off, one for each question. The app does not choose them as it runs: it
