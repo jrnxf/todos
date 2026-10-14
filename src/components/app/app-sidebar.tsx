@@ -4,9 +4,7 @@
 import { useState } from 'react'
 import { Link, useRouterState } from '@tanstack/react-router'
 import {
-  CalendarIcon,
   CheckIcon,
-  ClockIcon,
   ListChecksIcon,
   MoreHorizontalIcon,
   PencilIcon,
@@ -77,7 +75,6 @@ export function AppSidebar({ addPreset }: { addPreset?: Partial<ItemFields> }) {
   const open = board.items.filter(isOpen)
   const done = board.items.length - open.length
   const groups = upNext(board.items, board.today)
-  const soon = groups.overdue.length + groups.today.length + groups.week.length
 
   return (
     <Sidebar
@@ -118,36 +115,16 @@ export function AppSidebar({ addPreset }: { addPreset?: Partial<ItemFields> }) {
                   render={<Link to="/" />}
                 >
                   <SunriseIcon />
-                  Today
+                  Home
                 </SidebarMenuButton>
-                <SidebarMenuBadge>
-                  {groups.overdue.length + groups.today.length}
-                </SidebarMenuBadge>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  isActive={pathname === '/upnext'}
-                  render={<Link to="/upnext" />}
-                >
-                  <ClockIcon />
-                  Up next
-                </SidebarMenuButton>
+                {/* Late things first: they wait on today. */}
                 {groups.overdue.length > 0 ? (
                   <SidebarMenuBadge className="text-destructive">
                     {groups.overdue.length} late
                   </SidebarMenuBadge>
                 ) : (
-                  <SidebarMenuBadge>{soon}</SidebarMenuBadge>
+                  <SidebarMenuBadge>{groups.today.length}</SidebarMenuBadge>
                 )}
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  isActive={pathname === '/calendar'}
-                  render={<Link to="/calendar" />}
-                >
-                  <CalendarIcon />
-                  Calendar
-                </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton

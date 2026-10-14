@@ -5,7 +5,7 @@ and get told on your phone before the deadline bites. Built for two people who
 share the house, the kids and the paperwork, and who each need to see the same
 list.
 
-- **Views:** today, what is up next, a calendar (month and agenda), everything,
+- **Views:** home, always on one day, seen as a day, a week or a month; everything,
   and what got done this week.
 - **Tags** with a colour each, made by you: House, Kids, whatever fits.
 - **Alerts** through [Pushover](https://pushover.net): a morning digest, a
@@ -81,8 +81,8 @@ database, make a Google sign-in client, set the settings, deploy.
 | `src/alerts/rules.ts`    | Which alerts exist and when. Pure, with tests                   |
 | `src/alerts/tick.ts`     | One scheduler pass: send what fell due since the last pass      |
 | `src/alerts/notify.ts`   | The one way an alert leaves the app (Pushover today)            |
-| `src/routes/`            | Today, Up next, List, Calendar, Done, Account, and sign-in      |
-| `src/components/app/`    | Capture bar, pickers, calendar views, sidebar, the to-do drawer |
+| `src/routes/`            | Home, List, Done, Account, and sign-in                          |
+| `src/components/app/`    | Capture bar, pickers, the home grid, sidebar, the to-do drawer  |
 | `src/components/ui/`     | Stock shadcn components. Add more with `bunx shadcn add`        |
 
 ## Four seams, kept on purpose

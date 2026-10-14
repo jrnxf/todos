@@ -1,8 +1,8 @@
-// The frame around the three phone screens: a title block with whoever is
+// The frame around the phone's screens: a title block with whoever is
 // signed in, and the tab bar underneath.
 import { Link } from '@tanstack/react-router'
 import { cn } from 'cn'
-import { CalendarIcon, ListChecksIcon, SunriseIcon } from 'lucide-react'
+import { ListChecksIcon, SunriseIcon } from 'lucide-react'
 import { useBoard } from '@/lib/queries'
 import { PersonAvatar } from './todo-row'
 
@@ -67,14 +67,13 @@ export function ScreenHeader({
 }
 
 const TABS = [
-  { to: '/', label: 'Today', icon: SunriseIcon, exact: true },
+  { to: '/', label: 'Home', icon: SunriseIcon, exact: true },
   { to: '/list', label: 'List', icon: ListChecksIcon, exact: false },
-  { to: '/calendar', label: 'Calendar', icon: CalendarIcon, exact: false },
 ] as const
 
 export function TabBar() {
   return (
-    <nav aria-label="Views" className="grid grid-cols-3 border-t">
+    <nav aria-label="Views" className="grid grid-cols-2 border-t">
       {TABS.map((tab) => (
         <Link
           key={tab.to}

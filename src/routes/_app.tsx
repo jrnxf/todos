@@ -20,14 +20,12 @@ export const Route = createFileRoute('/_app')({
 })
 
 function AppLayout() {
-  // On the calendar, Add starts from the day being looked at.
-  const calendarDay = useRouterState({
+  // On the home page, Add starts from the day being stood on.
+  const homeDay = useRouterState({
     select: (state) =>
-      state.location.pathname === '/calendar'
-        ? state.location.search.day
-        : undefined,
+      state.location.pathname === '/' ? state.location.search.day : undefined,
   })
-  const preset = calendarDay ? { dueDate: calendarDay } : undefined
+  const preset = homeDay ? { dueDate: homeDay } : undefined
   const todoOpen = useOpenTodoId() !== undefined
 
   return (
