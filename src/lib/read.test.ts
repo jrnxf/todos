@@ -53,6 +53,16 @@ describe('whose a to-do is', () => {
     // A name the date stood in front of.
     ['thurs - sam - get the oil changed', 'sam', 'get the oil changed'],
     ["I've got to return the drill", 'alex', 'return the drill'],
+    // Said as what they will do, or asked of them.
+    [
+      'Sam will drop off the library books',
+      'sam',
+      'drop off the library books',
+    ],
+    ["Sam's going to fix the gate", 'sam', 'fix the gate'],
+    ['Can Sam walk the dog after school', 'sam', 'walk the dog after school'],
+    ['have Sam mop the kitchen', 'sam', 'mop the kitchen'],
+    ['Me - book the dentist', 'alex', 'book the dentist'],
   ])('reads %j', (text, assignee, title) => {
     expect(read(text)).toMatchObject({ title, fields: { assignee } })
   })
@@ -68,10 +78,26 @@ describe('whose a to-do is', () => {
     'Sam and Alex anniversary dinner reservation',
     'Sam & Alex date night',
     'Sam is out of town',
+    // The first of a whole name.
+    'Sam Rivera retirement party',
+    // A guest.
+    'have Sam over for dinner',
   ])('leaves %j with nobody', (text) => {
     expect(read(text)).toMatchObject({ title: text, fields: {} })
     expect(read(text).fields.assignee).toBeUndefined()
   })
+
+  it.each([
+    ['we should repaint the shed', 'repaint the shed'],
+    ["We've got to call the landlord", 'call the landlord'],
+    ["let's plan the garage sale", 'plan the garage sale'],
+  ])(
+    'leaves %j, which is the household’s, with nobody and a plain title',
+    (text, title) => {
+      expect(read(text)).toMatchObject({ title, fields: {} })
+      expect(read(text).fields.assignee).toBeUndefined()
+    },
+  )
 })
 
 describe('the tag', () => {
@@ -131,6 +157,10 @@ describe('the tag', () => {
     // What the tag is about beats what is being done for it.
     ["Pick up the dog's medicine", PETS],
     ['Renew car registration', CAR],
+    // What it is about still counts beside what means something else.
+    ["Book the dog's booster", PETS],
+    ['Tape the school calendar on the fridge', KIDS],
+    ['Weed the garden before the yard sale', YARD],
   ])('is hinted at by %j, which stays whole', (text, tagId) => {
     expect(read(text)).toMatchObject({ title: text, fields: { tagId } })
   })
@@ -142,8 +172,16 @@ describe('the tag', () => {
     // Two tags as strongly as each other: neither.
     'Pay the daycare invoice',
     'Take the kids and the dog to the park',
-    // A word that is as often nobody's.
+    // A word that is as often nobody's, or another tag's.
     'Set up the art walk carpool',
+    'Get a booster shot',
+    // A tag's word that means something else here.
+    'Plan the housewarming party',
+    'Get donations for the yard sale',
+    'Put the grocery list on the fridge',
+    'Print the garden pictures for Mom',
+    // Or is part of a name.
+    'Listen to the House Rules podcast',
   ])('is left empty for %j', (text) => {
     expect(read(text).fields.tagId).toBeUndefined()
   })
@@ -195,6 +233,8 @@ describe('the heads-up', () => {
     "Send the rent check, don't remind me",
     'Send the rent check no alerts',
     'Send the rent check, no need to remind us',
+    'Send the rent check, no reminder needed',
+    'Send the rent check - no alerts necessary',
   ])('is switched off by %j', (text) => {
     expect(read(text)).toMatchObject({
       title: 'Send the rent check',
@@ -247,6 +287,9 @@ describe('the flag', () => {
     ['URGENT call the insurance company', 'call the insurance company'],
     ['order flea medicine, must do', 'order flea medicine'],
     ['Renew passports, important, remind me a week before', 'Renew passports'],
+    ['!!! sign the lease', 'sign the lease'],
+    ['! sign the lease', 'sign the lease'],
+    ['Renew the permit ASAP!!', 'Renew the permit'],
   ])('is read from %j', (text, title) => {
     expect(read(text)).toMatchObject({ title, fields: { mustNotMiss: true } })
   })

@@ -15,12 +15,18 @@ interface Kind {
   about: Array<string>
   /** Things and jobs that belong to it. */
   hints: Array<string>
+  /**
+   * Where its words mean something else: a "house warming" is a party, and
+   * a list "on the fridge" is not about the fridge.
+   */
+  not?: Array<string>
 }
 
 const KINDS: Array<Kind> = [
   {
     names: ['house', 'home', 'household', 'apartment', 'flat', 'condo'],
     about: [],
+    not: ['house ?warming', '(?:on|onto|off) the (?:fridge|refrigerator)'],
     hints: [
       'gutter',
       'furnace',
@@ -102,6 +108,7 @@ const KINDS: Array<Kind> = [
   {
     names: ['yard', 'garden', 'outdoors', 'outside', 'lawn', 'landscaping'],
     about: [],
+    not: ['yard sale', 'garden (?:photo|picture|pic)s?'],
     hints: [
       'lawn',
       'mow',
@@ -276,7 +283,6 @@ const KINDS: Array<Kind> = [
       'flu shot',
       'vaccine',
       'vaccination',
-      'booster',
       'mammogram',
       'eye exam',
       'optometrist',
@@ -335,6 +341,24 @@ const KINDS: Array<Kind> = [
   },
 ]
 
+/** `title` with each of `phrases` blanked out. */
+const blanked = (title: string, phrases: Array<string>) =>
+  phrases.reduce(
+    (text, phrase) =>
+      text.replace(
+        new RegExp(
+          String.raw`(?<![\p{L}\p{N}])(?:${phrase})(?![\p{L}\p{N}])`,
+          'giu',
+        ),
+        (words) => ' '.repeat(words.length),
+      ),
+    title,
+  )
+
+// A run of capitalised words in a title that is not typed that way is a
+// name: "the Car Talk rerun" is a radio show, not about a car.
+const NAME = /(?<=\S\s+)\p{Lu}[\p{L}'’]*(?:\s+\p{Lu}[\p{L}'’]*)+/gu
+
 /** The `terms` that are in `title` as whole words, one or several, as typed. */
 function found(title: string, terms: Array<string>): Array<string> {
   return terms.flatMap(
@@ -361,11 +385,13 @@ export function hintedTag<T extends { name: string }>(
   })
   // A tag named in passing, or what it is about, comes first: "Order new
   // tires for the car" and "the dog's medicine" need nothing else.
+  const plain = /(?<=\S\s+)\p{Ll}/u.test(title)
   const about = known.flatMap(({ tag, name, kind }) => {
-    const words = found(title, [
-      name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
-      ...(kind?.about ?? []),
-    ])
+    const said = blanked(title, kind?.not ?? [])
+    const words = found(
+      plain ? said.replace(NAME, (run) => ' '.repeat(run.length)) : said,
+      [name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), ...(kind?.about ?? [])],
+    )
     return words.length > 0 ? [{ tag, words }] : []
   })
   const hinted =
@@ -374,7 +400,9 @@ export function hintedTag<T extends { name: string }>(
       : known
           .map(({ tag, kind }) => ({
             tag,
-            words: kind ? found(title, kind.hints) : [],
+            words: kind
+              ? found(blanked(title, kind.not ?? []), kind.hints)
+              : [],
           }))
           .filter((one) => one.words.length > 0)
           .sort((a, b) => b.words.length - a.words.length)

@@ -269,7 +269,7 @@ describe('checking who', () => {
   })
 
   it('fills a person where the rules read none, and leaves the title alone', () => {
-    const title = 'have Michelle water the ferns'
+    const title = "Michelle's turn to water the ferns"
     expect(rulesRead(title).fields.assignee).toBe(undefined)
     const read = column('who', title, { [MICHELLE]: yes })
     expect(read.fields.assignee).toBe('michelle')

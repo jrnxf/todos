@@ -107,9 +107,9 @@ export interface ParsedWhen extends When {
   title: string
 }
 
-// "by fri", "due on fri", "booked for fri": the linking word goes with the
-// date.
-const LINK = /\b(due|by|on|at|in|for|before|until)\s*$/i
+// "by fri", "due on fri", "booked for fri", "by the end of the month": the
+// linking word goes with the date.
+const LINK = /\b(?:(?:due|by|on|at|in|for|before|until)(?:\s+the)?|the)\s*$/i
 // The linking words that say a deadline. "for" does not: "tickets for
 // August: Osage County".
 const DUE = /\b(due|by|on|at|in|before|until)\s*$/i
@@ -154,6 +154,15 @@ const OF_MONTH = new RegExp(
 // A part of the day in front of a date. The parser runs the two together
 // and loses the date: "Parent teacher night 10/22", "date night saturday".
 const PART_THEN = /^(?:the\s+)?(?:night|morning|afternoon|evening)s?\s+(?=\S)/i
+// And one just after it, which the parser reads apart and which says no
+// more than the date does: "at 7:45 saturday morning".
+const PART_AFTER = /^\s+(?:in\s+the\s+)?(?:night|morning|afternoon|evening)\b/i
+// "the 7pm show", "a 2pm tee time", "the Sunday paper": a date between "the"
+// or "a" and the thing it describes is part of that thing's name. Not where
+// a linking word follows: "the day after tomorrow at noon".
+const THE_BEFORE = /\b(?:the|an?)\s+$/i
+const THING_AFTER =
+  /^\s+(?!(?:at|by|on|in|to|for|from|with|and|or|but|before|after|until|then|is|are|was|were|will)(?:\s|$))\p{L}/iu
 // "next week" names no day; it is read as the week's Monday.
 const NEXT_WEEK = /\bnext\s+week\b/i
 // A weekday said as the one this week, which on that weekday is today.
@@ -163,7 +172,7 @@ const HALF_SAID = /\d\s*[ap]\.?m\b|\b(noon|midnight|midday)\b/i
 // What makes a bare hour the evening's, or the morning's: "dinner at 7" is
 // 19:00 and "breakfast at 7" is 07:00.
 const EVENING =
-  /\b(dinner|supper|tonight|evening|night|drinks|happy hour|movie|concert|bedtime|sunset)\b/i
+  /\b(dinner|supper|tonight|evening|night|drinks|happy hour|movie|concert|bedtime|sunset|book club|trivia|karaoke|gig|theat(?:er|re)|opera|ballet|poker)\b/i
 const MORNING =
   /\b(breakfast|brunch|morning|sunrise|before (school|work)|school bus)\b/i
 
@@ -173,10 +182,10 @@ const MORNING =
 const RESPELL: Partial<Record<string, string>> = {}
 for (const [word, typed] of Object.entries({
   monday: 'munday mondya mondy moday',
-  tuesday: 'tuseday teusday tuesdy tusday tueday tuesay',
+  tuesday: 'tues tuseday teusday tuesdy tusday tueday tuesay',
   wednesday:
-    'wensday wendsday wednsday wedensday wenesday wednessday wedsday wednesay wendesday wedneday',
-  thursday: 'thrusday thurday thursdy thusday thurdsay thursay thirsday',
+    'weds wensday wendsday wednsday wedensday wenesday wednessday wedsday wednesay wendesday wedneday',
+  thursday: 'thrs thrusday thurday thursdy thusday thurdsay thursay thirsday',
   friday: 'firday fridya frieday fryday frday',
   saturday: 'saterday satruday saturdy satuday saturady sataurday satday',
   sunday: 'sunady sundy suday',
@@ -369,33 +378,38 @@ export function parseWhen(
       ' '.repeat(ofMonth[0].length) +
       text.slice(ofMonth.index + ofMonth[0].length)
     : text
-  const last = datesIn(parser, shown, reference, today)
-    .filter((one) => {
-      const before = shown.slice(0, one.index)
-      const after = shown.slice(one.index + one.text.length)
-      if (SPAN_ALONE.test(one.text) || PART_OF_DAY.test(one.text)) return false
-      // "Friday's field trip", "Tuesdays with Morrie": about the day, not due
-      // on it.
-      if (/^(['’]s\b|\p{L})/u.test(after)) return false
-      // "the day before": not a day at all.
-      if (fromPickerDate(one.start.date()) < today) return false
-      if (
-        plainWords &&
-        before.trim() &&
-        !DUE.test(before) &&
-        /^\p{Lu}/u.test(one.text) &&
-        /^\s+\p{Lu}/u.test(after)
-      )
-        return false
-      if (!MONTH_ALONE.test(one.text)) return true
-      return DUE.test(before)
-    })
-    .at(-1)
+  const kept = datesIn(parser, shown, reference, today).filter((one) => {
+    const before = shown.slice(0, one.index)
+    const after = shown.slice(one.index + one.text.length)
+    if (SPAN_ALONE.test(one.text) || PART_OF_DAY.test(one.text)) return false
+    // "Friday's field trip", "Tuesdays with Morrie": about the day, not due
+    // on it.
+    if (/^(['’]s\b|\p{L})/u.test(after)) return false
+    if (THE_BEFORE.test(before) && THING_AFTER.test(after)) return false
+    // "the day before": not a day at all.
+    if (fromPickerDate(one.start.date()) < today) return false
+    if (
+      plainWords &&
+      before.trim() &&
+      !DUE.test(before) &&
+      /^\p{Lu}/u.test(one.text) &&
+      /^\s+\p{Lu}/u.test(after)
+    )
+      return false
+    if (!MONTH_ALONE.test(one.text)) return true
+    return DUE.test(before)
+  })
+  const last = kept.at(-1)
   // Beside a day of an unnamed month, only a time is the parser's to add.
   const found =
     ofMonth && last && (saysDay(last) || !last.start.isCertain('hour'))
       ? undefined
       : last
+  /** Where `one` ends, with a part of the day said just after it. */
+  const endOf = (one: Found) => {
+    const end = one.index + one.text.length
+    return end + (PART_AFTER.exec(text.slice(end))?.[0].length ?? 0)
+  }
 
   const at = found?.start.date()
   const hasTime = found?.start.isCertain('hour') ?? false
@@ -408,10 +422,24 @@ export function parseWhen(
     dueTime = `${String(hour).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`
   }
 
+  const ofDay = ofMonth ? null : DAY_OF_MONTH.exec(text)
+  // "sunday the 25th": a weekday just before a day of the month names the
+  // same day, and the day of the month says which one.
+  const weekdayBeside =
+    ofDay &&
+    kept.find(
+      (one) =>
+        one.start.isCertain('weekday') &&
+        !one.start.isCertain('day') &&
+        /^[\s,]*$/.test(text.slice(endOf(one), ofDay.index)),
+    )
   // "on the 1st at 9am": the day of the month, with the parser's time if
   // that is all the parser found.
   const dayOfMonth =
-    ofMonth ?? (!found || timeOnly ? DAY_OF_MONTH.exec(text) : null)
+    ofMonth ??
+    (!found || timeOnly || (weekdayBeside && found === weekdayBeside)
+      ? ofDay
+      : null)
   // In figures, or else in a word.
   const figures = dayOfMonth?.at(1)
   const day = figures
@@ -427,7 +455,9 @@ export function parseWhen(
     const cuts = [
       cut(dayOfMonth.index, dayOfMonth.index + dayOfMonth[0].length),
     ]
-    if (found) cuts.push(cut(found.index, found.index + found.text.length))
+    if (found) cuts.push(cut(found.index, endOf(found)))
+    if (weekdayBeside && weekdayBeside !== found)
+      cuts.push(cut(weekdayBeside.index, endOf(weekdayBeside)))
     const title = without(typed, cuts)
     if (!title) return null
     return {
@@ -444,7 +474,7 @@ export function parseWhen(
   }
 
   if (!found || !at) return null
-  const [start, end] = cut(found.index, found.index + found.text.length)
+  const [start, end] = cut(found.index, endOf(found))
   const title = without(typed, [[start, end]])
   if (!title) return null
   let dueDate = fromPickerDate(at)

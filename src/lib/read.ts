@@ -94,10 +94,11 @@ const HEADS_UP_OPENS = new RegExp(
   'i',
 )
 const NO_HEADS_UP =
-  /[,;]?\s*\b(?:(?:no|without(?:\s+an?)?)\s+(?:reminder|heads[- ]?up|alert|notification|nudge|ping)s?|(?:don'?t|do\s+not|no\s+need\s+to|never)\s+(?:remind|alert|ping|nudge|notify|warn)(?:\s+(?:me|us))?)\b/i
-// "!" on its own at the end, or "!!". Not the "!" that ends an ordinary
-// sentence: the flag alerts everyone until the to-do is done.
-const FLAG_MARK = /(\s+!+|!!+)\s*$/
+  /[,;]?\s*\b(?:(?:no|without(?:\s+an?)?)\s+(?:reminder|heads[- ]?up|alert|notification|nudge|ping)s?(?:\s+(?:needed|necessary|required|wanted|please))?|(?:don'?t|do\s+not|no\s+need\s+to|never)\s+(?:remind|alert|ping|nudge|notify|warn)(?:\s+(?:me|us))?)\b/i
+// "!" on its own at the end, or "!!", or opening the title: "!! call the
+// bank". Not the "!" that ends an ordinary sentence: the flag alerts
+// everyone until the to-do is done.
+const FLAG_MARK = /(\s+!+|!!+)\s*$|^\s*!+(?=\s)/
 // Said as a phrase, wherever it is.
 const FLAG_PHRASE =
   /[,;]?\s*(?:[-–]\s+)?\b(must not miss|can'?t miss|cannot miss|do not forget|don'?t forget|can'?t forget|must not forget|asap)\b[:!,]?(\s+to\b)?/i
@@ -122,9 +123,15 @@ const FLAG_WORDS = [
   FLAG_SHOUTED,
 ]
 const MINE =
-  /^\s*(remind me to|note to self:?|i need to|i should|i ought to|i have to|i've got to|i gotta|i must|i'll|i will|i'm going to|i am going to)\s+/i
+  /^\s*(me\s*[:,–-]|remind me to|note to self:?|i need to|i should|i ought to|i have to|i've got to|i gotta|i must|i'll|i will|i'm going to|i am going to)\s+/i
+// "We need to book the cleaners": the household's, and no one person's. The
+// saying is not the task.
+const OURS =
+  /^\s*(?:we\s+(?:need to|should|have to|have got to|gotta|must|ought to|will|are going to|are gonna)|we['’](?:ve got to|ll|re going to|re gonna)|let['’]s|let us)\s+/i
 // "Michelle can you take out the trash": the asking is not the task.
 const ASKING = String.raw`(?:(?:can|could|will|would)\s+you\s+(?:please\s+)?|please\s+)`
+// "Michelle will pick up the cake", as "I'll" is the typist's.
+const WILL = String.raw`(?:\s+(?:to|should|needs to|has to|has got to|gotta|must|ought to|can|will|is going to|is gonna)|['’](?:s got to|ll|s going to|s gonna))`
 
 const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
@@ -139,24 +146,36 @@ function tidy(text: string): string {
 // Where a name means "this is theirs". A name in passing does not: "Call Sam"
 // and "Sam's eye appointment" are about Sam, not Sam's to do. A name that
 // opens the title does: "Sam visit the garden center". Unless it opens a
-// list of names or a sentence about them: "Sam and Michelle anniversary
-// dinner".
-function whose(name: string): Array<RegExp> {
+// list of names or a sentence about them, "Sam and Michelle anniversary
+// dinner", or is the first of a whole name, "Sam Smith concert tickets".
+function whose(name: string, text: string): Array<RegExp> {
   const n = escaped(name)
+  const opens = new RegExp(String.raw`^\s*${n}\s+`, 'i').exec(text)
+  const wholeName =
+    opens !== null &&
+    /^\p{Lu}/u.test(text.slice(opens[0].length)) &&
+    /(?<=\S\s+)\p{Ll}/u.test(text)
   return [
     new RegExp(String.raw`(^|\s)@${n}\b`, 'i'),
     new RegExp(String.raw`^\s*${n}\s*[:,-]\s+${ASKING}?`, 'i'),
     new RegExp(String.raw`^\s*${n}\s+${ASKING}`, 'i'),
-    new RegExp(
-      String.raw`^\s*${n}\s+(to|should|needs to|has to|must|can)\s+`,
-      'i',
-    ),
+    new RegExp(String.raw`^\s*${n}${WILL}\s+`, 'i'),
     new RegExp(String.raw`^\s*(ask|tell|have|get|remind)\s+${n}\s+to\s+`, 'i'),
-    new RegExp(String.raw`\s*[-–(]\s*${n}\)?\s*$`, 'i'),
+    // "Can Sam take the dog out", "have Michelle call the roofer". Not
+    // "have Sam over": a guest is not the one to do it.
     new RegExp(
-      String.raw`^\s*${n}\s+(?!(?:and|or|vs|is|was|are|were)\b|[&+/-])`,
+      String.raw`^\s*(?:(?:can|could|will|would)\s+${n}\s+(?:please\s+)?|have\s+${n}\s+(?!(?:over|round|around|back|along|for|to|at|in|on|stay|visit)\b))`,
       'i',
     ),
+    new RegExp(String.raw`\s*[-–(]\s*${n}\)?\s*$`, 'i'),
+    ...(wholeName
+      ? []
+      : [
+          new RegExp(
+            String.raw`^\s*${n}\s+(?!(?:and|or|vs|is|was|are|were)\b|[&+/-])`,
+            'i',
+          ),
+        ]),
   ]
 }
 
@@ -188,11 +207,10 @@ export function readTitle(
   /** Whoever the title is handed to, their name taken out of what is left. */
   const theirs = () =>
     context.people.find((one) =>
-      whose(one.name).some((pattern) => take('who', pattern)),
+      whose(one.name, rest).some((pattern) => take('who', pattern)),
     )
 
-  const marked = reads('flag') && take('flag', FLAG_MARK) !== null
-  if (marked) fields.mustNotMiss = true
+  if (reads('flag') && take('flag', FLAG_MARK)) fields.mustNotMiss = true
 
   // "Remind me the day before to pack lunches": the asking opened the title,
   // so it is the typist's, and the "to" that joined it to the task goes too.
@@ -225,12 +243,9 @@ export function readTitle(
   }
 
   // After the heads-up, so a stress that closed the task still closes it:
-  // "Renew the passports, important, remind me a week before".
-  if (
-    reads('flag') &&
-    !marked &&
-    FLAG_WORDS.some((pattern) => take('flag', pattern))
-  )
+  // "Renew the passports, important, remind me a week before". With the
+  // marks too, so "pay the fine ASAP!!" leaves no "ASAP" in the title.
+  if (reads('flag') && FLAG_WORDS.some((pattern) => take('flag', pattern)))
     fields.mustNotMiss = true
 
   if (reads('who')) {
@@ -243,6 +258,7 @@ export function readTitle(
       phrases.who = askedByMe
     }
   }
+  rest = rest.replace(OURS, '')
 
   // A tag named as a hashtag, a heading or in brackets: "#kids", "House:
   // ...", "Car - ...", "(house) ...".

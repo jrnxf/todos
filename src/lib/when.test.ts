@@ -33,6 +33,12 @@ describe('a date typed into a title', () => {
     })
   })
 
+  it('takes a "the" that went with the date', () => {
+    expect(
+      parseWhen(chrono, 'Wash the windows by the end of the month', today),
+    ).toMatchObject({ title: 'Wash the windows', dueDate: '2026-10-31' })
+  })
+
   it('does not take a name or an amount for a deadline', () => {
     for (const title of [
       'Pick up March of the Penguins dvd from library',
@@ -41,6 +47,10 @@ describe('a date typed into a title', () => {
       'Buy 3 days of food',
       'Renew passport, remind me 5 days before',
       'Fix the light on the 2nd floor',
+      // Between "the" and the thing it describes, part of its name.
+      'Grab the 6pm train tickets',
+      'Buy a 10am class pass',
+      'Cancel the saturday newspaper',
     ])
       expect(parseWhen(chrono, title, today), title).toBeNull()
   })
@@ -82,6 +92,29 @@ describe('a date typed into a title', () => {
       parseWhen(chrono, 'Close the books on the 31st', '2026-11-02'),
     ).toMatchObject({
       dueDate: '2026-12-31',
+    })
+  })
+
+  it('reads a day of the month beside the weekday it falls on', () => {
+    expect(
+      parseWhen(chrono, 'Pick up the cake on friday the 23rd', today),
+    ).toMatchObject({ title: 'Pick up the cake', dueDate: '2026-10-23' })
+    expect(
+      parseWhen(chrono, 'Recital friday, the 30th at 3pm', today),
+    ).toMatchObject({
+      title: 'Recital',
+      dueDate: '2026-10-30',
+      dueTime: '15:00',
+    })
+  })
+
+  it('takes a part of the day said after the date, which adds nothing', () => {
+    expect(
+      parseWhen(chrono, 'Drop off the car at 8:30 friday morning', today),
+    ).toMatchObject({
+      title: 'Drop off the car',
+      dueDate: '2026-10-16',
+      dueTime: '08:30',
     })
   })
 
@@ -156,6 +189,8 @@ describe('a date typed into a title', () => {
     ['Flu shot oct 20 9:15', '09:15'],
     ['Call the vet friday at 14:30', '14:30'],
     ['Lunch friday at noon', '12:00'],
+    ['book club at 8 on friday', '20:00'],
+    ['Karaoke saturday at 9', '21:00'],
     ['Flight friday at 6am', '06:00'],
   ])('works out the half of the day in %j', (title, dueTime) => {
     expect(parseWhen(chrono, title, today)).toMatchObject({ dueTime })
@@ -177,6 +212,8 @@ describe('a date typed into a title', () => {
       1,
     ],
     ['Flu shots thrusday', 'Flu shots', 3],
+    ['Call the bank tues', 'Call the bank', 1],
+    ['Book the vet weds at 4pm', 'Book the vet', 2],
     ['Trash to the curb tonite', 'Trash to the curb', 0],
     ['Renew the passes by febuary 2', 'Renew the passes', 113],
   ])('reads the mistyped day in %j', (typed, title, days) => {
