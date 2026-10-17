@@ -2,7 +2,7 @@
 
 How the app is put together once deployed, how to set up your own, and what to
 look at when something seems off. `<your-app>` below stands for the address
-your Worker is served at, such as `https://todos.jrnxf.co`.
+your Worker is served at, such as `todos.jrnxf.co`.
 
 ## Shape
 
@@ -52,7 +52,13 @@ in the house is a setting, not a table.
    The alert times (`DIGEST_TIME`, `HEADS_UP_TIME`, `NUDGE_MINUTES_BEFORE`)
    are plain `vars` in `wrangler.jsonc`.
 
-4. **Deploy.**
+4. **Custom domain.** A custom domain is required, because the temporary
+   `workers.dev` address is off. Attach your own domain to the Worker in the
+   Cloudflare dashboard: Workers > todos > Settings > Domains & Routes, or
+   add a `routes` entry with `custom_domain: true` in your own copy of
+   `wrangler.jsonc` before deploying.
+
+5. **Deploy.**
 
    ```bash
    bun run db:migrate:remote
