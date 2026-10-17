@@ -17,9 +17,15 @@ export const Route = createFileRoute('/_app/')({
       .optional(),
   }),
   head: ({ match }) => {
-    const { view } = match.search
+    const { view, day } = match.search
     const screen =
-      view === 'week' ? 'Week' : view === 'month' ? 'Month' : 'Today'
+      view === 'week'
+        ? 'Week'
+        : view === 'month'
+          ? 'Month'
+          : day
+            ? 'Day'
+            : 'Today'
     return { meta: [{ title: `${screen} - todos` }] }
   },
   component: HomeScreen,
