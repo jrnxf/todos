@@ -58,7 +58,8 @@ bun run deploy      # build, then wrangler deploy
 Everything about a household is a setting on the Worker, so nothing in this
 repo has to change except the database it points at.
 [docs/operations.md](docs/operations.md) has the full steps: make a D1
-database, make a Google sign-in client, set the settings, deploy.
+database, make a Google sign-in client, set the settings, attach a domain,
+deploy.
 
 ## Where things live
 
