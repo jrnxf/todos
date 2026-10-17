@@ -2,7 +2,7 @@
 
 How the app is put together once deployed, how to set up your own, and what to
 look at when something seems off. `<your-app>` below stands for the address
-your Worker is served at, such as `todos.<account>.workers.dev`.
+your Worker is served at, such as `https://todos.jrnxf.co`.
 
 ## Shape
 

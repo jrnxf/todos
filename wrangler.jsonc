@@ -7,9 +7,9 @@
   "compatibility_date": "2026-10-01",
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
-  // Served at todos.<account>.workers.dev. No per-version preview addresses:
+  // Served at https://todos.jrnxf.co. No per-version preview addresses:
   // sign-in only ever returns to the one address in APP_URL.
-  "workers_dev": true,
+  "workers_dev": false,
   "preview_urls": false,
 
   "d1_databases": [
