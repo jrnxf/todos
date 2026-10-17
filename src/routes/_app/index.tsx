@@ -3,7 +3,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 import { Lens } from '@/components/app/lens'
 import { LENS_VIEWS } from '@/lib/lens'
-import { useBoard } from '@/lib/queries'
+import { boardQ, useBoard } from '@/lib/queries'
 import type { LensChange } from '@/components/app/lens'
 
 export const Route = createFileRoute('/_app/')({
@@ -16,14 +16,17 @@ export const Route = createFileRoute('/_app/')({
       .regex(/^\d{4}-\d{2}-\d{2}$/)
       .optional(),
   }),
-  head: ({ match }) => {
+  loader: async ({ context }) => ({
+    today: (await context.queryClient.ensureQueryData(boardQ)).today,
+  }),
+  head: ({ match, loaderData }) => {
     const { view, day } = match.search
     const screen =
       view === 'week'
         ? 'Week'
         : view === 'month'
           ? 'Month'
-          : day
+          : day && day !== loaderData?.today
             ? 'Day'
             : 'Today'
     return { meta: [{ title: `${screen} - todos` }] }
