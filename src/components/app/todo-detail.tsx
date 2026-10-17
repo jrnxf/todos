@@ -326,7 +326,9 @@ export function TodoDetailBody({ todo }: { todo: Todo }) {
                   </ItemContent>
                   <ItemActions>
                     {todo.mustNotMiss ? (
-                      <Badge variant="destructive">Every morning, both</Badge>
+                      <Badge variant="destructive">
+                        Every morning, to both of you
+                      </Badge>
                     ) : (
                       <Badge variant="secondary">In the morning digest</Badge>
                     )}

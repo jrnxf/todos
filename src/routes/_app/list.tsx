@@ -22,6 +22,7 @@ import { useBoard } from '@/lib/queries'
 import type { Tag, Todo } from '@/db/schema'
 
 export const Route = createFileRoute('/_app/list')({
+  head: () => ({ meta: [{ title: 'List - todos' }] }),
   // With a tag in the URL the list is that one tag; the laptop sidebar
   // links here for each of them.
   validateSearch: z.object({ tag: z.coerce.number().int().optional() }),

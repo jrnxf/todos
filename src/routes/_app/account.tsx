@@ -20,6 +20,7 @@ import { useBoard } from '@/lib/queries'
 import { sendTestAlert } from '@/server/board'
 
 export const Route = createFileRoute('/_app/account')({
+  head: () => ({ meta: [{ title: 'Account - todos' }] }),
   component: AccountScreen,
 })
 
@@ -112,7 +113,7 @@ function AccountScreen() {
               <ItemDescription>
                 {board.channel === 'pushover'
                   ? 'Pushover linked. Turn on Critical Alerts in its app.'
-                  : 'Not connected yet'}
+                  : 'Pushover is not connected yet'}
               </ItemDescription>
             </ItemContent>
             <ItemActions>

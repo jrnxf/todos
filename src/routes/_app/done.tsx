@@ -12,7 +12,10 @@ import {
 import { isOpen } from '@/lib/board'
 import { useBoard } from '@/lib/queries'
 
-export const Route = createFileRoute('/_app/done')({ component: DoneScreen })
+export const Route = createFileRoute('/_app/done')({
+  head: () => ({ meta: [{ title: 'Done - todos' }] }),
+  component: DoneScreen,
+})
 
 // What was ticked off in the last week, newest first. Untick to bring one back.
 function DoneScreen() {
