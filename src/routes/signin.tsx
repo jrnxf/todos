@@ -9,6 +9,7 @@ import { authClient } from '@/lib/auth-client'
 import { returnPath } from '@/lib/signed-out'
 
 export const Route = createFileRoute('/signin')({
+  head: () => ({ meta: [{ title: 'Sign in - todos' }] }),
   // `redirect` is where the browser was headed; `error` is why the last try
   // at signing in came back empty-handed.
   validateSearch: z.object({

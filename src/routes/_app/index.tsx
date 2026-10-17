@@ -16,6 +16,12 @@ export const Route = createFileRoute('/_app/')({
       .regex(/^\d{4}-\d{2}-\d{2}$/)
       .optional(),
   }),
+  head: ({ match }) => {
+    const { view } = match.search
+    const screen =
+      view === 'week' ? 'Week' : view === 'month' ? 'Month' : 'Today'
+    return { meta: [{ title: `${screen} - todos` }] }
+  },
   component: HomeScreen,
 })
 
