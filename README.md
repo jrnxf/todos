@@ -65,23 +65,9 @@ deploy.
 
 ## Google Calendar
 
-Optional, and each person connects their own from the account page. To
-turn it on, as the owner of the Google Cloud project and the Worker:
-
-1. Enable the **Google Calendar API** in the sign-in client's project.
-2. Add the scope `https://www.googleapis.com/auth/calendar.app.created` to
-   the consent screen (Google Auth Platform > Data Access).
-3. Add `https://<your-app>/api/calendar/callback` (and
-   `http://localhost:3001/api/calendar/callback` for dev) to the sign-in
-   client's authorised redirect URIs.
-4. Publish the consent screen (Audience > Publish app): in Testing, Google
-   ends a calendar connection after 7 days.
-5. `bunx wrangler secret put CALENDAR_TOKEN_KEY` with
-   `openssl rand -base64 32`.
-6. `bun run db:migrate:remote`, then `bun run deploy`.
-
-[docs/operations.md](docs/operations.md#google-calendar-optional) says what
-syncs and how, and what to look at when a calendar stops.
+Optional, and each person connects their own from the account page.
+[docs/operations.md](docs/operations.md#google-calendar-optional) says how to
+turn it on, what syncs and how, and what to look at when a calendar stops.
 
 ## Where things live
 
