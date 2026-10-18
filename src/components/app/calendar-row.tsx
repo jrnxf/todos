@@ -87,9 +87,11 @@ export function CalendarRow() {
           <AlertDialogHeader>
             <AlertDialogTitle>Disconnect Google Calendar?</AlertDialogTitle>
             <AlertDialogDescription>
-              The Todos calendar is deleted from your Google account, and the
-              app forgets its access to it and which event is which to-do. Your
-              to-dos stay here, those you made in that calendar too.
+              {status.problem === 'revoked'
+                ? 'Google no longer lets the app in, so the Todos calendar stays in your Google account: delete it there if you no longer want it.'
+                : 'The Todos calendar is deleted from your Google account.'}{' '}
+              The app forgets its access to it and which event is which to-do.
+              Your to-dos stay here, those you made in that calendar too.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
