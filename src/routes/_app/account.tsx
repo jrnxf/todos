@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { z } from 'zod'
 import { BellIcon, CheckIcon, SmartphoneIcon } from 'lucide-react'
 import { toast } from 'sonner'
+import { CalendarRow } from '@/components/app/calendar-row'
 import { Row, Rows } from '@/components/app/rows'
 import { Column, ScreenHeader } from '@/components/app/shell'
 import { PersonAvatar, SectionHeading } from '@/components/app/todo-row'
@@ -16,19 +18,34 @@ import {
   ItemTitle,
 } from '@/components/ui/item'
 import { useSignOut } from '@/lib/auth-client'
-import { useBoard } from '@/lib/queries'
+import { calendarQ, useBoard } from '@/lib/queries'
 import { sendTestAlert } from '@/server/board'
 
 export const Route = createFileRoute('/_app/account')({
   head: () => ({ meta: [{ title: 'Account - todos' }] }),
+  // How connecting Google Calendar went, on the way back from Google.
+  validateSearch: z.object({ calendar: z.string().optional() }),
+  loader: ({ context }) => context.queryClient.ensureQueryData(calendarQ),
   component: AccountScreen,
 })
 
 // Who is signed in on this device, the two things worth setting up on a new
-// phone, and the way out.
+// phone, their Google Calendar, and the way out.
 function AccountScreen() {
   const board = useBoard()
   const me = board.people.find((person) => person.id === board.me)
+
+  // Said once, then taken out of the address so a reload does not repeat it.
+  const { calendar: outcome } = Route.useSearch()
+  const navigate = useNavigate({ from: Route.fullPath })
+  useEffect(() => {
+    if (!outcome) return
+    announce(outcome)
+    void navigate({
+      search: (search) => ({ ...search, calendar: undefined }),
+      replace: true,
+    })
+  }, [outcome, navigate])
 
   // Only knowable in the browser, so it starts unknown.
   const [installed, setInstalled] = useState<boolean | null>(null)
@@ -129,6 +146,40 @@ function AccountScreen() {
           </Row>
         </Rows>
       </section>
+
+      <section className="flex flex-col gap-2.5">
+        <SectionHeading>Calendar</SectionHeading>
+        <Rows>
+          <CalendarRow />
+        </Rows>
+      </section>
     </Column>
   )
+}
+
+// One toast however many times the page asks: React runs effects twice in dev.
+const ONCE = { id: 'calendar-outcome' }
+
+/** What the trip to Google came back with, said once. */
+function announce(outcome: string | undefined): void {
+  switch (outcome) {
+    case 'connected':
+      toast.success(
+        'Google Calendar connected. Your to-dos are on their way.',
+        ONCE,
+      )
+      break
+    case 'denied':
+      toast.warning(
+        'Google Calendar was not connected: access was not given.',
+        ONCE,
+      )
+      break
+    case 'failed':
+      toast.error('Could not connect Google Calendar. Try again.', ONCE)
+      break
+    case 'unavailable':
+      toast.error('Google Calendar is not set up on this server yet.', ONCE)
+      break
+  }
 }

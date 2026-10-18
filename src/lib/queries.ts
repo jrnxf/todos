@@ -20,6 +20,7 @@ import {
   updateTag,
   updateItem,
 } from '@/server/board'
+import { getCalendar } from '@/server/calendar'
 import type { Tag, TagColor, Todo } from '@/db/schema'
 import type { Board, ItemFields } from '@/server/board'
 
@@ -29,6 +30,21 @@ export const boardQ = queryOptions({
   refetchInterval: 15_000,
   refetchOnWindowFocus: true,
   staleTime: 5_000,
+})
+
+/** The person's Google Calendar connection, for the account page. */
+export const calendarQ = queryOptions({
+  queryKey: ['calendar'],
+  queryFn: () => getCalendar(),
+  // Asked often while the first pass after connecting runs, so "Filling"
+  // turns into "synced" on its own.
+  refetchInterval: (query) => {
+    const status = query.state.data
+    return status?.connected && !status.problem && !status.lastSyncedAt
+      ? 3_000
+      : 60_000
+  },
+  refetchOnWindowFocus: true,
 })
 
 export function useBoard(): Board {
@@ -83,6 +99,7 @@ export function useAddItem() {
           createdAt: new Date().toISOString(),
           createdBy: board.me,
           deletedAt: null,
+          updatedAt: new Date().toISOString(),
         },
       ],
     }),

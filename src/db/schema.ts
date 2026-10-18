@@ -4,6 +4,7 @@ import {
   primaryKey,
   sqliteTable,
   text,
+  uniqueIndex,
 } from 'drizzle-orm/sqlite-core'
 
 /** The colours a tag can have. Kept apart from the red and amber that mean late and soon. */
@@ -60,6 +61,16 @@ export const items = sqliteTable('items', {
   createdBy: text('created_by'),
   // Delete is soft, so a slip of the thumb can be undone.
   deletedAt: text('deleted_at'),
+  // The last change to the row, from the app or from a Google Calendar.
+  // Calendar sync settles a change made on both sides by which came last
+  // (src/calendar/sync.ts). Every write through drizzle stamps it; the
+  // constant default only covers rows from before the column existed, which
+  // the migration stamps with their creation.
+  updatedAt: text('updated_at')
+    .notNull()
+    .default('1970-01-01T00:00:00.000Z')
+    .$defaultFn(() => new Date().toISOString())
+    .$onUpdate(() => new Date().toISOString()),
 })
 
 // One row per alert that went out. The key is what makes the scheduler safe
@@ -82,6 +93,62 @@ export const meta = sqliteTable('meta', {
   key: text('key').primaryKey(),
   value: text('value').notNull(),
 })
+
+// Google Calendar, one row per person who connected theirs: their own
+// "Todos" calendar, kept in step with the list (src/calendar/). Every to-do
+// with a deadline is an event in it, whoever the to-do is for.
+export const calendarLinks = sqliteTable('calendar_links', {
+  // A person's id from the PEOPLE setting.
+  person: text('person').primaryKey(),
+  // Both tokens are sealed with the CALENDAR_TOKEN_KEY setting
+  // (src/calendar/seal.ts), never stored as Google issued them.
+  refreshToken: text('refresh_token').notNull(),
+  accessToken: text('access_token'),
+  accessTokenExpiresAt: integer('access_token_expires_at'),
+  // The calendar the app made. Null only until the first sync makes it.
+  calendarId: text('calendar_id'),
+  // Google's place in the calendar's history: the next sync asks only for
+  // what changed after it.
+  syncToken: text('sync_token'),
+  // The push channel Google calls on a change (/api/calendar/notify). The
+  // token Google sends back with each call is kept only as a hash.
+  channelId: text('channel_id'),
+  channelResourceId: text('channel_resource_id'),
+  channelTokenHash: text('channel_token_hash'),
+  // Unix milliseconds, as Google gives it.
+  channelExpiresAt: integer('channel_expires_at'),
+  // Null while it works. Otherwise why it stopped, and the person has to
+  // connect again: 'revoked' (access withdrawn in Google) or 'calendar_gone'
+  // (the Todos calendar was deleted there).
+  problem: text('problem').$type<'revoked' | 'calendar_gone'>(),
+  // UTC instants.
+  connectedAt: text('connected_at').notNull(),
+  lastSyncedAt: text('last_synced_at'),
+})
+
+// Which event in a person's Todos calendar is which to-do, and what was last
+// written to it. `etag` is Google's version of the event as the app last
+// wrote or read it, so the app knows its own writes when they come back.
+// `hash` is the event's content as the to-do last had it, so a change on
+// either side is seen as one.
+export const calendarEvents = sqliteTable(
+  'calendar_events',
+  {
+    person: text('person')
+      .notNull()
+      .references(() => calendarLinks.person, { onDelete: 'cascade' }),
+    itemId: integer('item_id')
+      .notNull()
+      .references(() => items.id, { onDelete: 'cascade' }),
+    eventId: text('event_id').notNull(),
+    etag: text('etag').notNull(),
+    hash: text('hash').notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.person, t.itemId] }),
+    uniqueIndex('calendar_events_event').on(t.person, t.eventId),
+  ],
+)
 
 // Sign-in. These four tables belong to Better Auth (src/server/auth.ts),
 // which reads and writes them by these property names; nothing else in the
@@ -157,3 +224,5 @@ export const authVerification = sqliteTable(
 
 export type Todo = typeof items.$inferSelect
 export type Tag = typeof tags.$inferSelect
+export type CalendarLink = typeof calendarLinks.$inferSelect
+export type CalendarEvent = typeof calendarEvents.$inferSelect

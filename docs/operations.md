@@ -9,13 +9,17 @@ your Worker is served at, such as `todos.jrnxf.co`.
 - One Worker: a TanStack Start app, deployed with wrangler from this repo.
 - One D1 database (SQLite). Schema changes are SQL files under `drizzle/`,
   applied with wrangler.
-- One Cron Trigger, every minute, which is the whole alert scheduler.
+- One Cron Trigger, every minute, which is the whole alert scheduler and the
+  Google Calendar sync's backstop.
 - Sign-in with Google (Better Auth), limited to a list of addresses. The
   address is public, but all it shows a stranger is the sign-in page.
+- Optionally, each person's own Google Calendar, kept in step with the list
+  both ways.
 
 The database holds only what the household creates (to-dos, tags, sign-in
-sessions), one row of scheduler state, and the migration history. Who lives
-in the house is a setting, not a table.
+sessions), each connected calendar's sealed tokens and its record of which
+event is which to-do, a few rows of scheduler state, and the migration
+history. Who lives in the house is a setting, not a table.
 
 ## Setting up your own
 
@@ -69,8 +73,10 @@ in the house is a setting, not a table.
 
 Only the Google accounts named in `PEOPLE_EMAILS`, and each one is the person
 it is listed against. Everything else is refused in one place,
-`src/start.ts`: a page request is sent to `/signin`, a data request gets a 401. Three paths answer without a session: `/signin`, `/api/auth/*` (the
-sign-in machinery) and `/api/health`.
+`src/start.ts`: a page request is sent to `/signin`, a data request gets a 401. Four paths answer without a session: `/signin`, `/api/auth/*` (the
+sign-in machinery), `/api/health`, and `/api/calendar/notify`, which Google
+Calendar calls on a change and which believes only a call that carries the
+channel, resource and token the app gave Google.
 
 - A Google account that is not on the list is turned away on its way back
   from Google and leaves no row behind.
@@ -118,6 +124,98 @@ instead of sent.
 3. On each phone, open the app, tap the avatar, press **Send test**. In the
    Pushover app, turn on Critical Alerts for high priority if a must-not-miss
    to-do should sound through silent.
+
+## Google Calendar (optional)
+
+Each person can connect their own Google account from the account page.
+The app then makes a calendar called **Todos** in that account and keeps it
+in step with the list, both ways:
+
+- Every to-do with a deadline is an event in it, whoever the to-do is for.
+  One with a time is a half-hour event at that time; one without is an
+  all-day event. A to-do finished more than 30 days ago is not added when
+  someone connects.
+- Renaming, re-dating, finishing or deleting a to-do changes or removes its
+  event, within seconds. Finished shows as a mark in front of the title:
+  "✓ Renew passports".
+- The same in Google Calendar changes the to-do: rename or move the event,
+  put ✓ (or `[x]`) in front of the title to finish it or take it out to
+  undo that, or delete the event to delete the to-do. Notes travel too.
+  Tags, who it is for, heads-ups and must-not-miss stay as they are.
+- An event made in the Todos calendar becomes a to-do, for either of you,
+  and shows up in everyone else's Todos calendar. A repeating event is left
+  alone.
+- When a to-do and its event both changed before the two caught up, the one
+  changed last wins.
+- Nothing outside the Todos calendar is read or written. The app asks
+  Google for `calendar.app.created`, which reaches only calendars the app
+  made itself: not the primary calendar, and not any other.
+
+**Disconnect** on the account page deletes the Todos calendar from that
+Google account, stops Google calling, withdraws the app's access and forgets
+the tokens. The to-dos stay, those made in the calendar too.
+
+How a change travels: Google calls `/api/calendar/notify` on every change
+to a Todos calendar (a push channel, renewed every week), and the app asks
+Google what changed since it last asked. A change in the app starts the
+same pass straight away. Every quarter of an hour the cron runs a pass
+anyway, in case a call from Google went missing. One pass makes at most 40
+requests to Google; a longer first fill carries on a minute later.
+
+### Turning it on
+
+1. In the Google Cloud console, in the project of the sign-in client:
+   - **APIs & Services > Library**: enable the **Google Calendar API**.
+   - **Google Auth Platform > Data Access** (the OAuth consent screen's
+     scopes): add `https://www.googleapis.com/auth/calendar.app.created`.
+   - **Google Auth Platform > Clients**, the sign-in client: add these
+     authorised redirect URIs next to the sign-in ones:
+
+     ```
+     https://<your-app>/api/calendar/callback
+     http://localhost:3001/api/calendar/callback
+     ```
+
+   - **Google Auth Platform > Audience**: if the publishing status is
+     **Testing**, Google lets a calendar connection last only 7 days. Press
+     **Publish app** to make it **In production**. Without Google's review of
+     the app, each person sees "Google hasn't verified this app" once when
+     connecting, and goes on through **Advanced**, which is fine for a
+     household.
+
+2. Set the key that seals the calendar tokens in the database:
+
+   ```bash
+   bunx wrangler secret put CALENDAR_TOKEN_KEY   # openssl rand -base64 32
+   ```
+
+   Changing it later cuts every calendar off; each person connects again.
+
+3. Apply the migration and deploy (`bun run db:migrate:remote`, then
+   `bun run deploy`, as in [Deploying a change](#deploying-a-change)).
+4. Each person: open the app, tap the avatar, **Connect** under Google
+   Calendar, and say yes to Google.
+
+Until the key and the sign-in client are both set, the account page says
+Google Calendar is not set up, and nothing is sent to Google. A dev server
+on `http://localhost` gets no push channel (Google calls only https
+addresses), so there a change made in Google Calendar arrives with the next
+change in the app or the quarter-hour pass.
+
+### When a calendar stops
+
+The account page says so, with **Reconnect**, when Google stopped letting
+the app in (access withdrawn at myaccount.google.com, or the key changed)
+or when the Todos calendar was deleted in Google. Reconnecting after the
+first carries on with the same calendar; after the second it makes a new
+one.
+
+```bash
+bunx wrangler d1 execute DB --remote --command \
+  "select person, problem, last_synced_at, channel_expires_at from calendar_links"
+```
+
+`last_synced_at` is the last pass that completed for that person, UTC.
 
 ## Reading titles with Jev (optional)
 

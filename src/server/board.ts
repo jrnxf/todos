@@ -1,10 +1,12 @@
 // Everything the screens read and every change they make. The whole
 // household list is a few hundred rows, so one read returns all of it and
-// the screens group and filter in the browser.
+// the screens group and filter in the browser. A change to a to-do starts a
+// calendar sync pass once it is saved (src/calendar/run.ts).
 import { createServerFn } from '@tanstack/react-start'
 import { and, eq, gte, isNull, lt, or } from 'drizzle-orm'
 import { z } from 'zod'
 import { channelFor, notify } from '@/alerts/notify'
+import { requestCalendarSync } from '@/calendar/run'
 import { getDb, schema } from '@/db/client'
 import { TAG_COLORS } from '@/db/schema'
 import { addDays, localNow } from '@/lib/dates'
@@ -138,6 +140,7 @@ export const addItem = createServerFn({ method: 'POST' })
         createdBy: me,
       })
       .returning()
+    requestCalendarSync()
     return created
   })
 
@@ -151,6 +154,7 @@ export const updateItem = createServerFn({ method: 'POST' })
     if (patch.dueDate === null) patch.dueTime = null
     const db = getDb()
     await db.update(schema.items).set(patch).where(eq(schema.items.id, data.id))
+    requestCalendarSync()
   })
 
 export const setDone = createServerFn({ method: 'POST' })
@@ -166,6 +170,7 @@ export const setDone = createServerFn({ method: 'POST' })
           : { doneAt: null, doneBy: null },
       )
       .where(eq(schema.items.id, data.id))
+    requestCalendarSync()
   })
 
 /** Soft delete; `deleted: false` brings the to-do back. */
@@ -177,6 +182,7 @@ export const setDeleted = createServerFn({ method: 'POST' })
       .update(schema.items)
       .set({ deletedAt: data.deleted ? new Date().toISOString() : null })
       .where(eq(schema.items.id, data.id))
+    requestCalendarSync()
   })
 
 /**
