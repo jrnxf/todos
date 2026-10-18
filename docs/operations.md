@@ -154,8 +154,9 @@ in step with the list, both ways:
 **Disconnect** on the account page deletes the Todos calendar from that
 Google account, stops Google calling, withdraws the app's access and forgets
 the tokens and which event is which to-do. It is there also when the link
-has a problem, such as access withdrawn in Google. The to-dos stay, those
-made in the calendar too.
+has a problem. When access was withdrawn in Google, the app can no longer
+delete the Todos calendar, so it stays in that Google account and can be
+deleted there. The to-dos stay, those made in the calendar too.
 
 How a change travels: Google calls `/api/calendar/notify` on every change
 to a Todos calendar (a push channel, renewed every week), and the app asks
