@@ -17,6 +17,7 @@ import {
 import { testDb } from './test-db'
 import type { Todo } from '@/db/schema'
 import type { CalendarApi } from './google'
+import type { GoogleEvent } from './mapping'
 import type { Db, SyncDeps } from './sync'
 
 const TZ = 'America/Chicago'
@@ -356,6 +357,82 @@ describe('a change in Google Calendar', () => {
   })
 })
 
+describe('what an event cannot say word for word', () => {
+  beforeEach(() => connect('alex'))
+
+  async function editEvent(itemId: number, body: Partial<GoogleEvent>) {
+    later()
+    google
+      .asPerson(calendarOf('alex').id)
+      .edit(await eventIdOf('alex', itemId), body)
+  }
+
+  it('keeps a title that starts like a done mark when the event moves', async () => {
+    const item = await addTodo({ title: '[x] list' })
+    const packing = await addTodo({ title: '✅ Packing' })
+    await syncHousehold(deps)
+
+    await editEvent(item.id, {
+      start: { date: '2026-10-16' },
+      end: { date: '2026-10-17' },
+    })
+    // Nothing the list shows: a colour, a reminder.
+    await editEvent(packing.id, {})
+    await syncHousehold(deps)
+
+    expect(await todo(item.id)).toMatchObject({
+      title: '[x] list',
+      doneAt: null,
+      dueDate: '2026-10-16',
+    })
+    expect(await todo(packing.id)).toMatchObject({
+      title: '✅ Packing',
+      doneAt: null,
+      dueDate: '2026-10-15',
+    })
+    await expectQuiet()
+  })
+
+  it('keeps notes that look like a tag when the event changes', async () => {
+    const item = await addTodo({
+      title: 'Read',
+      notes: 'see <https://example.com>',
+    })
+    await syncHousehold(deps)
+
+    await editEvent(item.id, {})
+    await syncHousehold(deps)
+    await editEvent(item.id, { summary: 'Read it' })
+    await syncHousehold(deps)
+
+    expect(await todo(item.id)).toMatchObject({
+      title: 'Read it',
+      notes: 'see <https://example.com>',
+    })
+    await expectQuiet()
+  })
+
+  it('keeps them when it takes back its own event', async () => {
+    const item = await addTodo({
+      title: '[x] list',
+      notes: 'see <https://example.com>',
+    })
+    await syncHousehold(deps)
+    await db.delete(schema.calendarEvents)
+    await db
+      .update(schema.calendarLinks)
+      .set({ syncToken: null })
+      .where(eq(schema.calendarLinks.person, 'alex'))
+
+    await syncHousehold(deps)
+    expect(await todo(item.id)).toMatchObject({
+      title: '[x] list',
+      notes: 'see <https://example.com>',
+      doneAt: null,
+    })
+  })
+})
+
 describe('when both sides changed', () => {
   async function setUp() {
     await connect('alex')
@@ -521,6 +598,42 @@ describe('passes', () => {
     // The running pass saw the request and went round again.
     expect(await syncWanted(db)).toBe(false)
     expect(google.visible(calendarOf('alex').id)).toHaveLength(1)
+  })
+
+  it('stops a pass whose lease was taken over, without copies of events', async () => {
+    await connect('alex')
+    const gone = await addTodo({ title: 'Cancelled', dueDate: '2026-10-14' })
+    await syncHousehold(deps)
+    await editTodo(gone.id, { deletedAt: clock.toISOString() })
+    await addTodo({ title: 'Renew passports' })
+
+    // The first pass stalls on a request until its lease has run out, and
+    // another pass takes over and does the work meanwhile.
+    let stalled = false
+    const slow: SyncDeps = {
+      ...deps,
+      apiFor: (link) => {
+        const api = google.apiFor(link.person)
+        return {
+          ...api,
+          deleteEvent: async (...args) => {
+            if (!stalled) {
+              stalled = true
+              later(3)
+              expect(await runSync(deps)).toBe('ran')
+            }
+            return api.deleteEvent(...args)
+          },
+        } satisfies CalendarApi
+      },
+    }
+    expect(await runSync(slow)).toBe('ran')
+
+    expect(stalled).toBe(true)
+    expect(google.visible(calendarOf('alex').id).map((e) => e.summary)).toEqual(
+      ['Renew passports'],
+    )
+    await expectQuiet()
   })
 
   it('takes over a lease whose holder is long gone', async () => {

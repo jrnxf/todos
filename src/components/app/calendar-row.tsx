@@ -45,7 +45,6 @@ export function CalendarRow() {
     onSettled: () => client.invalidateQueries({ queryKey: calendarQ.queryKey }),
   })
 
-  const connected = status.connected && !status.problem
   return (
     <Row>
       <ItemMedia variant="icon">
@@ -61,16 +60,7 @@ export function CalendarRow() {
       </ItemContent>
       {status.available && (
         <ItemActions>
-          {connected ? (
-            <Button
-              variant="outline"
-              size="lg"
-              disabled={remove.isPending}
-              onClick={() => setConfirming(true)}
-            >
-              Disconnect
-            </Button>
-          ) : (
+          {(!status.connected || status.problem) && (
             <Button
               variant="outline"
               size="lg"
@@ -80,6 +70,16 @@ export function CalendarRow() {
               {status.problem ? 'Reconnect' : 'Connect'}
             </Button>
           )}
+          {status.connected && (
+            <Button
+              variant="outline"
+              size="lg"
+              disabled={remove.isPending}
+              onClick={() => setConfirming(true)}
+            >
+              Disconnect
+            </Button>
+          )}
         </ItemActions>
       )}
       <AlertDialog open={confirming} onOpenChange={setConfirming}>
@@ -87,7 +87,8 @@ export function CalendarRow() {
           <AlertDialogHeader>
             <AlertDialogTitle>Disconnect Google Calendar?</AlertDialogTitle>
             <AlertDialogDescription>
-              The Todos calendar is deleted from your Google account. Your
+              The Todos calendar is deleted from your Google account, and the
+              app forgets its access to it and which event is which to-do. Your
               to-dos stay here, those you made in that calendar too.
             </AlertDialogDescription>
           </AlertDialogHeader>
