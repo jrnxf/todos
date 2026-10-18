@@ -7,6 +7,7 @@ import { Toaster } from '@/components/ui/sonner'
 import { themeBootScript } from '@/lib/theme'
 
 import appCss from '../styles.css?url'
+import geistLatin from '@fontsource-variable/geist/files/geist-latin-wght-normal.woff2?url'
 
 import type { QueryClient } from '@tanstack/react-query'
 
@@ -28,6 +29,16 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       { name: 'apple-mobile-web-app-title', content: 'todos' },
     ],
     links: [
+      // Found from the HTML, so it downloads beside the stylesheet instead of
+      // after it. crossorigin is required even same-origin, or the browser
+      // fetches the font a second time.
+      {
+        rel: 'preload',
+        as: 'font',
+        type: 'font/woff2',
+        href: geistLatin,
+        crossOrigin: 'anonymous',
+      },
       { rel: 'stylesheet', href: appCss },
       { rel: 'manifest', href: '/manifest.webmanifest' },
       { rel: 'icon', href: '/icon.svg', type: 'image/svg+xml' },
