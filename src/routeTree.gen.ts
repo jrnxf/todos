@@ -20,6 +20,9 @@ import { Route as AppUpnextRouteImport } from './routes/_app/upnext'
 import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as ItemIdRouteImport } from './routes/item.$id'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as ApiCalendarCallbackRouteImport } from './routes/api/calendar/callback'
+import { Route as ApiCalendarConnectRouteImport } from './routes/api/calendar/connect'
+import { Route as ApiCalendarNotifyRouteImport } from './routes/api/calendar/notify'
 
 const AppRoute = AppRouteImport.update({
   id: '/_app',
@@ -75,6 +78,21 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiCalendarCallbackRoute = ApiCalendarCallbackRouteImport.update({
+  id: '/api/calendar/callback',
+  path: '/api/calendar/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiCalendarConnectRoute = ApiCalendarConnectRouteImport.update({
+  id: '/api/calendar/connect',
+  path: '/api/calendar/connect',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiCalendarNotifyRoute = ApiCalendarNotifyRouteImport.update({
+  id: '/api/calendar/notify',
+  path: '/api/calendar/notify',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
@@ -87,6 +105,9 @@ export interface FileRoutesByFullPath {
   '/api/health': typeof ApiHealthRoute
   '/item/$id': typeof ItemIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/calendar/callback': typeof ApiCalendarCallbackRoute
+  '/api/calendar/connect': typeof ApiCalendarConnectRoute
+  '/api/calendar/notify': typeof ApiCalendarNotifyRoute
 }
 export interface FileRoutesByTo {
   '/signin': typeof SigninRoute
@@ -99,6 +120,9 @@ export interface FileRoutesByTo {
   '/item/$id': typeof ItemIdRoute
   '/': typeof AppIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/calendar/callback': typeof ApiCalendarCallbackRoute
+  '/api/calendar/connect': typeof ApiCalendarConnectRoute
+  '/api/calendar/notify': typeof ApiCalendarNotifyRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -113,6 +137,9 @@ export interface FileRoutesById {
   '/item/$id': typeof ItemIdRoute
   '/_app/': typeof AppIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/calendar/callback': typeof ApiCalendarCallbackRoute
+  '/api/calendar/connect': typeof ApiCalendarConnectRoute
+  '/api/calendar/notify': typeof ApiCalendarNotifyRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -127,6 +154,9 @@ export interface FileRouteTypes {
     | '/api/health'
     | '/item/$id'
     | '/api/auth/$'
+    | '/api/calendar/callback'
+    | '/api/calendar/connect'
+    | '/api/calendar/notify'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/signin'
@@ -139,6 +169,9 @@ export interface FileRouteTypes {
     | '/item/$id'
     | '/'
     | '/api/auth/$'
+    | '/api/calendar/callback'
+    | '/api/calendar/connect'
+    | '/api/calendar/notify'
   id:
     | '__root__'
     | '/_app'
@@ -152,6 +185,9 @@ export interface FileRouteTypes {
     | '/item/$id'
     | '/_app/'
     | '/api/auth/$'
+    | '/api/calendar/callback'
+    | '/api/calendar/connect'
+    | '/api/calendar/notify'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -160,6 +196,9 @@ export interface RootRouteChildren {
   ApiHealthRoute: typeof ApiHealthRoute
   ItemIdRoute: typeof ItemIdRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiCalendarCallbackRoute: typeof ApiCalendarCallbackRoute
+  ApiCalendarConnectRoute: typeof ApiCalendarConnectRoute
+  ApiCalendarNotifyRoute: typeof ApiCalendarNotifyRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -241,6 +280,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/calendar/callback': {
+      id: '/api/calendar/callback'
+      path: '/api/calendar/callback'
+      fullPath: '/api/calendar/callback'
+      preLoaderRoute: typeof ApiCalendarCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/calendar/connect': {
+      id: '/api/calendar/connect'
+      path: '/api/calendar/connect'
+      fullPath: '/api/calendar/connect'
+      preLoaderRoute: typeof ApiCalendarConnectRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/calendar/notify': {
+      id: '/api/calendar/notify'
+      path: '/api/calendar/notify'
+      fullPath: '/api/calendar/notify'
+      preLoaderRoute: typeof ApiCalendarNotifyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -270,6 +330,9 @@ const rootRouteChildren: RootRouteChildren = {
   ApiHealthRoute: ApiHealthRoute,
   ItemIdRoute: ItemIdRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiCalendarCallbackRoute: ApiCalendarCallbackRoute,
+  ApiCalendarConnectRoute: ApiCalendarConnectRoute,
+  ApiCalendarNotifyRoute: ApiCalendarNotifyRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

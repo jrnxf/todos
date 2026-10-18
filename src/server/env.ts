@@ -82,6 +82,16 @@ const _env = createEnv({
     // each one is. Anyone else is turned away at sign-in.
     PEOPLE_EMAILS: z.string().default('').transform(pairs),
 
+    // A secret: seals the Google Calendar tokens kept in the database
+    // (src/calendar/seal.ts). Any 32 or more random characters. Until it is
+    // set, and the Google client above is too, nobody can connect a
+    // calendar. Changing it later cuts every connected calendar off, and
+    // each person connects theirs again.
+    CALENDAR_TOKEN_KEY: z
+      .string()
+      .min(32, 'at least 32 characters')
+      .default(''),
+
     // Dev server only, ignored once built: be this person without signing in.
     DEV_SIGNED_IN_AS: z.string().default(''),
 
@@ -168,6 +178,19 @@ export const env = {
     },
     get devSignedInAs() {
       return knownPerson(_env.DEV_SIGNED_IN_AS)
+    },
+  },
+  calendar: {
+    get tokenKey() {
+      return _env.CALENDAR_TOKEN_KEY
+    },
+    /** Whether a person can connect a Google Calendar here. */
+    get enabled() {
+      return (
+        _env.CALENDAR_TOKEN_KEY !== '' &&
+        _env.GOOGLE_CLIENT_ID !== '' &&
+        _env.GOOGLE_CLIENT_SECRET !== ''
+      )
     },
   },
   typesafe: {

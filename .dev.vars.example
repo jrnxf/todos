@@ -23,6 +23,12 @@ GOOGLE_CLIENT_SECRET=
 # id:email pairs, ids as in PEOPLE: the Google accounts allowed in.
 PEOPLE_EMAILS=
 
+# Optional. Google Calendar sync: any 32 or more random characters, which
+# seal the calendar tokens kept in the database. Needs the Google client
+# above too, with http://localhost:3001/api/calendar/callback as a redirect
+# URI and the Calendar API enabled. Empty: nobody can connect a calendar.
+CALENDAR_TOKEN_KEY=
+
 # The Pushover application token.
 PUSHOVER_APP_TOKEN=
 

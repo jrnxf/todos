@@ -1,9 +1,10 @@
 // The Worker's entry. Requests go to TanStack Start unchanged; the Cron
 // Trigger in wrangler.jsonc calls `scheduled` once a minute, and that is the
-// whole alert scheduler.
+// whole alert scheduler, and the calendar sync's backstop.
 import handler from '@tanstack/react-start/server-entry'
 import geistLatin from '@fontsource-variable/geist/files/geist-latin-wght-normal.woff2?url'
 import { tick } from '@/alerts/tick'
+import { calendarTick } from '@/calendar/run'
 
 import appCss from './styles.css?url'
 
@@ -24,7 +25,8 @@ export default {
     for (const link of earlyHints) hinted.headers.append('Link', link)
     return hinted
   },
-  scheduled(_controller, _env, ctx) {
+  scheduled(controller, _env, ctx) {
     ctx.waitUntil(tick())
+    ctx.waitUntil(calendarTick(new Date(controller.scheduledTime)))
   },
 } satisfies ExportedHandler<Env>

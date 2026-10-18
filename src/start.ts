@@ -1,13 +1,15 @@
 // The front door. Every request the app answers passes through here before
-// any page, server function or API route sees it, and only three things are
+// any page, server function or API route sees it, and only four things are
 // open to someone who is not signed in: the sign-in page, the sign-in
-// machinery under /api/auth, and the health check. The cron is not a request
-// and does not come this way.
+// machinery under /api/auth, the health check, and the address Google Calendar
+// calls on a change, which checks the caller itself. The cron is not a
+// request and does not come this way.
 import {
   createCsrfMiddleware,
   createMiddleware,
   createStart,
 } from '@tanstack/react-start'
+import { PUSH_PATH } from '@/calendar/paths'
 import { SIGNED_OUT, returnPath, signInPath } from '@/lib/signed-out'
 import { currentPerson } from '@/server/identity'
 
@@ -31,7 +33,9 @@ const door = createMiddleware().server(
     // These answer for themselves, signed in or not.
     if (
       page &&
-      (pathname === '/api/health' || pathname.startsWith('/api/auth/'))
+      (pathname === '/api/health' ||
+        pathname === PUSH_PATH ||
+        pathname.startsWith('/api/auth/'))
     ) {
       return next({ context: { person: null as string | null } })
     }

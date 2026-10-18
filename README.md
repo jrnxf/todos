@@ -13,6 +13,8 @@ list.
   not miss" switch that alerts everyone until it is done.
 - **Sign-in with Google**, limited to the addresses you list. Nobody else sees
   anything but the sign-in page.
+- **Google Calendar**, if you like: each person's own "Todos" calendar holds
+  every to-do with a deadline, and a change on either side reaches the other.
 - Works as a Home Screen app on a phone, and with a sidebar on a laptop.
 
 It is a TanStack Start app on Cloudflare Workers with stock shadcn/ui, one D1
@@ -61,6 +63,26 @@ repo has to change except the database it points at.
 database, make a Google sign-in client, set the settings, attach a domain,
 deploy.
 
+## Google Calendar
+
+Optional, and each person connects their own from the account page. To
+turn it on, as the owner of the Google Cloud project and the Worker:
+
+1. Enable the **Google Calendar API** in the sign-in client's project.
+2. Add the scope `https://www.googleapis.com/auth/calendar.app.created` to
+   the consent screen (Google Auth Platform > Data Access).
+3. Add `https://<your-app>/api/calendar/callback` (and
+   `http://localhost:3001/api/calendar/callback` for dev) to the sign-in
+   client's authorised redirect URIs.
+4. Publish the consent screen (Audience > Publish app): in Testing, Google
+   ends a calendar connection after 7 days.
+5. `bunx wrangler secret put CALENDAR_TOKEN_KEY` with
+   `openssl rand -base64 32`.
+6. `bun run db:migrate:remote`, then `bun run deploy`.
+
+[docs/operations.md](docs/operations.md#google-calendar-optional) says what
+syncs and how, and what to look at when a calendar stops.
+
 ## Where things live
 
 | Path                     | What                                                            |
@@ -82,6 +104,8 @@ deploy.
 | `src/alerts/rules.ts`    | Which alerts exist and when. Pure, with tests                   |
 | `src/alerts/tick.ts`     | One scheduler pass: send what fell due since the last pass      |
 | `src/alerts/notify.ts`   | The one way an alert leaves the app (Pushover today)            |
+| `src/calendar/sync.ts`   | Google Calendar sync both ways: conflicts, echoes. With tests   |
+| `src/calendar/run.ts`    | The sync wired to D1, Google, the cron and the push channel     |
 | `src/routes/`            | Home, List, Done, Account, and sign-in                          |
 | `src/components/app/`    | Capture bar, pickers, the home grid, sidebar, the to-do drawer  |
 | `src/components/ui/`     | Stock shadcn components. Add more with `bunx shadcn add`        |

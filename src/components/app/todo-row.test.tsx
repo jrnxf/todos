@@ -18,6 +18,7 @@ const todo: Todo = {
   createdAt: '2026-10-01T00:00:00.000Z',
   createdBy: null,
   deletedAt: null,
+  updatedAt: '2026-10-01T00:00:00.000Z',
 }
 
 function render(overrides: Partial<Todo> = {}) {

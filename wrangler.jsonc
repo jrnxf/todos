@@ -25,15 +25,16 @@
     },
   ],
 
-  // The scheduler: one pass a minute (src/alerts/tick.ts).
+  // The scheduler: one pass a minute (src/alerts/tick.ts), which also backs
+  // up the Google Calendar sync (src/calendar/run.ts).
   "triggers": { "crons": ["* * * * *"] },
 
   // Only what any household would share. Everything about one particular
   // household (PEOPLE, PEOPLE_EMAILS, HOUSEHOLD_TZ, APP_URL) and every secret
   // (BETTER_AUTH_SECRET, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
-  // PUSHOVER_APP_TOKEN, PUSHOVER_USER_KEYS) lives on the Worker, set with
-  // `wrangler secret put`, and in dev in .dev.vars. So this file says nothing
-  // about who runs it. Every setting is described in src/server/env.ts.
+  // PUSHOVER_APP_TOKEN, PUSHOVER_USER_KEYS, CALENDAR_TOKEN_KEY) lives on the
+  // Worker, set with `wrangler secret put`, and in dev in .dev.vars. So this
+  // file says nothing about who runs it. Every setting is described in src/server/env.ts.
   "vars": {
     "DIGEST_TIME": "07:30",
     "HEADS_UP_TIME": "19:00",
