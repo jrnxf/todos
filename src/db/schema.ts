@@ -129,8 +129,10 @@ export const calendarLinks = sqliteTable('calendar_links', {
 // Which event in a person's Todos calendar is which to-do, and what was last
 // written to it. `etag` is Google's version of the event as the app last
 // wrote or read it, so the app knows its own writes when they come back.
-// `hash` is the event's content as the to-do last had it, so a change on
-// either side is seen as one.
+// `hash` is the to-do's content as it last agreed with the event, so a change
+// in the app is seen as one. `event_hash` is what the event itself last said,
+// part by part, so a change in the calendar is seen as one, and only the
+// parts it changed travel.
 export const calendarEvents = sqliteTable(
   'calendar_events',
   {
@@ -143,6 +145,7 @@ export const calendarEvents = sqliteTable(
     eventId: text('event_id').notNull(),
     etag: text('etag').notNull(),
     hash: text('hash').notNull(),
+    eventHash: text('event_hash').notNull(),
   },
   (t) => [
     primaryKey({ columns: [t.person, t.itemId] }),

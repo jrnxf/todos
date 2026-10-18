@@ -90,18 +90,38 @@ export function contentOf(item: Todo): EventContent {
  * one, so a change is seen by comparing it with the one last written.
  */
 export async function contentHash(content: EventContent): Promise<string> {
-  const text = JSON.stringify([
-    content.title,
-    content.notes,
-    content.dueDate,
-    content.dueTime,
-    content.done,
-  ])
-  const digest = await crypto.subtle.digest(
+  return digest(JSON.stringify(FIELDS.map((field) => content[field])))
+}
+
+const FIELDS = ['title', 'notes', 'dueDate', 'dueTime', 'done'] as const
+
+/**
+ * A fingerprint of each part of an event's content, in one string, so what
+ * changed in an event is told part by part from what it said before.
+ */
+export async function fieldHashes(content: EventContent): Promise<string> {
+  const parts = await Promise.all(
+    FIELDS.map((field) => digest(JSON.stringify(content[field]))),
+  )
+  return parts.join(' ')
+}
+
+/** The parts of `content` that differ from those `fieldHashes` once gave. */
+export async function changedFields(
+  content: EventContent,
+  before: string,
+): Promise<Array<keyof EventContent>> {
+  const known = before.split(' ')
+  const now = (await fieldHashes(content)).split(' ')
+  return FIELDS.filter((_, i) => now[i] !== known[i])
+}
+
+async function digest(text: string): Promise<string> {
+  const bytes = await crypto.subtle.digest(
     'SHA-256',
     new TextEncoder().encode(text),
   )
-  return [...new Uint8Array(digest)]
+  return [...new Uint8Array(bytes)]
     .map((byte) => byte.toString(16).padStart(2, '0'))
     .join('')
 }

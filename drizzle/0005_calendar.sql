@@ -7,6 +7,7 @@ CREATE TABLE `calendar_events` (
 	`event_id` text NOT NULL,
 	`etag` text NOT NULL,
 	`hash` text NOT NULL,
+	`event_hash` text NOT NULL,
 	PRIMARY KEY(`person`, `item_id`),
 	FOREIGN KEY (`person`) REFERENCES `calendar_links`(`person`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`item_id`) REFERENCES `items`(`id`) ON UPDATE no action ON DELETE cascade

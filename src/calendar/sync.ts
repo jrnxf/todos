@@ -3,16 +3,18 @@
 // (Google's sync token), applies it to the list, then writes every to-do
 // whose event no longer says what the to-do does.
 //
-// - A change on one side is a change because it differs from the content
-//   last written to both (`calendar_events.hash`). When both sides changed
-//   since then, the later change wins: the to-do's `updated_at` against the
-//   event's `updated`.
+// - A change on one side is a change because it differs from what that side
+//   last said: the to-do against `calendar_events.hash`, the event against
+//   `calendar_events.event_hash`, part by part, so only the parts changed in
+//   the calendar travel. When both sides changed since then, the later
+//   change wins: the to-do's `updated_at` against the event's `updated`.
 // - The app's own writes come back from Google on the next read. Each event
 //   row holds the etag Google gave the app's last write or read of it, so
 //   those are known and skipped, and nothing bounces back and forth.
 // - One pass at a time for the whole household, held by a lease in `meta`.
 //   A request for a pass while one runs is left as a flag the running pass
-//   picks up, or the next minute's cron does.
+//   picks up, or the next minute's cron does. The holder renews the lease
+//   before each request to Google, and stops when it finds it taken over.
 //
 // Nothing here reads the environment or the request: src/calendar/run.ts
 // wires it to D1 and Google, and sync.test.ts to a fake Google and SQLite.
@@ -22,16 +24,18 @@ import { BudgetSpent, GoogleError, RevokedError } from './google'
 import {
   ITEM_PROPERTY,
   belongsInCalendar,
+  changedFields,
   contentFromEvent,
   contentHash,
   contentOf,
   eventBody,
+  fieldHashes,
 } from './mapping'
 import { hashToken, matchesHash, randomToken } from './seal'
 import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core'
 import type { CalendarEvent, CalendarLink, Todo } from '@/db/schema'
 import type { CalendarApi } from './google'
-import type { GoogleEvent } from './mapping'
+import type { EventContent, GoogleEvent } from './mapping'
 
 export type Db = BaseSQLiteDatabase<'async', unknown, typeof schema>
 
@@ -60,6 +64,16 @@ const RENEW_BEFORE_MS = 24 * 60 * 60 * 1000
 
 const { calendarEvents, calendarLinks, items, meta } = schema
 
+/** Called before each request to Google; throws `LeaseLost` once another pass holds the lease. */
+type Keep = () => Promise<void>
+
+/** Another pass took the lease over: this one stops where it is. */
+class LeaseLost extends Error {
+  constructor() {
+    super('another calendar pass took over the lease')
+  }
+}
+
 /**
  * Runs passes until nobody wants another, unless a pass is already running,
  * in which case that one is asked to go again. 'idle' when nobody has a
@@ -77,14 +91,17 @@ export async function runSync(
     for (let round = 0; round < ROUNDS; round++) {
       if ((await getMeta(db, WANTED)) !== '1') break
       await setMeta(db, WANTED, '0')
-      if (!(await syncHousehold(deps))) {
-        // Out of requests: the next minute's cron carries on.
+      if (!(await syncHousehold(deps, () => renewLease(deps, lease)))) {
+        // Out of requests, or taken over: the next minute's cron, or the
+        // pass that took over, carries on.
         await setMeta(db, WANTED, '1')
         break
       }
     }
   } finally {
-    await db.delete(meta).where(and(eq(meta.key, LEASE), eq(meta.value, lease)))
+    await db
+      .delete(meta)
+      .where(and(eq(meta.key, LEASE), eq(meta.value, lease.value)))
   }
   return 'ran'
 }
@@ -97,20 +114,25 @@ export async function syncWanted(db: Db): Promise<boolean> {
 /**
  * One pass over every connected calendar: read all of them, then write all
  * of them, so a change read from one calendar reaches the others in the same
- * pass. False when it ran out of requests before the end.
+ * pass. False when it ran out of requests, or lost the lease, before the end.
  */
-export async function syncHousehold(deps: SyncDeps): Promise<boolean> {
+export async function syncHousehold(
+  deps: SyncDeps,
+  keep: Keep = async () => {},
+): Promise<boolean> {
   const failed = new Set<string>()
   try {
     for (const link of await activeLinks(deps)) {
-      await guarded(deps, link, failed, () => pull(deps, link))
+      await guarded(deps, link, failed, () => pull(deps, link, keep))
     }
     for (const link of await activeLinks(deps)) {
       if (failed.has(link.person) || !link.calendarId) continue
-      await guarded(deps, link, failed, () => push(deps, link))
+      await guarded(deps, link, failed, () => push(deps, link, keep))
     }
   } catch (error) {
-    if (error instanceof BudgetSpent) return false
+    if (error instanceof BudgetSpent || error instanceof LeaseLost) {
+      return false
+    }
     throw error
   }
   const at = deps.now().toISOString()
@@ -138,7 +160,7 @@ async function guarded(
   try {
     await work()
   } catch (error) {
-    if (error instanceof BudgetSpent) throw error
+    if (error instanceof BudgetSpent || error instanceof LeaseLost) throw error
     failed.add(link.person)
     if (error instanceof RevokedError) {
       await setProblem(deps.db, link.person, 'revoked')
@@ -153,14 +175,19 @@ async function guarded(
 }
 
 /** Reads what changed in a person's calendar and applies it to the list. */
-async function pull(deps: SyncDeps, link: CalendarLink): Promise<void> {
+async function pull(
+  deps: SyncDeps,
+  link: CalendarLink,
+  keep: Keep,
+): Promise<void> {
   const api = deps.apiFor(link)
-  const calendarId = await ensureCalendar(deps, link, api)
+  const calendarId = await ensureCalendar(deps, link, api, keep)
   let syncToken = link.syncToken
   let pageToken: string | null = null
   const seen = new Set<string>()
   for (;;) {
     let page
+    await keep()
     try {
       page = await api.listEvents(calendarId, { syncToken, pageToken })
     } catch (error) {
@@ -196,8 +223,10 @@ async function ensureCalendar(
   deps: SyncDeps,
   link: CalendarLink,
   api: CalendarApi,
+  keep: Keep,
 ): Promise<string> {
   if (link.calendarId) return link.calendarId
+  await keep()
   const made = await api.insertCalendar({
     summary: CALENDAR_NAME,
     description: `To-dos with a deadline, kept in step with ${deps.appUrl}. An event made here becomes a to-do there.`,
@@ -292,46 +321,54 @@ async function applyEvent(
     await keepEtag(db, row, event.etag)
     return
   }
-  const eventHash = await contentHash(content)
-  if (eventHash === itemHash || hereIsLater) {
-    // Same content either way, or the to-do changed last and the next write
-    // overwrites the event. Either way, this version has been read.
+  const eventHash = await fieldHashes(content)
+  const changedThere = await changedFields(content, row.eventHash)
+  const where = and(
+    eq(calendarEvents.person, person),
+    eq(calendarEvents.itemId, item.id),
+  )
+  if (changedThere.length === 0 || hereIsLater) {
+    // Nothing the list shows changed there (a colour, a reminder), or the
+    // to-do changed last and the next write overwrites the event. Either
+    // way, this version has been read.
     await db
       .update(calendarEvents)
-      .set({
-        etag: event.etag,
-        ...(eventHash === itemHash ? { hash: eventHash } : {}),
-      })
-      .where(
-        and(
-          eq(calendarEvents.person, person),
-          eq(calendarEvents.itemId, item.id),
-        ),
-      )
+      .set({ etag: event.etag, eventHash })
+      .where(where)
     return
   }
 
-  await db
-    .update(items)
-    .set({
-      title: content.title,
-      notes: content.notes,
-      dueDate: content.dueDate,
-      dueTime: content.dueTime,
-      ...doneChange(item, content.done, person, event, deps),
-      deletedAt: null,
-      updatedAt: stamp(event, deps),
-    })
-    .where(eq(items.id, item.id))
+  // Only what changed in the calendar is taken from it. A to-do no longer
+  // in the calendar comes back as its event says.
+  const merged: EventContent = itemHash === null ? content : contentOf(item)
+  for (const field of changedThere) {
+    Object.assign(merged, { [field]: content[field] })
+  }
+  const mergedHash = await contentHash(merged)
+  if (mergedHash !== itemHash) {
+    await db
+      .update(items)
+      .set({
+        title: merged.title,
+        notes: merged.notes,
+        dueDate: merged.dueDate,
+        dueTime: merged.dueTime,
+        ...doneChange(item, merged.done, person, event, deps),
+        deletedAt: null,
+        updatedAt: stamp(event, deps),
+      })
+      .where(eq(items.id, item.id))
+  }
+  // A change in the app the event does not show yet keeps the old `hash`,
+  // so the next write puts it there.
   await db
     .update(calendarEvents)
-    .set({ etag: event.etag, hash: eventHash })
-    .where(
-      and(
-        eq(calendarEvents.person, person),
-        eq(calendarEvents.itemId, item.id),
-      ),
-    )
+    .set({
+      etag: event.etag,
+      eventHash,
+      ...(changedHere ? {} : { hash: mergedHash }),
+    })
+    .where(where)
 }
 
 /**
@@ -348,7 +385,6 @@ async function adopt(
   if (event.status === 'cancelled' || event.recurrence) return
   const content = contentFromEvent(event, deps.timeZone)
   if (!content) return
-  const hash = await contentHash(content)
 
   const named = Number(event.extendedProperties?.private?.[ITEM_PROPERTY])
   if (Number.isInteger(named)) {
@@ -367,17 +403,22 @@ async function adopt(
     // own, not a new to-do.
     if (item && taken) return
     if (item) {
-      // Recorded with the to-do's own content, so the event's differences
-      // are applied the usual way.
-      const itemHash = belongsInCalendar(item, true, deps.now())
-        ? await contentHash(contentOf(item))
-        : ''
+      // Recorded as if written from the to-do's own content, so the event's
+      // differences are applied the usual way.
+      const belongs = belongsInCalendar(item, true, deps.now())
+      const written = belongs
+        ? contentFromEvent(
+            { ...eventBody(item.id, contentOf(item), deps), id: '', etag: '' },
+            deps.timeZone,
+          )
+        : null
       await db.insert(calendarEvents).values({
         person,
         itemId: named,
         eventId: event.id,
         etag: '',
-        hash: itemHash,
+        hash: belongs ? await contentHash(contentOf(item)) : '',
+        eventHash: written ? await fieldHashes(written) : '',
       })
       return applyEvent(deps, person, event)
     }
@@ -403,12 +444,17 @@ async function adopt(
     itemId: created.id,
     eventId: event.id,
     etag: event.etag,
-    hash,
+    hash: await contentHash(content),
+    eventHash: await fieldHashes(content),
   })
 }
 
 /** Writes every to-do whose event is missing, out of date, or no longer wanted. */
-async function push(deps: SyncDeps, link: CalendarLink): Promise<void> {
+async function push(
+  deps: SyncDeps,
+  link: CalendarLink,
+  keep: Keep,
+): Promise<void> {
   const { db } = deps
   const calendarId = link.calendarId
   if (!calendarId) return
@@ -435,6 +481,7 @@ async function push(deps: SyncDeps, link: CalendarLink): Promise<void> {
     const row = rows.get(item.id)
     if (!belongsInCalendar(item, row !== undefined, now)) {
       if (row) {
+        await keep()
         await quietly(api.deleteEvent(calendarId, row.eventId))
         await dropEvent(db, row)
       }
@@ -445,6 +492,7 @@ async function push(deps: SyncDeps, link: CalendarLink): Promise<void> {
     if (row?.hash === hash) continue
     const body = eventBody(item.id, content, deps)
 
+    await keep()
     let written: GoogleEvent | null = null
     if (row) {
       try {
@@ -455,6 +503,11 @@ async function push(deps: SyncDeps, link: CalendarLink): Promise<void> {
       }
     }
     written ??= await api.insertEvent(calendarId, body)
+    // What the event now says, as it is read back, which is not always the
+    // to-do word for word: a title that starts "[x]" reads as done.
+    const eventHash = await fieldHashes(
+      contentFromEvent(written, deps.timeZone) ?? content,
+    )
     await db
       .insert(calendarEvents)
       .values({
@@ -463,10 +516,11 @@ async function push(deps: SyncDeps, link: CalendarLink): Promise<void> {
         eventId: written.id,
         etag: written.etag,
         hash,
+        eventHash,
       })
       .onConflictDoUpdate({
         target: [calendarEvents.person, calendarEvents.itemId],
-        set: { eventId: written.id, etag: written.etag, hash },
+        set: { eventId: written.id, etag: written.etag, hash, eventHash },
       })
   }
 }
@@ -688,17 +742,44 @@ async function setMeta(db: Db, key: string, value: string): Promise<void> {
  * value is when it ends, then something only this holder knows, so the
  * holder releases its own lease and never one taken over after it expired.
  */
-async function claimLease(deps: SyncDeps): Promise<string | null> {
+async function claimLease(deps: SyncDeps): Promise<Lease | null> {
   const now = deps.now()
-  const lease = `${new Date(now.getTime() + LEASE_MS).toISOString()} ${randomToken(8)}`
+  const lease = { token: randomToken(8), value: '' }
+  lease.value = leaseValue(deps, lease.token)
   const taken = await deps.db
     .insert(meta)
-    .values({ key: LEASE, value: lease })
+    .values({ key: LEASE, value: lease.value })
     .onConflictDoUpdate({
       target: meta.key,
-      set: { value: lease },
+      set: { value: lease.value },
       setWhere: lt(meta.value, now.toISOString()),
     })
     .returning({ value: meta.value })
   return taken.length > 0 ? lease : null
+}
+
+interface Lease {
+  token: string
+  /** What `meta` holds for it now. */
+  value: string
+}
+
+function leaseValue(deps: SyncDeps, token: string): string {
+  return `${new Date(deps.now().getTime() + LEASE_MS).toISOString()} ${token}`
+}
+
+/**
+ * Pushes the lease's end out again, while it is still this holder's: one
+ * nobody took over is this holder's even past its end, since nobody else
+ * has run. Throws `LeaseLost` once another pass holds it.
+ */
+async function renewLease(deps: SyncDeps, lease: Lease): Promise<void> {
+  const value = leaseValue(deps, lease.token)
+  const renewed = await deps.db
+    .update(meta)
+    .set({ value })
+    .where(and(eq(meta.key, LEASE), eq(meta.value, lease.value)))
+    .returning({ value: meta.value })
+  if (renewed.length === 0) throw new LeaseLost()
+  lease.value = value
 }
