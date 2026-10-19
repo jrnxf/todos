@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { backToAccount, finishConsent, forgetConsent } from '@/calendar/consent'
+import { readsCalendars } from '@/calendar/google'
 import { connectCalendar, oauthClient } from '@/calendar/run'
 import { env } from '@/server/env'
 import { currentPerson } from '@/server/identity'
@@ -18,7 +19,11 @@ export const Route = createFileRoute('/api/calendar/callback')({
         const reply = await finishConsent(request, client)
         if ('outcome' in reply) return backToAccount(reply.outcome, forget)
         await connectCalendar(person, reply.grant)
-        return backToAccount('connected', forget)
+        if (reply.want === 'sync') return backToAccount('connected', forget)
+        return backToAccount(
+          readsCalendars(reply.grant.scopes) ? 'reading' : 'reading-denied',
+          forget,
+        )
       },
     },
   },

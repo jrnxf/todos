@@ -1,9 +1,18 @@
 import { useEffect, useState } from 'react'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { z } from 'zod'
-import { BellIcon, CheckIcon, SmartphoneIcon } from 'lucide-react'
+import {
+  BellIcon,
+  CalendarRangeIcon,
+  CheckIcon,
+  SmartphoneIcon,
+} from 'lucide-react'
 import { toast } from 'sonner'
+import {
+  CalendarChoices,
+  READ_CALENDARS,
+} from '@/components/app/calendar-events'
 import { CalendarRow } from '@/components/app/calendar-row'
 import { Row, Rows } from '@/components/app/rows'
 import { Column, ScreenHeader } from '@/components/app/shell'
@@ -30,9 +39,12 @@ export const Route = createFileRoute('/_app/account')({
 })
 
 // Who is signed in on this device, the two things worth setting up on a new
-// phone, their Google Calendar, and the way out.
+// phone, their Google Calendar and which of their other calendars the views
+// show, and the way out.
 function AccountScreen() {
   const board = useBoard()
+  const { data: calendar } = useSuspenseQuery(calendarQ)
+  const linked = calendar.available && calendar.connected && !calendar.problem
   const me = board.people.find((person) => person.id === board.me)
 
   // Said once, then taken out of the address so a reload does not repeat it.
@@ -151,8 +163,42 @@ function AccountScreen() {
         <SectionHeading>Calendar</SectionHeading>
         <Rows>
           <CalendarRow />
+          {linked && (
+            <Row>
+              <ItemMedia variant="icon">
+                <CalendarRangeIcon />
+              </ItemMedia>
+              <ItemContent>
+                <ItemTitle>Your other calendars</ItemTitle>
+                <ItemDescription>
+                  {calendar.reads
+                    ? 'Choose which show in Day, Week and Month, for you only'
+                    : 'See their events in Day, Week and Month, read-only'}
+                </ItemDescription>
+              </ItemContent>
+              {!calendar.reads && (
+                <ItemActions>
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    nativeButton={false}
+                    render={<a href={READ_CALENDARS} />}
+                  >
+                    Show
+                  </Button>
+                </ItemActions>
+              )}
+            </Row>
+          )}
         </Rows>
       </section>
+
+      {linked && calendar.reads && (
+        <section className="flex flex-col gap-2.5">
+          <SectionHeading>Shown in Day, Week and Month</SectionHeading>
+          <CalendarChoices />
+        </section>
+      )}
     </Column>
   )
 }
@@ -180,6 +226,18 @@ function announce(outcome: string | undefined): void {
       break
     case 'unavailable':
       toast.error('Google Calendar is not set up on this server yet.', ONCE)
+      break
+    case 'reading':
+      toast.success(
+        'Your calendars are ready. Choose which to show below.',
+        ONCE,
+      )
+      break
+    case 'reading-denied':
+      toast.warning(
+        'Your other calendars were not shown: access was not given. The Todos calendar carries on.',
+        ONCE,
+      )
       break
   }
 }

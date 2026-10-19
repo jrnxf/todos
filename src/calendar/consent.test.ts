@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { finishConsent, startConsent } from './consent'
-import { CALENDAR_SCOPE } from './google'
+import { CALENDAR_SCOPE, READ_SCOPES } from './google'
+import type { Want } from './consent'
 
 const client = {
   clientId: 'client',
@@ -9,8 +10,8 @@ const client = {
 }
 
 /** Goes to Google and returns with Google's answer and the browser's cookie. */
-async function roundTrip() {
-  const start = await startConsent(client, 'alex@example.com')
+async function roundTrip(want: Want = 'sync') {
+  const start = await startConsent(client, 'alex@example.com', want)
   const to = new URL(start.headers.get('Location')!)
   const cookie = start.headers.get('Set-Cookie')!.split(';')[0]
   return {
@@ -44,6 +45,7 @@ describe('asking for a calendar', () => {
     )
     expect(Object.fromEntries(to.searchParams)).toMatchObject({
       scope: CALENDAR_SCOPE,
+      include_granted_scopes: 'true',
       access_type: 'offline',
       prompt: 'consent',
       code_challenge_method: 'S256',
@@ -104,5 +106,49 @@ describe('asking for a calendar', () => {
         client,
       ),
     ).toEqual({ outcome: 'denied' })
+  })
+})
+
+describe('asking to read the other calendars as well', () => {
+  const all = [CALENDAR_SCOPE, ...READ_SCOPES].join(' ')
+
+  it('asks for the read-only scopes on top of what was given before', async () => {
+    const trip = await roundTrip('read')
+    expect(trip.to.searchParams.get('scope')).toBe(all)
+    expect(trip.to.searchParams.get('include_granted_scopes')).toBe('true')
+  })
+
+  it('says what was asked for when the grant comes back', async () => {
+    const trip = await roundTrip('read')
+    expect(
+      await finishConsent(
+        trip.back(`code=abc&state=${trip.state}`),
+        client,
+        google(all),
+      ),
+    ).toMatchObject({ want: 'read', grant: { scopes: all.split(' ') } })
+  })
+
+  it('keeps a grant without the reading, so the sync carries on', async () => {
+    const trip = await roundTrip('read')
+    const fetcher = google(CALENDAR_SCOPE)
+    expect(
+      await finishConsent(
+        trip.back(`code=abc&state=${trip.state}`),
+        client,
+        fetcher,
+      ),
+    ).toMatchObject({ want: 'read', grant: { scopes: [CALENDAR_SCOPE] } })
+    expect(fetcher).toHaveBeenCalledTimes(1)
+  })
+
+  it('says the reading was not given when the person said no', async () => {
+    const trip = await roundTrip('read')
+    expect(
+      await finishConsent(
+        trip.back(`error=access_denied&state=${trip.state}`),
+        client,
+      ),
+    ).toEqual({ outcome: 'reading-denied' })
   })
 })

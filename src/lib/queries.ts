@@ -20,9 +20,16 @@ import {
   updateTag,
   updateItem,
 } from '@/server/board'
-import { getCalendar } from '@/server/calendar'
+import {
+  getCalendar,
+  getCalendarEvents,
+  getCalendars,
+  setCalendarShown,
+} from '@/server/calendar'
 import type { Tag, TagColor, Todo } from '@/db/schema'
 import type { Board, ItemFields } from '@/server/board'
+import type { ShownCalendar } from './calendar-events'
+import type { LocalDate } from './dates'
 
 export const boardQ = queryOptions({
   queryKey: ['board'],
@@ -46,6 +53,66 @@ export const calendarQ = queryOptions({
   },
   refetchOnWindowFocus: true,
 })
+
+/** The person's other Google calendars, for choosing which the views show. */
+export const calendarsQ = queryOptions({
+  queryKey: ['calendars'],
+  queryFn: () => getCalendars(),
+  staleTime: 60_000,
+})
+
+/**
+ * The shown calendars' events over the days on screen. Asked of Google when
+ * a screen needs them, kept a couple of minutes, and asked again on focus:
+ * nothing of them is stored on the server.
+ */
+export const calendarEventsQ = (from: LocalDate, to: LocalDate) =>
+  queryOptions({
+    queryKey: ['calendar-events', from, to],
+    queryFn: () => getCalendarEvents({ data: { from, to } }),
+    staleTime: 2 * 60_000,
+    refetchInterval: 5 * 60_000,
+    refetchOnWindowFocus: true,
+  })
+
+/** Shows one of the person's calendars in the views, or stops showing it. */
+export function useShowCalendar() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationKey: ['show-calendar'],
+    mutationFn: (vars: { id: string; shown: boolean }) =>
+      setCalendarShown({ data: vars }),
+    onMutate: async ({ id, shown }) => {
+      await client.cancelQueries({ queryKey: calendarsQ.queryKey })
+      const before = client.getQueryData(calendarsQ.queryKey)
+      if (before) {
+        client.setQueryData(
+          calendarsQ.queryKey,
+          before.map((calendar: ShownCalendar) =>
+            calendar.id === id ? { ...calendar, shown } : calendar,
+          ),
+        )
+      }
+      return { before }
+    },
+    onError: (_error, _vars, context) => {
+      if (context?.before) {
+        client.setQueryData(calendarsQ.queryKey, context.before)
+      }
+      toast.error('Could not change which calendars are shown.')
+    },
+    onSettled: async () => {
+      // Switches flicked in quick succession refetch once, after the last,
+      // so an earlier answer cannot turn a later switch back off.
+      if (client.isMutating({ mutationKey: ['show-calendar'] }) > 1) return
+      await Promise.all([
+        client.invalidateQueries({ queryKey: calendarsQ.queryKey }),
+        client.invalidateQueries({ queryKey: calendarQ.queryKey }),
+        client.invalidateQueries({ queryKey: ['calendar-events'] }),
+      ])
+    },
+  })
+}
 
 export function useBoard(): Board {
   return useSuspenseQuery(boardQ).data

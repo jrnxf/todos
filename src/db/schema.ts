@@ -121,10 +121,33 @@ export const calendarLinks = sqliteTable('calendar_links', {
   // connect again: 'revoked' (access withdrawn in Google) or 'calendar_gone'
   // (the Todos calendar was deleted there).
   problem: text('problem').$type<'revoked' | 'calendar_gone'>(),
+  // What Google granted, space-separated, as its last grant said. The
+  // Todos calendar's own scope always; the read-only ones too once the
+  // person asked to see their other calendars (src/calendar/google.ts).
+  // Links from before this column had only the first.
+  scopes: text('scopes')
+    .notNull()
+    .default('https://www.googleapis.com/auth/calendar.app.created'),
   // UTC instants.
   connectedAt: text('connected_at').notNull(),
   lastSyncedAt: text('last_synced_at'),
 })
+
+// Which of a person's other Google calendars they chose to see in the day,
+// week and month views, by Google's calendar id. Only the choice is kept:
+// the calendars' names, colours and events are asked of Google when the
+// views are open (src/calendar/read.ts), and never stored. None until the
+// person picks one, and gone with the link on Disconnect.
+export const calendarsShown = sqliteTable(
+  'calendars_shown',
+  {
+    person: text('person')
+      .notNull()
+      .references(() => calendarLinks.person, { onDelete: 'cascade' }),
+    calendarId: text('calendar_id').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.person, t.calendarId] })],
+)
 
 // Which event in a person's Todos calendar is which to-do, and what was last
 // written to it. `etag` is Google's version of the event as the app last

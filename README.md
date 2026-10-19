@@ -15,6 +15,8 @@ list.
   anything but the sign-in page.
 - **Google Calendar**, if you like: each person's own "Todos" calendar holds
   every to-do with a deadline, and a change on either side reaches the other.
+  Each person can also see their other Google calendars' events beside the
+  to-dos, read-only.
 - Works as a Home Screen app on a phone, and with a sidebar on a laptop.
 
 It is a TanStack Start app on Cloudflare Workers with stock shadcn/ui, one D1
@@ -92,6 +94,7 @@ turn it on, what syncs and how, and what to look at when a calendar stops.
 | `src/alerts/notify.ts`   | The one way an alert leaves the app (Pushover today)            |
 | `src/calendar/sync.ts`   | Google Calendar sync both ways: conflicts, echoes. With tests   |
 | `src/calendar/run.ts`    | The sync wired to D1, Google, the cron and the push channel     |
+| `src/calendar/read.ts`   | Reading the other calendars a person chose to see, read-only    |
 | `src/routes/`            | Home, List, Done, Account, and sign-in                          |
 | `src/components/app/`    | Capture bar, pickers, the home grid, sidebar, the to-do drawer  |
 | `src/components/ui/`     | Stock shadcn components. Add more with `bunx shadcn add`        |

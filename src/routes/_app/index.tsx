@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
+import { ShownEventsProvider } from '@/components/app/calendar-events'
 import { Lens } from '@/components/app/lens'
 import { LENS_VIEWS } from '@/lib/lens'
 import { boardQ, useBoard } from '@/lib/queries'
@@ -71,5 +72,9 @@ function HomeScreen() {
     )
   }
 
-  return <Lens view={shown.view} day={shown.day} onChange={go} />
+  return (
+    <ShownEventsProvider day={shown.day}>
+      <Lens view={shown.view} day={shown.day} onChange={go} />
+    </ShownEventsProvider>
+  )
 }
