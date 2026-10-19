@@ -457,7 +457,7 @@ function LensSquareView({
           <div className="lens-layer" data-layer="active" style={sizes.active}>
             <div className="lens-pad">
               {number}
-              <div className="lens-list">
+              <ActiveList>
                 {carried.length > 0 && (
                   <>
                     <p className="lens-caption" data-late="">
@@ -482,7 +482,7 @@ function LensSquareView({
                 {events.map((on) => (
                   <LensEventRow key={on.event.key} on={on} />
                 ))}
-              </div>
+              </ActiveList>
             </div>
           </div>
           <div className="lens-layer" data-layer="day" style={sizes.day}>
@@ -493,6 +493,67 @@ function LensSquareView({
         </>
       )}
     </div>
+  )
+}
+
+/** The active square's rows, down to the last that fits whole. What does
+    not fit is hidden and counted, as a month square counts its chips. */
+function ActiveList({ children }: { children: React.ReactNode }) {
+  const list = useRef<HTMLDivElement>(null)
+  const more = useRef<HTMLSpanElement>(null)
+  // Laid out by hand, as React does not see the square's size: every row
+  // shows, then those from the first that leaves no room for "N more" hide.
+  const measure = useCallback(() => {
+    const element = list.current
+    const line = more.current
+    const pad = element?.parentElement
+    if (!element || !line || !pad) return
+    const rows = Array.from(element.children) as Array<HTMLElement>
+    for (const row of rows) row.style.display = ''
+    line.hidden = false
+    const bottom =
+      pad.getBoundingClientRect().bottom -
+      parseFloat(getComputedStyle(pad).paddingBottom)
+    const last = rows.at(-1)
+    let cut = rows.length
+    if (last && last.getBoundingClientRect().bottom > bottom) {
+      // "N more" takes the place of the first row it stands for, so it
+      // stands for the row before the first place it would not fit.
+      const height = line.getBoundingClientRect().height
+      const crowded = rows.findIndex(
+        (row) => row.getBoundingClientRect().top + height > bottom,
+      )
+      cut = Math.max(0, (crowded === -1 ? rows.length : crowded) - 1)
+      // A caption with nothing under it goes too.
+      while (cut > 0 && !rows[cut - 1].classList.contains('lens-row')) cut--
+    }
+    rows.forEach((row, index) => {
+      if (index >= cut) row.style.display = 'none'
+    })
+    const hidden = rows
+      .slice(cut)
+      .filter((row) => row.classList.contains('lens-row')).length
+    line.textContent = `${hidden} more`
+    line.hidden = hidden === 0
+  }, [])
+  // Rows come and go with the board, and change height as fonts load; the
+  // square resizes as the view moves.
+  useLayoutEffect(measure)
+  useLayoutEffect(() => {
+    const element = list.current
+    if (!element?.parentElement) return
+    const observer = new ResizeObserver(measure)
+    observer.observe(element)
+    observer.observe(element.parentElement)
+    return () => observer.disconnect()
+  }, [measure])
+  return (
+    <>
+      <div ref={list} className="lens-list">
+        {children}
+      </div>
+      <span ref={more} className="lens-more" hidden />
+    </>
   )
 }
 
