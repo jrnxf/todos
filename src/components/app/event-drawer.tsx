@@ -637,7 +637,7 @@ function DateTime({
       <Native
         type="date"
         value={date}
-        text={formatDay(date)}
+        format={formatDay}
         disabled={disabled}
         label={`${label} day`}
         onPick={onDate}
@@ -646,7 +646,7 @@ function DateTime({
         <Native
           type="time"
           value={time}
-          text={formatTime(time)}
+          format={formatTime}
           disabled={disabled}
           label={`${label} time`}
           onPick={onTime}
@@ -656,21 +656,30 @@ function DateTime({
   )
 }
 
+/**
+ * One native picker. What is picked shows at once, and is kept when the
+ * picker is left or Enter is pressed.
+ */
 function Native({
   type,
   value,
-  text,
+  format,
   disabled,
   label,
   onPick,
 }: {
   type: 'date' | 'time'
   value: string
-  text: string
+  format: (value: string) => string
   disabled: boolean
   label: string
   onPick: (value: string) => void
 }) {
+  const [draft, setDraft] = useState<string | null>(null)
+  const commit = () => {
+    if (draft && draft !== value) onPick(draft)
+    setDraft(null)
+  }
   return (
     <span
       className={cn(
@@ -678,11 +687,11 @@ function Native({
         !disabled && 'hover:bg-muted',
       )}
     >
-      {text}
+      {format(draft || value)}
       <input
         type={type}
         aria-label={label}
-        defaultValue={value}
+        value={draft ?? value}
         disabled={disabled}
         required
         className="absolute inset-0 size-full cursor-pointer opacity-0 disabled:cursor-default"
@@ -693,10 +702,10 @@ function Native({
             // Already open, or a browser that opens it on its own.
           }
         }}
-        onChange={(changed) => {
-          if (changed.target.value && changed.target.value !== value) {
-            onPick(changed.target.value)
-          }
+        onChange={(changed) => setDraft(changed.target.value)}
+        onBlur={commit}
+        onKeyDown={(pressed) => {
+          if (pressed.key === 'Enter') commit()
         }}
       />
     </span>

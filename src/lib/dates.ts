@@ -65,6 +65,16 @@ export function localNow(
   return { date, time, stamp: toStamp(date, time) }
 }
 
+/** The instant the wall clock in `timeZone` reads `stamp`. */
+export function zonedInstant(stamp: Stamp, timeZone: string): Date {
+  const wall = Date.parse(`${stamp}:00Z`)
+  let at = wall
+  for (let pass = 0; pass < 2; pass++) {
+    at += wall - Date.parse(`${localNow(timeZone, new Date(at)).stamp}:00Z`)
+  }
+  return new Date(at)
+}
+
 /** A Date at local midnight for a calendar date, for date pickers. */
 export function toPickerDate(date: LocalDate): Date {
   const [y, m, d] = date.split('-').map(Number)

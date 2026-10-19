@@ -68,7 +68,7 @@ function view(event: FullEvent, calendar: Calendar): CalendarEventView | null {
 function lookOnly(event: FullEvent, calendar: Calendar): EventDetail['why'] {
   if (!calendar.writable) return 'calendar'
   if (!CHANGEABLE.includes(event.eventType)) return 'google'
-  if (event.organizer?.self === false && !event.guestsCanModify) {
+  if (event.organizer?.self !== true && !event.guestsCanModify) {
     return 'invited'
   }
   return null
@@ -304,10 +304,6 @@ export async function changeEvent(
   const seriesView = view(series, calendar)
   const now = change.when ?? whenOf(current)
   if (scope === 'all' || isFirst(series, event)) {
-    let recurrence = series.recurrence ?? []
-    if (change.when && change.when.allDay !== current.allDay) {
-      recurrence = restyleUntil(recurrence, change.when.allDay)
-    }
     await api.patchEvent(calendarId, seriesId, {
       ...text,
       ...(change.when && seriesView
@@ -316,7 +312,12 @@ export async function changeEvent(
               shiftSeries(whenOf(seriesView), whenOf(current), now),
               true,
             ),
-            recurrence,
+            recurrence: restyleUntil(
+              series.recurrence ?? [],
+              seriesView.startTime,
+              now.allDay ? null : now.startTime,
+              env.timeZone,
+            ),
           }
         : {}),
     })
@@ -353,7 +354,12 @@ export async function changeEvent(
       ...carried,
       ...text,
       ...googleWhen(now, false),
-      recurrence: restyleUntil(continueSeries(recurrence, done), now.allDay),
+      recurrence: restyleUntil(
+        continueSeries(recurrence, done),
+        (seriesView ?? current).startTime,
+        now.allDay ? null : now.startTime,
+        env.timeZone,
+      ),
     })
   } catch (error) {
     await api

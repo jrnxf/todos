@@ -239,11 +239,22 @@ describe('opening an event', () => {
       id: 'invite',
       summary: 'Quarterly review',
       start: { date: '2026-10-20' },
-      organizer: { self: false },
+      organizer: {},
     })
     expect(await openEvent('alex', WORK, 'invite')).toMatchObject({
       can: 'view',
       why: 'invited',
+    })
+    put(WORK, {
+      id: 'potluck',
+      summary: 'Potluck',
+      start: { date: '2026-10-21' },
+      organizer: {},
+      guestsCanModify: true,
+    })
+    expect(await openEvent('alex', WORK, 'potluck')).toMatchObject({
+      can: 'edit',
+      why: null,
     })
     put(WORK, {
       id: 'birthday',
@@ -332,6 +343,19 @@ describe('changing an event', () => {
       }),
     ).rejects.toThrow(/ends before/)
     expect(calls).toEqual([])
+  })
+
+  it("refuses someone else's invitation, and asks Google nothing more", async () => {
+    put(WORK, {
+      id: 'invite',
+      summary: 'Quarterly review',
+      start: { date: '2026-10-20' },
+      organizer: {},
+    })
+    await expect(deleteEvent('alex', WORK, 'invite', 'this')).rejects.toThrow(
+      /looked at/,
+    )
+    expect(writes()).toEqual([])
   })
 
   it('refuses an event on a calendar shared to view', async () => {

@@ -3,8 +3,8 @@
 // panel, and rewritten when a change or a delete is for "this and following
 // events", which ends the series before that day and starts a new one there.
 // Pure, and runs on both sides.
-import { addDays } from './dates'
-import type { LocalDate } from './dates'
+import { addDays, localNow, zonedInstant } from './dates'
+import type { LocalDate, LocalTime } from './dates'
 
 const DAYS: Record<string, string> = {
   SU: 'Sunday',
@@ -154,18 +154,50 @@ export function countsDays(recurrence: ReadonlyArray<string>): boolean {
 }
 
 /**
- * The rule as a series that is now all day, or now timed, must write its
- * UNTIL: a date for the one, an instant for the other. The last day stays
- * the last day.
+ * The rule as a series that now starts at `startTime`, or is now all day
+ * for null, must write its UNTIL: a date for an all-day series, an instant
+ * for a timed one. The series' last day in `timeZone` stays its last day.
+ * `wasStart` is the time the series started at before, null for all day.
  */
 export function restyleUntil(
   recurrence: ReadonlyArray<string>,
-  allDay: boolean,
+  wasStart: LocalTime | null,
+  startTime: LocalTime | null,
+  timeZone: string,
 ): Array<string> {
   return writeRule(recurrence, (parts) => {
     const until = parts.get('UNTIL')
     if (!until) return
-    const day = until.slice(0, 8)
-    parts.set('UNTIL', allDay ? day : `${day}T235959Z`)
+    const last = lastDay(until, wasStart, timeZone)
+    parts.set(
+      'UNTIL',
+      startTime === null
+        ? last.replaceAll('-', '')
+        : untilValue({
+            instant: new Date(
+              zonedInstant(`${addDays(last, 1)}T00:00`, timeZone).getTime() -
+                1000,
+            ).toISOString(),
+          }),
+    )
   })
+}
+
+/** The local day of a series' last day, from its UNTIL and start time. */
+function lastDay(
+  until: string,
+  startTime: LocalTime | null,
+  timeZone: string,
+): LocalDate {
+  const date = `${until.slice(0, 4)}-${until.slice(4, 6)}-${until.slice(6, 8)}`
+  if (until.length === 8) return date
+  const at = localNow(
+    timeZone,
+    new Date(
+      `${date}T${until.slice(9, 11)}:${until.slice(11, 13)}:${until.slice(13, 15)}Z`,
+    ),
+  )
+  return startTime !== null && at.time < startTime
+    ? addDays(at.date, -1)
+    : at.date
 }

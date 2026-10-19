@@ -85,13 +85,53 @@ describe('splitting a series at one of its days', () => {
 
   it('writes the end as a date or an instant to match the series', () => {
     expect(
-      restyleUntil(['RRULE:FREQ=DAILY;UNTIL=20261231T235959Z'], true),
+      restyleUntil(
+        ['RRULE:FREQ=DAILY;UNTIL=20261231T235959Z'],
+        '09:00',
+        null,
+        'UTC',
+      ),
     ).toEqual(['RRULE:FREQ=DAILY;UNTIL=20261231'])
-    expect(restyleUntil(['RRULE:FREQ=DAILY;UNTIL=20261231'], false)).toEqual([
-      'RRULE:FREQ=DAILY;UNTIL=20261231T235959Z',
-    ])
-    expect(restyleUntil(['RRULE:FREQ=DAILY'], false)).toEqual([
+    expect(
+      restyleUntil(['RRULE:FREQ=DAILY;UNTIL=20261231'], null, '09:00', 'UTC'),
+    ).toEqual(['RRULE:FREQ=DAILY;UNTIL=20261231T235959Z'])
+    expect(restyleUntil(['RRULE:FREQ=DAILY'], null, '09:00', 'UTC')).toEqual([
       'RRULE:FREQ=DAILY',
     ])
+  })
+
+  it('keeps the last day in the household time zone', () => {
+    const zone = 'America/New_York'
+    // The last day of a 20:00 series is Oct 30 in New York.
+    expect(
+      restyleUntil(
+        ['RRULE:FREQ=DAILY;UNTIL=20261031T035959Z'],
+        '20:00',
+        null,
+        zone,
+      ),
+    ).toEqual(['RRULE:FREQ=DAILY;UNTIL=20261030'])
+    // Ended a second before its 09:00 day: the day before is the last.
+    expect(
+      restyleUntil(
+        ['RRULE:FREQ=DAILY;UNTIL=20261024T125959Z'],
+        '09:00',
+        null,
+        zone,
+      ),
+    ).toEqual(['RRULE:FREQ=DAILY;UNTIL=20261023'])
+    // A 20:00 day on Oct 31 starts on Nov 1 in UTC, and still counts.
+    expect(
+      restyleUntil(['RRULE:FREQ=DAILY;UNTIL=20261031'], null, '20:00', zone),
+    ).toEqual(['RRULE:FREQ=DAILY;UNTIL=20261101T035959Z'])
+    // A timed series moved later keeps its last day too.
+    expect(
+      restyleUntil(
+        ['RRULE:FREQ=DAILY;UNTIL=20261024T135959Z'],
+        '09:00',
+        '20:00',
+        zone,
+      ),
+    ).toEqual(['RRULE:FREQ=DAILY;UNTIL=20261025T035959Z'])
   })
 })
