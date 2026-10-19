@@ -657,8 +657,9 @@ function DateTime({
 }
 
 /**
- * One native picker. What is picked shows at once, and is kept when the
- * picker is left or Enter is pressed.
+ * One native picker. What is picked shows at once, and is kept once it
+ * settles: when typing or picking stops for a moment, when the picker is
+ * left or Enter is pressed, or when the panel closes.
  */
 function Native({
   type,
@@ -676,10 +677,25 @@ function Native({
   onPick: (value: string) => void
 }) {
   const [draft, setDraft] = useState<string | null>(null)
-  const commit = () => {
-    if (draft && draft !== value) onPick(draft)
+  const [saved, setSaved] = useState(value)
+  if (saved !== value) {
+    setSaved(value)
     setDraft(null)
   }
+  const pending = useRef<string | null>(null)
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const commit = () => {
+    clearTimeout(timer.current)
+    const next = pending.current
+    pending.current = null
+    if (next && next !== value) onPick(next)
+    else if (next !== null) setDraft(null)
+  }
+  const flush = useRef(commit)
+  useEffect(() => {
+    flush.current = commit
+  })
+  useEffect(() => () => flush.current(), [])
   return (
     <span
       className={cn(
@@ -702,7 +718,12 @@ function Native({
             // Already open, or a browser that opens it on its own.
           }
         }}
-        onChange={(changed) => setDraft(changed.target.value)}
+        onChange={(changed) => {
+          pending.current = changed.target.value
+          setDraft(changed.target.value)
+          clearTimeout(timer.current)
+          timer.current = setTimeout(() => flush.current(), 800)
+        }}
         onBlur={commit}
         onKeyDown={(pressed) => {
           if (pressed.key === 'Enter') commit()
