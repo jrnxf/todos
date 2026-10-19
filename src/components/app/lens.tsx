@@ -121,7 +121,9 @@ export function Lens({
       newMonth: shown.day.slice(0, 7) !== day.slice(0, 7),
     })
     setLeaving(
-      shown.view === 'day' && view === 'day'
+      shown.view === 'day' &&
+        view === 'day' &&
+        monthWeeks(shown.day)[0][0] === monthWeeks(day)[0][0]
         ? [...leaving.filter((date) => date !== day), shown.day]
         : [],
     )
