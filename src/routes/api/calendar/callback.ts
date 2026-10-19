@@ -1,5 +1,10 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { backToAccount, finishConsent, forgetConsent } from '@/calendar/consent'
+import {
+  backTo,
+  backToAccount,
+  finishConsent,
+  forgetConsent,
+} from '@/calendar/consent'
 import { readsCalendars } from '@/calendar/google'
 import { connectCalendar, oauthClient } from '@/calendar/run'
 import { env } from '@/server/env'
@@ -17,6 +22,12 @@ export const Route = createFileRoute('/api/calendar/callback')({
         if (!person) return backToAccount('failed', forget)
         if (!env.calendar.enabled) return backToAccount('unavailable', forget)
         const reply = await finishConsent(request, client)
+        // Asked from an event: back to it, which can be changed or not as
+        // Google answered. Only a trip that failed outright says so first.
+        if (reply.back && !('outcome' in reply && reply.outcome === 'failed')) {
+          if ('grant' in reply) await connectCalendar(person, reply.grant)
+          return backTo(reply.back, forget)
+        }
         if ('outcome' in reply) return backToAccount(reply.outcome, forget)
         await connectCalendar(person, reply.grant)
         if (reply.want === 'sync') return backToAccount('connected', forget)

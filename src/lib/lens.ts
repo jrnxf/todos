@@ -39,10 +39,14 @@ export function stepDay(
   return `${target.slice(0, 8)}${String(dayOfMonth).padStart(2, '0')}`
 }
 
-/** How much larger the active square is than the rest, column and row. */
+/**
+ * How much larger the active square is than the rest: its column in a
+ * month and in a week, and its row in a month. A laptop's month keeps the
+ * column modest, so the six others have room for their chips and bars.
+ */
 const GROW = {
-  compact: { month: 2.3, week: 7 },
-  wide: { month: 1.9, week: 2.6 },
+  compact: { month: 2.3, week: 7, monthRow: 2.3 },
+  wide: { month: 1.5, week: 2.6, monthRow: 1.9 },
 }
 
 export interface LensTracks {
@@ -86,7 +90,7 @@ export function lensTracks({
     return view === 'week' ? grow.week : grow.month
   })
   const rowWeights = weeks.map((_, r) => {
-    if (view === 'month') return r === row ? grow.month : 1
+    if (view === 'month') return r === row ? grow.monthRow : 1
     return r === row ? 1 : 0
   })
   return {

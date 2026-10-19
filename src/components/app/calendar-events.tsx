@@ -1,15 +1,17 @@
 // A person's other Google calendars in the app: choosing which to show, and
 // their events beside the to-dos in the day, week and month views. An event
-// is read-only and is never a to-do: it has no box to tick, carries its
-// calendar's colour as a mark, and opens in Google Calendar.
+// is never a to-do: it has no box to tick, carries its calendar's colour as
+// a mark, and opens in its own panel (event-drawer.tsx). One that runs a
+// whole day or more spans its days in week and month as a bar.
 import { createContext, useContext, useEffect } from 'react'
+import { Link, useRouterState } from '@tanstack/react-router'
 import {
   keepPreviousData,
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query'
 import { cn } from 'cn'
-import { ArrowUpRightIcon, CalendarRangeIcon, ClockIcon } from 'lucide-react'
+import { CalendarRangeIcon, ChevronRightIcon, ClockIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   ItemActions,
@@ -29,6 +31,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { eventSpan, eventsOn } from '@/lib/calendar-events'
+import { formatTime } from '@/lib/dates'
 import { monthWeeks, stepDay } from '@/lib/lens'
 import {
   calendarEventsQ,
@@ -38,7 +41,11 @@ import {
 } from '@/lib/queries'
 import { Row, Rows } from './rows'
 import { SectionHeading } from './todo-row'
-import type { CalendarEventView, DayEvent } from '@/lib/calendar-events'
+import type {
+  BarPiece,
+  CalendarEventView,
+  DayEvent,
+} from '@/lib/calendar-events'
 import type { LocalDate } from '@/lib/dates'
 import type { LensView } from '@/lib/lens'
 
@@ -101,6 +108,11 @@ export function ShownEventsProvider({
   )
 }
 
+/** The shown events over the month grid on screen. */
+export function useShownEvents(): ReadonlyArray<CalendarEventView> {
+  return useContext(ShownEvents)
+}
+
 /** The shown events on one day, whole-day ones first. */
 export function useEventsOn(date: LocalDate): Array<DayEvent> {
   return eventsOn(useContext(ShownEvents), date)
@@ -117,28 +129,47 @@ export function EventMark({ color }: { color: string }) {
   )
 }
 
-/** Opens the event in Google Calendar, in a tab of its own. */
-function EventLink({
+/**
+ * Opens the event in its panel over the page, as a to-do opens in its
+ * drawer: the first one adds a history entry, so Back closes it, and moving
+ * to another replaces it.
+ */
+export function OpenEvent({
   event,
   className,
+  style,
   children,
+  ...props
 }: {
   event: CalendarEventView
   className?: string
+  style?: React.CSSProperties
   children: React.ReactNode
-}) {
-  if (!event.link) return <span className={className}>{children}</span>
+} & Omit<React.ComponentProps<'a'>, 'href'>) {
+  const anyOpen = useRouterState({
+    select: ({ location: { search } }) =>
+      search.item !== undefined || search.event !== undefined,
+  })
   return (
-    <a
-      href={event.link}
-      target="_blank"
-      rel="noreferrer"
+    <Link
+      to="."
+      search={(now) => ({ ...now, event: event.key, item: undefined })}
+      state={(now) => ({ ...now, openedInPlace: true })}
+      replace={anyOpen}
       className={className}
-      aria-label={`${event.title}, in Google Calendar`}
+      style={style}
+      {...props}
     >
       {children}
-    </a>
+    </Link>
   )
+}
+
+/** Whether `event` is the one open in the panel. */
+function useIsOpen(event: CalendarEventView): boolean {
+  return useRouterState({
+    select: (state) => state.location.search.event === event.key,
+  })
 }
 
 /** One event in the active square of a week or a month. */
@@ -150,10 +181,10 @@ export function LensEventRow({ on }: { on: DayEvent }) {
         className="lens-row-mark"
         style={{ background: on.event.color }}
       />
-      <EventLink event={on.event} className="lens-row-title">
+      <OpenEvent event={on.event} className="lens-row-title">
         <span>{on.event.title}</span>
         {!on.wholeDay && <small>{on.when}</small>}
-      </EventLink>
+      </OpenEvent>
     </div>
   )
 }
@@ -179,11 +210,12 @@ const COVER =
 
 function EventRow({ on }: { on: DayEvent }) {
   const { event } = on
+  const open = useIsOpen(event)
   return (
     <Row
       className={cn(
-        'relative items-start gap-3',
-        event.link && 'hover:bg-muted/50',
+        'relative items-start gap-3 hover:bg-muted/50',
+        open && 'bg-muted/50',
       )}
     >
       {/* Where a to-do has its box: the calendar's colour, as a bar. */}
@@ -194,7 +226,7 @@ function EventRow({ on }: { on: DayEvent }) {
           style={{ background: event.color }}
         />
       </ItemMedia>
-      <EventLink event={event} className={cn('flex min-w-0 flex-1', COVER)}>
+      <OpenEvent event={event} className={cn('flex min-w-0 flex-1', COVER)}>
         <ItemContent className="min-w-0 gap-0.5">
           <ItemTitle className="line-clamp-2 text-[0.9375rem]">
             {event.title}
@@ -207,13 +239,69 @@ function EventRow({ on }: { on: DayEvent }) {
             <span className="truncate">{event.calendar}</span>
           </ItemDescription>
         </ItemContent>
-      </EventLink>
-      {event.link && (
-        <ItemActions>
-          <ArrowUpRightIcon className="size-4 text-muted-foreground" />
-        </ItemActions>
-      )}
+      </OpenEvent>
+      <ItemActions>
+        <ChevronRightIcon className="size-4 text-muted-foreground" />
+      </ItemActions>
     </Row>
+  )
+}
+
+/**
+ * One week's bars, laid over its row of the lens on the grid's own column
+ * tracks, so they stretch as the columns do. Each piece runs from its first
+ * to its last day in the week, on its lane; an arrow end says it carries on
+ * into the week before or after. Lanes from `shown` down are hidden, and
+ * counted in each day's "N more" (lens.tsx).
+ */
+export function WeekBars({
+  row,
+  week,
+  pieces,
+  shown,
+}: {
+  row: number
+  /** The active day's week: the one row a week view keeps open. */
+  week: boolean
+  pieces: ReadonlyArray<BarPiece>
+  shown: number
+}) {
+  return (
+    <div
+      className="lens-bars"
+      data-week={week ? '' : undefined}
+      style={{ gridRow: row + 1 }}
+    >
+      {pieces.map((piece) => (
+        <Bar key={piece.event.key} piece={piece} hidden={piece.lane >= shown} />
+      ))}
+    </div>
+  )
+}
+
+function Bar({ piece, hidden }: { piece: BarPiece; hidden: boolean }) {
+  const { event } = piece
+  const open = useIsOpen(event)
+  const time = !event.allDay && !piece.before ? event.startTime : null
+  return (
+    <OpenEvent
+      event={event}
+      className="lens-bar"
+      data-before={piece.before ? '' : undefined}
+      data-after={piece.after ? '' : undefined}
+      data-open={open ? '' : undefined}
+      data-hidden={hidden ? '' : undefined}
+      tabIndex={hidden ? -1 : undefined}
+      title={event.title}
+      style={{
+        gridColumn: `${piece.from + 1} / ${piece.to + 2}`,
+        gridRow: piece.lane + 2,
+        ['--bar' as string]: event.color,
+      }}
+    >
+      {time && <small>{formatTime(time)}</small>}
+      <span>{event.title}</span>
+    </OpenEvent>
   )
 }
 
@@ -315,7 +403,7 @@ export function CalendarsButton({ className }: { className?: string }) {
           <PopoverDescription>
             {status.reads
               ? 'Their events show here beside the to-dos. Only you see them.'
-              : 'Show events from your other Google calendars here, beside the to-dos. Read-only, and only you see them.'}
+              : 'Show events from your other Google calendars here, beside the to-dos, to see and change. Only you see them.'}
           </PopoverDescription>
         </PopoverHeader>
         {status.reads ? (

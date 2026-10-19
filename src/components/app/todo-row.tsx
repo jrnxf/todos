@@ -22,7 +22,10 @@ export function TodoRow(
   const openId = useRouterState({
     select: (state) => state.location.search.item,
   })
-  const anyOpen = openId !== undefined
+  const anyOpen = useRouterState({
+    select: ({ location: { search } }) =>
+      search.item !== undefined || search.event !== undefined,
+  })
 
   return (
     <TodoRowView
@@ -37,7 +40,7 @@ export function TodoRow(
           // Opens over the list instead of leaving it. The first one adds a
           // history entry, so Back closes it; moving to another replaces it.
           to="."
-          search={(now) => ({ ...now, item: todo.id })}
+          search={(now) => ({ ...now, item: todo.id, event: undefined })}
           state={(now) => ({ ...now, openedInPlace: true })}
           replace={anyOpen}
           className={className}

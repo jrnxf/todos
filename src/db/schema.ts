@@ -122,8 +122,9 @@ export const calendarLinks = sqliteTable('calendar_links', {
   // (the Todos calendar was deleted there).
   problem: text('problem').$type<'revoked' | 'calendar_gone'>(),
   // What Google granted, space-separated, as its last grant said. The
-  // Todos calendar's own scope always; the read-only ones too once the
-  // person asked to see their other calendars (src/calendar/google.ts).
+  // Todos calendar's own scope always; those that read and change their
+  // other calendars too once the person asked to see them
+  // (src/calendar/google.ts).
   // Links from before this column had only the first.
   scopes: text('scopes')
     .notNull()

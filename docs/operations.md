@@ -164,36 +164,67 @@ deleted there. The to-dos stay, those made in the calendar too.
 
 Each person can also see the events of their other Google calendars (their
 own, a shared family one, a school's) in Day, Week and Month, beside the
-to-dos. It is off until they turn it on, and only they see their own.
+to-dos, and open, change or delete one there. It is off until they turn it
+on, and only they see their own.
 
 Where the sync was already running, before anyone turns this on: add the
-two scopes below in the Google Cloud console (step 1 of
-[Turning it on](#turning-it-on)), then `bun run db:migrate:remote` and
-`bun run deploy`, back to back.
+scopes below in the Google Cloud console (step 1 of
+[Turning it on](#turning-it-on)), then `bun run deploy`. Changing events
+needs `calendar.events` added under **Google Auth Platform > Data Access**
+even where seeing them already worked: Google only grants a scope listed
+there.
 
 - **Turning it on.** Under Google Calendar on the account page, **Your
   other calendars**, **Show**; or the calendar button by the arrows at
   home (by the avatar on a phone), **Choose calendars**. Google asks once
-  more, for two read-only scopes on top of the one the sync already has:
+  more, for two scopes on top of the one the sync already has:
   - `calendar.calendarlist.readonly`, the list of the person's calendars
     with the colour each has, to choose from;
-  - `calendar.events.readonly`, the events in them.
+  - `calendar.events`, the events in them, to read, change and delete.
 
-  Together they read less than `calendar.readonly`, which would also read
-  each calendar's settings and who it is shared with, and neither can
-  change anything. Nobody who never turns this on is asked for them, and
-  the sync carries on as it was if the person says no.
+  Together they reach less than `calendar`, which would also change each
+  calendar's settings and who it is shared with. `calendar.events.owned`
+  would be narrower, but it leaves out calendars shared with the person to
+  edit, such as a family's, which Google Calendar lets them change. Nobody
+  who never turns this on is asked for them, and the sync carries on as it
+  was if the person says no.
+
+  Someone who turned this on before events could be changed here gave
+  `calendar.events.readonly` instead. Their events still show; the first
+  time they open one they could change, its panel offers **Allow editing**,
+  which asks Google for `calendar.events` the same way and comes back to
+  that event.
 
 - **Choosing.** A switch for each calendar, on the account page and in that
   button's popover. None is shown until the person picks one, the Todos
   calendar is never offered (it is the to-dos themselves), and twelve at
   most can be shown.
-- **What shows.** Each event once a day it touches, after the day's to-dos,
-  marked with its calendar's colour and outlined rather than filled, with
-  no box to tick. Tapping one in Day, or in the open square of Week or
-  Month, opens it in Google Calendar. Events the person declined, and
-  cancelled ones, are left out. An event is never a to-do and the app never
-  writes to these calendars.
+- **What shows.** An event that is all day, or runs 24 hours or more, is a
+  bar across its days in Week and Month, one piece per week with an arrow
+  end where it carries on, tinted with its calendar's colour. A week row
+  shows three lanes of bars (five in the open day's row, ten in Week); the
+  rest are counted in each day's "N more". Anything shorter is a chip on
+  each day it touches, after the day's to-dos, marked with its calendar's
+  colour and outlined rather than filled, with no box to tick. Day lists
+  them all. Events the person declined, and cancelled ones, are left out.
+  An event is never a to-do.
+- **Opening one.** Tapping a bar, or an event in Day or in the open square
+  of Week or Month, opens it in a panel beside the grid (a sheet on a
+  phone), as a to-do opens: its title, when, calendar, place and notes, and
+  **Open in Google Calendar**. Changes save as they are made, straight to
+  Google: the title, all day or not, when it starts and ends (moving the
+  start keeps the length), the place and the notes. Changing the calendar
+  moves it there. **Delete** asks first, and it goes from that calendar for
+  everyone who sees it. A repeating event first asks whether a change or a
+  delete is for that day, that day and the ones after it, or all of them;
+  "this and following" ends the series the day before and, for a change,
+  starts a new one there, as Google Calendar does. Moving a repeating event
+  moves the whole series.
+- **What can only be looked at.** An event on a calendar shared with the
+  person to view only (a school's, holidays), one someone else invited
+  them to that does not let guests change it, and one Google keeps itself
+  (a birthday) open the same way, with no editing and no delete, and a
+  note saying why. Creating events is not done here.
 - **What is kept.** Only which calendars each person chose, by Google's
   calendar id (`calendars_shown`), and the granted scopes on their link. A
   chosen calendar Google no longer lists for the person (they left it, or
@@ -203,14 +234,18 @@ two scopes below in the Google Cloud console (step 1 of
   on screen, and are kept only in that browser: asked again when the page
   comes back into view after two minutes, and every five minutes while it
   stays open. Nothing of them is stored in the database or the Worker.
-  Each ask fetches only an event's title, times, link, status and the
-  person's own answer to an invitation: no descriptions, places or guests.
+  Each ask for the views fetches only an event's title, times, link,
+  status, series and the person's own answer to an invitation: no
+  descriptions, places or guests. Opening one event reads its description
+  and place too, and its series' rule to say how it repeats; splitting a
+  series reads the series in full, to carry its guests and reminders over
+  to the new one. None of it is kept.
 - **Turning it off.** Turn every switch off, and no events are read; the
   list of calendars is read only while the account page or the popover
   shows it.
   **Disconnect** forgets the choices with the rest and withdraws all of the
-  app's access, the read-only scopes included; connecting again later asks
-  for the calendar sync alone.
+  app's access, these scopes included; connecting again later asks for the
+  calendar sync alone.
 
 How a change travels: Google calls `/api/calendar/notify` on every change
 to a Todos calendar (a push channel, renewed every week), and the app asks
@@ -225,10 +260,12 @@ requests to Google; a longer first fill carries on a minute later.
    - **APIs & Services > Library**: enable the **Google Calendar API**.
    - **Google Auth Platform > Data Access** (the OAuth consent screen's
      scopes): add `https://www.googleapis.com/auth/calendar.app.created`,
-     and, for seeing other calendars,
+     and, for seeing and changing other calendars,
      `https://www.googleapis.com/auth/calendar.calendarlist.readonly` and
-     `https://www.googleapis.com/auth/calendar.events.readonly`. Google
-     only grants a scope listed here.
+     `https://www.googleapis.com/auth/calendar.events`. Google only grants
+     a scope listed here. Where `calendar.events.readonly` is listed from
+     before, it can stay: people who gave it keep seeing their events until
+     they allow editing.
    - **Google Auth Platform > Clients**, the sign-in client: add these
      authorised redirect URIs next to the sign-in ones:
 
@@ -276,8 +313,10 @@ bunx wrangler d1 execute DB --remote --command \
   "select person, problem, last_synced_at, channel_expires_at from calendar_links"
 ```
 
-When a person's other calendars stop showing, `scopes` on the same row says
-whether the two read-only scopes are still granted. Reconnecting after the
+When a person's other calendars stop showing, or their events cannot be
+changed, `scopes` on the same row says whether `calendar.calendarlist.readonly`
+and `calendar.events` (or, from before, `calendar.events.readonly`, which
+only reads) are still granted. Reconnecting after the
 Todos calendar was deleted keeps them (the app asks Google to keep what was
 given before); after access was withdrawn they went with the rest, and the
 account page offers **Show** again.

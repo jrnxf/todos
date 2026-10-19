@@ -14,12 +14,17 @@
 //   route, and a day stepped away from keeps its page until it is gone.
 //
 // Events from the person's other Google calendars, once they chose some,
-// sit after the day's to-dos in each drawing (calendar-events.tsx).
+// sit after the day's to-dos in each drawing (calendar-events.tsx). One that
+// runs a whole day or more is not drawn in the squares but once per week, as
+// a bar laid over the row on the grid's own column tracks, so it stretches
+// as the columns move; each drawing leaves room for the row's bars under the
+// day's number.
 import {
   memo,
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react'
@@ -46,11 +51,14 @@ import {
   stepDay,
 } from '@/lib/lens'
 import { useBoard, useSetDone } from '@/lib/queries'
+import { barsHidden, isBar, weekBars } from '@/lib/calendar-events'
 import {
   CalendarsButton,
   EventMark,
   LensEventRow,
+  WeekBars,
   useEventsOn,
+  useShownEvents,
 } from './calendar-events'
 import { DayView } from './day-view'
 import { ScreenHeader } from './shell'
@@ -61,7 +69,13 @@ import type { LocalDate } from '@/lib/dates'
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 /** The weekday names above the grid; they fold away for a day. */
-const HEADER_HEIGHT = 32
+const HEADER_HEIGHT = 26
+/**
+ * How many lanes of bars a week shows, by how tall its row is: a month's
+ * row, the active day's row in a month, and a week. Bars past these are
+ * counted in each day's "N more".
+ */
+const LANES = { month: 3, activeMonth: 5, week: 10 }
 /** Narrower than this, the grid is a phone's: the active day takes more. */
 const COMPACT_WIDTH = 640
 
@@ -174,6 +188,19 @@ export function Lens({
   const weeks = monthWeeks(day)
   const thisWeek = weekStart(day)
   const undated = upNext(board.items, today).undated
+  const events = useShownEvents()
+  const firstOfMonth = `${day.slice(0, 7)}-01`
+  const bars = useMemo(
+    () => monthWeeks(firstOfMonth).map((dates) => weekBars(events, dates)),
+    [events, firstOfMonth],
+  )
+  /** The lanes a row shows in a view: the active row has more room. */
+  const lanesShown = (row: number, forView: LensView) =>
+    forView === 'month'
+      ? row === now.row
+        ? LANES.activeMonth
+        : LANES.month
+      : LANES.week
 
   // What a square does when picked, kept stable so a square only redraws
   // when its own look changes: a tap redraws one or two squares, not 35.
@@ -286,6 +313,7 @@ export function Lens({
         data-dir={move.dir}
         data-from={move.from}
         data-ready={ready ? '' : undefined}
+        data-compact={compact ? '' : undefined}
       >
         <div
           className="lens-weekdays"
@@ -320,10 +348,27 @@ export function Lens({
                   size
                     ? { width: Math.round(w), height: Math.round(h) }
                     : { width: '100%', height: '100%' }
+                const { pieces, lanes } = bars[row]
+                const activeView = view === 'week' ? 'week' : 'month'
                 return (
                   <LensSquare
                     key={date}
                     date={date}
+                    row={row}
+                    col={col}
+                    lanes={{
+                      month: Math.min(lanes, lanesShown(row, 'month')),
+                      week: Math.min(lanes, LANES.week),
+                      active: Math.min(lanes, lanesShown(row, activeView)),
+                    }}
+                    hidden={{
+                      month: barsHidden(pieces, col, lanesShown(row, 'month')),
+                      active: barsHidden(
+                        pieces,
+                        col,
+                        lanesShown(row, activeView),
+                      ),
+                    }}
                     active={active}
                     leaving={leaving.includes(date)}
                     inWeek={weekStart(date) === thisWeek}
@@ -345,6 +390,14 @@ export function Lens({
                   />
                 )
               })}
+              {bars[row].lanes > 0 && (
+                <WeekBars
+                  row={row}
+                  week={row === now.row}
+                  pieces={bars[row].pieces}
+                  shown={lanesShown(row, view)}
+                />
+              )}
             </div>
           ))}
         </div>
@@ -376,6 +429,10 @@ export function Lens({
 
 type Size = { width: number | string; height: number | string }
 type Sizes = { month: Size; week: Size; active: Size; day: Size }
+/** Lanes of bars each drawing leaves room for, under the day's number. */
+type Lanes = { month: number; week: number; active: number }
+/** Bars over this day that its row has no room to show. */
+type Hidden = { month: number; active: number }
 
 const sameSize = (a: Size, b: Size) =>
   a.width === b.width && a.height === b.height
@@ -384,6 +441,13 @@ const LensSquare = memo(
   LensSquareView,
   (a, b) =>
     a.date === b.date &&
+    a.row === b.row &&
+    a.col === b.col &&
+    a.lanes.month === b.lanes.month &&
+    a.lanes.week === b.lanes.week &&
+    a.lanes.active === b.lanes.active &&
+    a.hidden.month === b.hidden.month &&
+    a.hidden.active === b.hidden.active &&
     a.active === b.active &&
     a.leaving === b.leaving &&
     a.inWeek === b.inWeek &&
@@ -398,6 +462,10 @@ const LensSquare = memo(
 
 function LensSquareView({
   date,
+  row,
+  col,
+  lanes,
+  hidden,
   active,
   leaving,
   inWeek,
@@ -408,6 +476,11 @@ function LensSquareView({
   onToday,
 }: {
   date: LocalDate
+  /** Where it sits in the grid, which the week's bars share. */
+  row: number
+  col: number
+  lanes: Lanes
+  hidden: Hidden
   active: boolean
   /** The day just stepped away from, as a day: its page stays until it is
       out of sight. */
@@ -432,15 +505,22 @@ function LensSquareView({
     (a, b) => Number(!isOpen(a)) - Number(!isOpen(b)) || byDue(a, b),
   )
   const past = date < today
-  const events = useEventsOn(date)
-  const chipCount = items.length + events.length + (carried.length ? 1 : 0)
+  // What spans the week is drawn as a bar over the row instead.
+  const events = useEventsOn(date).filter((on) => !isBar(on.event))
   const number = (
     <span className="lens-number" aria-hidden>
       {Number(date.slice(8))}
     </span>
   )
+  const room = (count: number) => (
+    <span
+      aria-hidden
+      className="lens-lanes"
+      style={{ ['--shown' as string]: count }}
+    />
+  )
   const chips = (
-    <div className="lens-chips">
+    <>
       {carried.length > 0 && (
         <span className="lens-chip" data-late="" data-carried="">
           <span>{carried.length} carried over</span>
@@ -471,8 +551,7 @@ function LensSquareView({
           </span>
         </span>
       ))}
-      {chipCount > 2 && <span className="lens-more">{chipCount - 2} more</span>}
-    </div>
+    </>
   )
 
   return (
@@ -480,6 +559,7 @@ function LensSquareView({
       role="gridcell"
       aria-selected={active}
       className="lens-square"
+      style={{ gridRow: row + 1, gridColumn: col + 1 }}
       data-active={active ? '' : undefined}
       data-leaving={leaving ? '' : undefined}
       data-week={inWeek ? '' : undefined}
@@ -498,20 +578,25 @@ function LensSquareView({
       <div className="lens-layer" data-layer="month" style={sizes.month}>
         <div className="lens-pad">
           {number}
-          {chips}
+          {room(lanes.month)}
+          <FitList className="lens-chips" more={hidden.month}>
+            {chips}
+          </FitList>
         </div>
       </div>
       <div className="lens-layer" data-layer="week" style={sizes.week}>
         <div className="lens-pad">
           {number}
-          {chips}
+          {room(lanes.week)}
+          <div className="lens-chips">{chips}</div>
         </div>
       </div>
       {active && (
         <div className="lens-layer" data-layer="active" style={sizes.active}>
           <div className="lens-pad">
             {number}
-            <ActiveList>
+            {room(lanes.active)}
+            <FitList className="lens-list" more={hidden.active}>
               {carried.length > 0 && (
                 <>
                   <p className="lens-caption" data-late="">
@@ -536,7 +621,7 @@ function LensSquareView({
               {events.map((on) => (
                 <LensEventRow key={on.event.key} on={on} />
               ))}
-            </ActiveList>
+            </FitList>
           </div>
         </div>
       )}
@@ -556,9 +641,20 @@ function LensSquareView({
   )
 }
 
-/** The active square's rows, down to the last that fits whole. What does
-    not fit is hidden and counted, as a month square counts its chips. */
-function ActiveList({ children }: { children: React.ReactNode }) {
+/**
+ * A drawing's chips or rows, down to the last that fits whole. What does not
+ * fit is hidden and counted in an "N more" line, with `more` bars over the
+ * day that its row has no room to show.
+ */
+function FitList({
+  className,
+  more: extra,
+  children,
+}: {
+  className: string
+  more: number
+  children: React.ReactNode
+}) {
   const list = useRef<HTMLDivElement>(null)
   const more = useRef<HTMLSpanElement>(null)
   // Laid out by hand, as React does not see the square's size: every row
@@ -569,14 +665,18 @@ function ActiveList({ children }: { children: React.ReactNode }) {
     const pad = element?.parentElement
     if (!element || !line || !pad) return
     const rows = Array.from(element.children) as Array<HTMLElement>
+    const counts = (row: HTMLElement) => !row.classList.contains('lens-caption')
     for (const row of rows) row.style.display = ''
+    line.textContent = `${extra} more`
     line.hidden = false
     const bottom =
       pad.getBoundingClientRect().bottom -
       parseFloat(getComputedStyle(pad).paddingBottom)
     const last = rows.at(-1)
+    const fits = (box: HTMLElement) =>
+      box.getBoundingClientRect().bottom <= bottom + 0.5
     let cut = rows.length
-    if (last && last.getBoundingClientRect().bottom > bottom) {
+    if ((last && !fits(last)) || (extra > 0 && !fits(line))) {
       // "N more" takes the place of the first row it stands for, so it
       // stands for the row before the first place it would not fit.
       const height = line.getBoundingClientRect().height
@@ -584,18 +684,20 @@ function ActiveList({ children }: { children: React.ReactNode }) {
         (row) => row.getBoundingClientRect().top + height > bottom,
       )
       cut = Math.max(0, (crowded === -1 ? rows.length : crowded) - 1)
+      if (crowded === -1 && last && fits(last) && extra > 0) {
+        // Every row fits, only the line does not: the last row makes way.
+        cut = rows.length - 1
+      }
       // A caption with nothing under it goes too.
-      while (cut > 0 && !rows[cut - 1].classList.contains('lens-row')) cut--
+      while (cut > 0 && !counts(rows[cut - 1])) cut--
     }
     rows.forEach((row, index) => {
       if (index >= cut) row.style.display = 'none'
     })
-    const hidden = rows
-      .slice(cut)
-      .filter((row) => row.classList.contains('lens-row')).length
+    const hidden = rows.slice(cut).filter(counts).length + extra
     line.textContent = `${hidden} more`
     line.hidden = hidden === 0
-  }, [])
+  }, [extra])
   // Rows come and go with the board, and change height as fonts load; the
   // square resizes as the view moves.
   useLayoutEffect(measure)
@@ -609,7 +711,7 @@ function ActiveList({ children }: { children: React.ReactNode }) {
   }, [measure])
   return (
     <>
-      <div ref={list} className="lens-list">
+      <div ref={list} className={className}>
         {children}
       </div>
       <span ref={more} className="lens-more" hidden />
@@ -660,12 +762,13 @@ function OpenTodo({
   children: React.ReactNode
 }) {
   const anyOpen = useRouterState({
-    select: (state) => state.location.search.item !== undefined,
+    select: ({ location: { search } }) =>
+      search.item !== undefined || search.event !== undefined,
   })
   return (
     <Link
       to="."
-      search={(now) => ({ ...now, item: todo.id })}
+      search={(now) => ({ ...now, item: todo.id, event: undefined })}
       state={(now) => ({ ...now, openedInPlace: true })}
       replace={anyOpen}
       className={className}

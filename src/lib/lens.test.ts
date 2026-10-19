@@ -49,7 +49,7 @@ describe('lensTracks', () => {
     const t = lensTracks({ view: 'month', day: '2026-10-13', ...size })
     expect(t.col).toBe(2)
     expect(t.row).toBe(2)
-    expect(t.cols[2]).toBeCloseTo(t.cols[0] * 1.9)
+    expect(t.cols[2]).toBeCloseTo(t.cols[0] * 1.5)
     expect(t.rows[2]).toBeCloseTo(t.rows[0] * 1.9)
   })
 

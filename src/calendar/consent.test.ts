@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { finishConsent, startConsent } from './consent'
+import { finishConsent, safeBack, startConsent } from './consent'
 import { CALENDAR_SCOPE, READ_SCOPES } from './google'
 import type { Want } from './consent'
 
@@ -10,8 +10,8 @@ const client = {
 }
 
 /** Goes to Google and returns with Google's answer and the browser's cookie. */
-async function roundTrip(want: Want = 'sync') {
-  const start = await startConsent(client, 'alex@example.com', want)
+async function roundTrip(want: Want = 'sync', back: string | null = null) {
+  const start = await startConsent(client, 'alex@example.com', want, back)
   const to = new URL(start.headers.get('Location')!)
   const cookie = start.headers.get('Set-Cookie')!.split(';')[0]
   return {
@@ -112,7 +112,7 @@ describe('asking for a calendar', () => {
 describe('asking to read the other calendars as well', () => {
   const all = [CALENDAR_SCOPE, ...READ_SCOPES].join(' ')
 
-  it('asks for the read-only scopes on top of what was given before', async () => {
+  it('asks to read and change them, on top of what was given before', async () => {
     const trip = await roundTrip('read')
     expect(trip.to.searchParams.get('scope')).toBe(all)
     expect(trip.to.searchParams.get('include_granted_scopes')).toBe('true')
@@ -150,5 +150,44 @@ describe('asking to read the other calendars as well', () => {
         client,
       ),
     ).toEqual({ outcome: 'reading-denied' })
+  })
+})
+
+describe('asking from an event, to change it', () => {
+  const back = '/?view=month&event=family%40group.calendar.google.com%20abc'
+  const all = [CALENDAR_SCOPE, ...READ_SCOPES].join(' ')
+
+  it('brings the person back to the event, whatever Google answered', async () => {
+    const yes = await roundTrip('read', back)
+    expect(
+      await finishConsent(
+        yes.back(`code=abc&state=${yes.state}`),
+        client,
+        google(all),
+      ),
+    ).toMatchObject({ want: 'read', back })
+    const no = await roundTrip('read', back)
+    expect(
+      await finishConsent(
+        no.back(`error=access_denied&state=${no.state}`),
+        client,
+      ),
+    ).toEqual({ outcome: 'reading-denied', back })
+  })
+
+  it('only ever goes back to a page of the app', () => {
+    expect(safeBack('/account')).toBe('/account')
+    expect(safeBack(back)).toBe(back)
+    for (const elsewhere of [
+      'https://evil.example/',
+      '//evil.example/',
+      '/\\evil.example',
+      'account',
+      '/a b',
+      null,
+      '/'.repeat(1025),
+    ]) {
+      expect(safeBack(elsewhere)).toBeNull()
+    }
   })
 })

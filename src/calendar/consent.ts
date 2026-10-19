@@ -3,7 +3,9 @@
 // verifier ride in a short-lived cookie scoped to /api/calendar, so a reply
 // is only taken from the browser that asked, and a code is only any use to
 // the app that asked for it. The cookie also says what was asked for: the
-// Todos calendar alone, or the person's other calendars to read as well.
+// Todos calendar alone, or the person's other calendars to read and change
+// as well, and, when the person was asked from an event they went to change,
+// the page to bring them back to.
 import {
   CALENDAR_SCOPE,
   READ_SCOPES,
@@ -31,9 +33,10 @@ export type Outcome =
   | 'reading-denied'
 
 /**
- * What a trip to Google asks for: the Todos calendar only, or reading the
- * person's other calendars too. The second is asked for only when a person
- * turns it on, so nobody else is asked to give more than the sync needs.
+ * What a trip to Google asks for: the Todos calendar only, or the person's
+ * other calendars too, to read and change. The second is asked for only
+ * when a person turns it on, or goes to change an event while they gave
+ * reading alone, so nobody else is asked to give more than the sync needs.
  */
 export type Want = 'sync' | 'read'
 
@@ -43,10 +46,46 @@ const SCOPES: Record<Want, Array<string>> = {
 }
 
 export function backToAccount(outcome: Outcome, extra?: HeadersInit): Response {
+  return backTo(`/account?calendar=${outcome}`, extra)
+}
+
+/** Back to a page of the app. */
+export function backTo(path: string, extra?: HeadersInit): Response {
   const headers = new Headers(extra)
-  headers.set('Location', `/account?calendar=${outcome}`)
+  headers.set('Location', path)
   headers.set('Cache-Control', 'no-store')
   return new Response(null, { status: 302, headers })
+}
+
+/**
+ * A page of this app to come back to: a path, never another site. Anything
+ * else is dropped, and the person lands on the account page as usual.
+ */
+export function safeBack(path: string | null | undefined): string | null {
+  if (!path || path.length > 1024) return null
+  if (!path.startsWith('/') || path.startsWith('//')) return null
+  if (/[\\\s]/.test(path)) return null
+  return path
+}
+
+const encodeBack = (path: string) =>
+  btoa(String.fromCharCode(...new TextEncoder().encode(path)))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '')
+
+function decodeBack(value: string | undefined): string | null {
+  if (!value) return null
+  try {
+    const binary = atob(value.replace(/-/g, '+').replace(/_/g, '/'))
+    return safeBack(
+      new TextDecoder().decode(
+        Uint8Array.from(binary, (char) => char.charCodeAt(0)),
+      ),
+    )
+  } catch {
+    return null
+  }
 }
 
 function cookie(value: string, maxAge: number, secure: boolean): string {
@@ -65,6 +104,7 @@ export async function startConsent(
   client: OAuthClient,
   loginHint: string | null,
   want: Want = 'sync',
+  back: string | null = null,
 ): Promise<Response> {
   const state = randomToken(16)
   const verifier = randomToken(32)
@@ -79,7 +119,7 @@ export async function startConsent(
         scopes: SCOPES[want],
       }),
       'Set-Cookie': cookie(
-        `${state}.${verifier}.${want}`,
+        [state, verifier, want, ...(back ? [encodeBack(back)] : [])].join('.'),
         COOKIE_SECONDS,
         secure,
       ),
@@ -94,22 +134,28 @@ export async function startConsent(
  * them. A grant without the calendar (Google lets a person untick it) is
  * handed straight back. One with the calendar but without the reading is
  * kept: the sync goes on, and the caller says the reading was not given.
+ * Either way, `back` is the page the person asked from, when there was one.
  */
 export async function finishConsent(
   request: Request,
   client: OAuthClient,
   fetcher: Fetch = fetch,
-): Promise<{ grant: Grant; want: Want } | { outcome: Outcome }> {
+): Promise<
+  | { grant: Grant; want: Want; back?: string }
+  | { outcome: Outcome; back?: string }
+> {
   const url = new URL(request.url)
   const remembered = (request.headers.get('Cookie') ?? '')
     .split(';')
     .map((part) => part.trim())
     .find((part) => part.startsWith(`${COOKIE}=`))
     ?.slice(COOKIE.length + 1)
-  const [state, verifier, asked] = remembered?.split('.') ?? []
+  const [state, verifier, asked, backed] = remembered?.split('.') ?? []
   const want: Want = asked === 'read' ? 'read' : 'sync'
+  const back = decodeBack(backed)
+  const from = back ? { back } : {}
   if (url.searchParams.get('error')) {
-    return { outcome: want === 'read' ? 'reading-denied' : 'denied' }
+    return { outcome: want === 'read' ? 'reading-denied' : 'denied', ...from }
   }
   const code = url.searchParams.get('code')
   if (!state || !verifier || !code || url.searchParams.get('state') !== state) {
@@ -124,9 +170,9 @@ export async function finishConsent(
   }
   if (!grant.scopes.includes(CALENDAR_SCOPE)) {
     await revoke(grant.refreshToken, fetcher).catch(() => {})
-    return { outcome: want === 'read' ? 'reading-denied' : 'denied' }
+    return { outcome: want === 'read' ? 'reading-denied' : 'denied', ...from }
   }
-  return { grant, want }
+  return { grant, want, ...from }
 }
 
 /** The header that clears the cookie once the reply is read. */

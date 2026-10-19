@@ -173,7 +173,7 @@ function AccountScreen() {
                 <ItemDescription>
                   {calendar.reads
                     ? 'Choose which show in Day, Week and Month, for you only'
-                    : 'See their events in Day, Week and Month, read-only'}
+                    : 'See and change their events in Day, Week and Month'}
                 </ItemDescription>
               </ItemContent>
               {!calendar.reads && (
