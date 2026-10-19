@@ -5,9 +5,9 @@
  * link still closes by dropping it from the address, not by leaving the page.
  */
 export function openInPlace(replacing: boolean) {
-  return <S extends { openedInPlace?: boolean }>(
-    now: S,
-  ): S & { openedInPlace?: boolean } => ({
+  return <TState extends { openedInPlace?: boolean }>(
+    now: TState,
+  ): TState & { openedInPlace?: boolean } => ({
     ...now,
     openedInPlace: replacing ? now.openedInPlace : true,
   })
