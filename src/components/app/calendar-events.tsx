@@ -33,6 +33,7 @@ import { Switch } from '@/components/ui/switch'
 import { eventSpan, eventsOn } from '@/lib/calendar-events'
 import { formatTime } from '@/lib/dates'
 import { monthWeeks, stepDay } from '@/lib/lens'
+import { openInPlace } from '@/lib/in-place'
 import {
   calendarEventsQ,
   calendarQ,
@@ -154,7 +155,7 @@ export function OpenEvent({
     <Link
       to="."
       search={(now) => ({ ...now, event: event.key, item: undefined })}
-      state={(now) => ({ ...now, openedInPlace: true })}
+      state={openInPlace(anyOpen)}
       replace={anyOpen}
       className={className}
       style={style}

@@ -2,6 +2,7 @@ import { Link, useRouterState } from '@tanstack/react-router'
 import { cn } from 'cn'
 import { Badge } from '@/components/ui/badge'
 import { useBoard, useSetDone } from '@/lib/queries'
+import { openInPlace } from '@/lib/in-place'
 import { Rows } from './rows'
 import { TodoRowView } from './todo-row-view'
 import type { RowOptions } from './todo-row-view'
@@ -41,7 +42,7 @@ export function TodoRow(
           // history entry, so Back closes it; moving to another replaces it.
           to="."
           search={(now) => ({ ...now, item: todo.id, event: undefined })}
-          state={(now) => ({ ...now, openedInPlace: true })}
+          state={openInPlace(anyOpen)}
           replace={anyOpen}
           className={className}
         >

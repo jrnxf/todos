@@ -50,6 +50,7 @@ import {
   monthWeeks,
   stepDay,
 } from '@/lib/lens'
+import { openInPlace } from '@/lib/in-place'
 import { useBoard, useSetDone } from '@/lib/queries'
 import { barsHidden, isBar, weekBars } from '@/lib/calendar-events'
 import {
@@ -769,7 +770,7 @@ function OpenTodo({
     <Link
       to="."
       search={(now) => ({ ...now, item: todo.id, event: undefined })}
-      state={(now) => ({ ...now, openedInPlace: true })}
+      state={openInPlace(anyOpen)}
       replace={anyOpen}
       className={className}
     >
