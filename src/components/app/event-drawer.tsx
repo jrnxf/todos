@@ -68,6 +68,7 @@ import {
   NO_TITLE,
   lastDay,
   parseEventKey,
+  settlePick,
   whenRuns,
 } from '@/lib/calendar-events'
 import {
@@ -386,6 +387,7 @@ function EventPanel({
                 date={event.startDate}
                 time={event.allDay ? null : event.startTime}
                 disabled={!canEdit}
+                repeating={repeating}
                 label="Start"
                 onDate={(date) => startTo(date, event.startTime)}
                 onTime={(time) => startTo(event.startDate, time)}
@@ -398,6 +400,7 @@ function EventPanel({
                 date={event.allDay ? final : event.endDate}
                 time={event.allDay ? null : event.endTime}
                 disabled={!canEdit}
+                repeating={repeating}
                 label="End"
                 onDate={(date) =>
                   setWhen({ endDate: event.allDay ? addDays(date, 1) : date })
@@ -621,6 +624,7 @@ function DateTime({
   date,
   time,
   disabled,
+  repeating,
   label,
   onDate,
   onTime,
@@ -628,6 +632,7 @@ function DateTime({
   date: LocalDate
   time: LocalTime | null
   disabled: boolean
+  repeating: boolean
   label: string
   onDate: (date: LocalDate) => void
   onTime: (time: LocalTime) => void
@@ -639,6 +644,7 @@ function DateTime({
         value={date}
         format={formatDay}
         disabled={disabled}
+        repeating={repeating}
         label={`${label} day`}
         onPick={onDate}
       />
@@ -648,6 +654,7 @@ function DateTime({
           value={time}
           format={formatTime}
           disabled={disabled}
+          repeating={repeating}
           label={`${label} time`}
           onPick={onTime}
         />
@@ -666,6 +673,7 @@ function Native({
   value,
   format,
   disabled,
+  repeating,
   label,
   onPick,
 }: {
@@ -673,6 +681,7 @@ function Native({
   value: string
   format: (value: string) => string
   disabled: boolean
+  repeating: boolean
   label: string
   onPick: (value: string) => void
 }) {
@@ -684,18 +693,20 @@ function Native({
   }
   const pending = useRef<string | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
-  const commit = () => {
+  const commit = (leaving = false) => {
     clearTimeout(timer.current)
     const next = pending.current
     pending.current = null
-    if (next && next !== value) onPick(next)
+    const settled = settlePick(next, value, { leaving, repeating })
+    if (settled && 'keep' in settled) onPick(settled.keep)
+    else if (settled) toast(settled.dropped)
     else if (next !== null) setDraft(null)
   }
   const flush = useRef(commit)
   useEffect(() => {
     flush.current = commit
   })
-  useEffect(() => () => flush.current(), [])
+  useEffect(() => () => flush.current(true), [])
   return (
     <span
       className={cn(
@@ -724,7 +735,7 @@ function Native({
           clearTimeout(timer.current)
           timer.current = setTimeout(() => flush.current(), 800)
         }}
-        onBlur={commit}
+        onBlur={() => commit()}
         onKeyDown={(pressed) => {
           if (pressed.key === 'Enter') commit()
         }}

@@ -314,6 +314,25 @@ export interface EventChange {
   when?: EventWhen
 }
 
+/** What the panel says when it drops a repeating event's unsaved pick. */
+export const SERIES_PICK_DROPPED = 'Change to a repeating event not saved.'
+
+/**
+ * What becomes of a picked day or time once it settles: kept when it is a
+ * whole value that differs from the saved one, and otherwise nothing. Left
+ * behind as the panel closes, a repeating event's pick is dropped and said
+ * so, since nothing is there to ask which days it is for.
+ */
+export function settlePick(
+  pick: string | null,
+  saved: string,
+  { leaving, repeating }: { leaving: boolean; repeating: boolean },
+): { keep: string } | { dropped: string } | null {
+  if (!pick || pick === saved) return null
+  if (leaving && repeating) return { dropped: SERIES_PICK_DROPPED }
+  return { keep: pick }
+}
+
 /** Which days of a repeating event a change or a delete is for. */
 export type SeriesScope = 'this' | 'following' | 'all'
 

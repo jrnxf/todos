@@ -7,6 +7,7 @@ import {
   isBar,
   parseEventKey,
   plainText,
+  settlePick,
   weekBars,
   whenRuns,
 } from './calendar-events'
@@ -319,5 +320,37 @@ describe('an event, opened by its key', () => {
     expect(
       plainText('Code <b>4417</b><br>Bring chains &amp; a shovel<br/>'),
     ).toBe('Code 4417\nBring chains & a shovel')
+  })
+})
+
+describe('settling a picked day or time', () => {
+  const stay = { leaving: false, repeating: false }
+
+  it('keeps a whole pick that differs from what is saved', () => {
+    expect(settlePick('10:30', '09:00', stay)).toEqual({ keep: '10:30' })
+    expect(
+      settlePick('2026-10-21', '2026-10-20', { ...stay, repeating: true }),
+    ).toEqual({ keep: '2026-10-21' })
+  })
+
+  it('does nothing for no pick, a part of one, or the saved value', () => {
+    expect(settlePick(null, '09:00', stay)).toBeNull()
+    expect(settlePick('', '09:00', stay)).toBeNull()
+    expect(settlePick('09:00', '09:00', stay)).toBeNull()
+  })
+
+  it("still keeps a one-off event's pick as the panel closes", () => {
+    expect(
+      settlePick('10:30', '09:00', { leaving: true, repeating: false }),
+    ).toEqual({ keep: '10:30' })
+  })
+
+  it("drops a repeating event's pick as the panel closes, and says so", () => {
+    expect(
+      settlePick('10:30', '09:00', { leaving: true, repeating: true }),
+    ).toEqual({ dropped: 'Change to a repeating event not saved.' })
+    expect(
+      settlePick('09:00', '09:00', { leaving: true, repeating: true }),
+    ).toBeNull()
   })
 })
