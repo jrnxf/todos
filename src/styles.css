@@ -329,6 +329,18 @@
     .lens-layer {
     transition: none;
   }
+  /* Stepping from day to day is one page sliding out as the next slides
+     in. The day left keeps its page until its column has closed, and no
+     square shows its chips on the way, not even for a frame. */
+  .lens[data-view='day'] .lens-square[data-leaving] [data-layer='day'] {
+    opacity: 1;
+  }
+  .lens[data-view='day'][data-dir='same']
+    .lens-square
+    .lens-layer:not([data-layer='day']) {
+    opacity: 0;
+    transition: none;
+  }
   /* Week and day: the ring leaves before the square grows, and comes back
      with the rest of the move as it shrinks. The panel and its hairlines
      fade evenly, the same both ways. */

@@ -4,6 +4,7 @@
 // nothing is left. Any other day is that day's list, with a pointer back to
 // today while something is late. Under the to-dos, either way, come the
 // events of the calendars the person chose to see.
+import { memo } from 'react'
 import { Link } from '@tanstack/react-router'
 import {
   BellIcon,
@@ -50,7 +51,9 @@ import type { LocalDate } from '@/lib/dates'
 /** How much of "Later" a day with nothing left on it shows. */
 const LATER_SHOWN = 5
 
-export function DayView({
+// Its own memo, so a page sliding out does not redraw as its square stops
+// being the active one.
+export const DayView = memo(function DayView({
   day,
   onToday,
 }: {
@@ -64,7 +67,7 @@ export function DayView({
   ) : (
     <OtherDayView day={day} onToday={onToday} />
   )
-}
+})
 
 function TodayView() {
   const board = useBoard()
