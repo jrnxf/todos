@@ -195,14 +195,16 @@ two scopes below in the Google Cloud console (step 1 of
   cancelled ones, are left out. An event is never a to-do and the app never
   writes to these calendars.
 - **What is kept.** Only which calendars each person chose, by Google's
-  calendar id (`calendars_shown`), and the granted scopes on their link.
+  calendar id (`calendars_shown`), and the granted scopes on their link. A
+  chosen calendar Google no longer lists for the person (they left it, or
+  lost access) is forgotten the next time the list is read.
   Names, colours and events are asked of Google while the home page is
   open, one request for the list and one per shown calendar for the month
   on screen, and are kept only in that browser: asked again when the page
   comes back into view after two minutes, and every five minutes while it
-  stays open. Nothing of them is stored in the database or the Worker. Each ask fetches only an event's title, times, link, status and
-  the person's own answer to an invitation: no descriptions, places or
-  guests.
+  stays open. Nothing of them is stored in the database or the Worker.
+  Each ask fetches only an event's title, times, link, status and the
+  person's own answer to an invitation: no descriptions, places or guests.
 - **Turning it off.** Turn every switch off, and no events are read; the
   list of calendars is read only while the account page or the popover
   shows it.
