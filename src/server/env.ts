@@ -86,11 +86,19 @@ const _env = createEnv({
     // (src/calendar/seal.ts). Any 32 or more random characters. Until it is
     // set, and the Google client above is too, nobody can connect a
     // calendar. Changing it later cuts every connected calendar off, and
-    // each person connects theirs again.
+    // each person connects theirs again. One set but too short leaves
+    // calendars off, as if unset, and says so in the log: calendars are
+    // optional, so a bad key must not stop the rest of the app.
     CALENDAR_TOKEN_KEY: z
       .string()
-      .min(32, 'at least 32 characters')
-      .default(''),
+      .default('')
+      .transform((key) => {
+        if (key === '' || key.length >= 32) return key
+        console.error(
+          '[env] CALENDAR_TOKEN_KEY must be at least 32 characters; calendar sync is off until it is',
+        )
+        return ''
+      }),
 
     // Dev server only, ignored once built: be this person without signing in.
     DEV_SIGNED_IN_AS: z.string().default(''),
