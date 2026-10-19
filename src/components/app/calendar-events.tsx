@@ -2,8 +2,12 @@
 // their events beside the to-dos in the day, week and month views. An event
 // is read-only and is never a to-do: it has no box to tick, carries its
 // calendar's colour as a mark, and opens in Google Calendar.
-import { createContext, useContext } from 'react'
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { createContext, useContext, useEffect } from 'react'
+import {
+  keepPreviousData,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query'
 import { cn } from 'cn'
 import { ArrowUpRightIcon, CalendarRangeIcon, ClockIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -25,7 +29,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { eventSpan, eventsOn } from '@/lib/calendar-events'
-import { monthWeeks } from '@/lib/lens'
+import { monthWeeks, stepDay } from '@/lib/lens'
 import {
   calendarEventsQ,
   calendarQ,
@@ -36,12 +40,19 @@ import { Row, Rows } from './rows'
 import { SectionHeading } from './todo-row'
 import type { CalendarEventView, DayEvent } from '@/lib/calendar-events'
 import type { LocalDate } from '@/lib/dates'
+import type { LensView } from '@/lib/lens'
 
 /** Where the person lets the app read their other calendars. */
 export const READ_CALENDARS = '/api/calendar/connect?read'
 
 const NONE: ReadonlyArray<CalendarEventView> = []
 const ShownEvents = createContext<ReadonlyArray<CalendarEventView>>(NONE)
+
+/** The first and last day of the month grid that holds `day`. */
+function gridSpan(day: LocalDate): [LocalDate, LocalDate] {
+  const weeks = monthWeeks(day)
+  return [weeks[0][0], weeks[weeks.length - 1][6]]
+}
 
 /**
  * The shown calendars' events over the month grid that holds `day`, for the
@@ -50,15 +61,15 @@ const ShownEvents = createContext<ReadonlyArray<CalendarEventView>>(NONE)
  * a calendar to show.
  */
 export function ShownEventsProvider({
+  view,
   day,
   children,
 }: {
+  view: LensView
   day: LocalDate
   children: React.ReactNode
 }) {
-  const weeks = monthWeeks(day)
-  const from = weeks[0][0]
-  const to = weeks[weeks.length - 1][6]
+  const [from, to] = gridSpan(day)
   const { data: status } = useQuery(calendarQ)
   const showing = Boolean(
     status && status.reads && !status.problem && status.showing > 0,
@@ -69,6 +80,20 @@ export function ShownEventsProvider({
     // Moving to another month keeps the days the two grids share filled.
     placeholderData: keepPreviousData,
   })
+  // Where the arrows lead is asked for ahead, when it is another grid, so
+  // its events are there as the move starts rather than after it.
+  const client = useQueryClient()
+  const [beforeFrom, beforeTo] = gridSpan(stepDay(day, view, -1))
+  const [afterFrom, afterTo] = gridSpan(stepDay(day, view, 1))
+  useEffect(() => {
+    if (!showing) return
+    for (const [start, end] of [
+      [beforeFrom, beforeTo],
+      [afterFrom, afterTo],
+    ]) {
+      if (start !== from) void client.prefetchQuery(calendarEventsQ(start, end))
+    }
+  }, [client, showing, from, beforeFrom, beforeTo, afterFrom, afterTo])
   return (
     <ShownEvents.Provider value={showing && data ? data : NONE}>
       {children}

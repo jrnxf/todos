@@ -43,9 +43,9 @@ function HomeScreen() {
   const navigate = Route.useNavigate()
 
   // The page answers a tap at once and the URL follows once the move has
-  // started; routing first held every move back. Back, Forward
-  // and links still win: a URL that changes from outside resets what is
-  // shown.
+  // finished; routing first held every move back, and routing during it
+  // stalled it partway. Back, Forward and links still win: a URL that
+  // changes from outside resets what is shown.
   const fromUrl = { view: search.view ?? 'day', day: search.day ?? today }
   const [shown, setShown] = useState(fromUrl)
   const [url, setUrl] = useState(fromUrl)
@@ -54,27 +54,27 @@ function HomeScreen() {
     setShown(fromUrl)
   }
 
-  const go = (change: LensChange) => {
-    const next = { ...shown, ...change }
-    setShown(next)
-    // After the frame that starts the move has been drawn.
-    requestAnimationFrame(() =>
-      setTimeout(() =>
-        navigate({
-          search: (now) => ({
-            ...now,
-            view: next.view === 'day' ? undefined : next.view,
-            day: next.day === today ? undefined : next.day,
-          }),
-          replace: true,
-        }),
-      ),
-    )
+  const go = (change: LensChange) => setShown({ ...shown, ...change })
+  const settled = () => {
+    if (shown.view === url.view && shown.day === url.day) return
+    void navigate({
+      search: (now) => ({
+        ...now,
+        view: shown.view === 'day' ? undefined : shown.view,
+        day: shown.day === today ? undefined : shown.day,
+      }),
+      replace: true,
+    })
   }
 
   return (
-    <ShownEventsProvider day={shown.day}>
-      <Lens view={shown.view} day={shown.day} onChange={go} />
+    <ShownEventsProvider view={shown.view} day={shown.day}>
+      <Lens
+        view={shown.view}
+        day={shown.day}
+        onChange={go}
+        onSettled={settled}
+      />
     </ShownEventsProvider>
   )
 }

@@ -10,10 +10,19 @@
 //   active day's checklist, the full day), each laid out once at the size it
 //   will be shown at. The grid only uncovers them; no title re-wraps
 //   mid-move. Which one shows, and how it fades, is CSS in styles.css.
+// - Nothing slow runs while the grid moves: the page waits for onSettled to
+//   route, and a day stepped away from keeps its page until it is gone.
 //
 // Events from the person's other Google calendars, once they chose some,
 // sit after the day's to-dos in each drawing (calendar-events.tsx).
-import { memo, useCallback, useLayoutEffect, useRef, useState } from 'react'
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react'
 import { Link, useRouterState } from '@tanstack/react-router'
 import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -83,10 +92,13 @@ export function Lens({
   view,
   day,
   onChange,
+  onSettled,
 }: {
   view: LensView
   day: LocalDate
   onChange: (change: LensChange) => void
+  /** The last change has finished moving: the time for slower work. */
+  onSettled: () => void
 }) {
   const board = useBoard()
   const { today } = board
@@ -98,6 +110,9 @@ export function Lens({
     from: LensView
     newMonth: boolean
   }>({ dir: 'same', from: view, newMonth: false })
+  // Days stepped away from as a day keep their page while their column
+  // closes, so the page slides out instead of blinking into chips.
+  const [leaving, setLeaving] = useState<Array<LocalDate>>([])
   if (shown.view !== view || shown.day !== day) {
     setShown({ view, day })
     setMove({
@@ -105,6 +120,11 @@ export function Lens({
       from: shown.view,
       newMonth: shown.day.slice(0, 7) !== day.slice(0, 7),
     })
+    setLeaving(
+      shown.view === 'day' && view === 'day'
+        ? [...leaving.filter((date) => date !== day), shown.day]
+        : [],
+    )
   }
 
   // The panel's size in pixels. Until it is known (the server render, the
@@ -155,10 +175,35 @@ export function Lens({
 
   // What a square does when picked, kept stable so a square only redraws
   // when its own look changes: a tap redraws one or two squares, not 35.
-  const latest = useRef({ view, day, today, onChange })
+  const latest = useRef({ view, day, today, onChange, onSettled })
   useLayoutEffect(() => {
-    latest.current = { view, day, today, onChange }
+    latest.current = { view, day, today, onChange, onSettled }
   })
+
+  // Once the grid stops moving, the days left behind go, and the page may
+  // do what would have stalled the move.
+  const grid = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const element = grid.current
+    if (!element) return
+    let live = true
+    const settle = async () => {
+      for (
+        let running = element.getAnimations();
+        running.length > 0;
+        running = element.getAnimations()
+      ) {
+        await Promise.allSettled(running.map((one) => one.finished))
+      }
+      if (!live) return
+      setLeaving([])
+      latest.current.onSettled()
+    }
+    void settle()
+    return () => {
+      live = false
+    }
+  }, [view, day])
   const pick = useCallback((date: LocalDate) => {
     const { view: shownView, day: shownDay, onChange: change } = latest.current
     change(
@@ -255,6 +300,7 @@ export function Lens({
         <div
           // A new month is a new grid: it fades in instead of moving.
           key={weeks[0][0]}
+          ref={grid}
           className="lens-grid"
           data-new-month={move.newMonth ? '' : undefined}
           role="grid"
@@ -277,6 +323,7 @@ export function Lens({
                     key={date}
                     date={date}
                     active={active}
+                    leaving={leaving.includes(date)}
                     inWeek={weekStart(date) === thisWeek}
                     outside={date.slice(0, 7) !== day.slice(0, 7)}
                     canOpen={active && view !== 'day'}
@@ -336,6 +383,7 @@ const LensSquare = memo(
   (a, b) =>
     a.date === b.date &&
     a.active === b.active &&
+    a.leaving === b.leaving &&
     a.inWeek === b.inWeek &&
     a.outside === b.outside &&
     a.canOpen === b.canOpen &&
@@ -349,6 +397,7 @@ const LensSquare = memo(
 function LensSquareView({
   date,
   active,
+  leaving,
   inWeek,
   outside,
   canOpen,
@@ -358,6 +407,9 @@ function LensSquareView({
 }: {
   date: LocalDate
   active: boolean
+  /** The day just stepped away from, as a day: its page stays until it is
+      out of sight. */
+  leaving: boolean
   /** In the active day's week: the squares a week view shows. */
   inWeek: boolean
   /** In the grid but not the month, such as Sep 27 in October. */
@@ -427,6 +479,7 @@ function LensSquareView({
       aria-selected={active}
       className="lens-square"
       data-active={active ? '' : undefined}
+      data-leaving={leaving ? '' : undefined}
       data-week={inWeek ? '' : undefined}
       data-today={date === today ? '' : undefined}
       data-outside={outside ? '' : undefined}
@@ -453,44 +506,49 @@ function LensSquareView({
         </div>
       </div>
       {active && (
-        <>
-          <div className="lens-layer" data-layer="active" style={sizes.active}>
-            <div className="lens-pad">
-              {number}
-              <ActiveList>
-                {carried.length > 0 && (
-                  <>
-                    <p className="lens-caption" data-late="">
-                      Carried over
-                    </p>
-                    {carried.map((todo) => (
-                      <MiniRow key={todo.id} todo={todo} late />
-                    ))}
-                    <p className="lens-caption">Today</p>
-                  </>
-                )}
-                {items.map((todo) => (
-                  <MiniRow
-                    key={todo.id}
-                    todo={todo}
-                    late={past && isOpen(todo)}
-                  />
-                ))}
-                {items.length === 0 && (
-                  <p className="lens-caption">Nothing due</p>
-                )}
-                {events.map((on) => (
-                  <LensEventRow key={on.event.key} on={on} />
-                ))}
-              </ActiveList>
-            </div>
+        <div className="lens-layer" data-layer="active" style={sizes.active}>
+          <div className="lens-pad">
+            {number}
+            <ActiveList>
+              {carried.length > 0 && (
+                <>
+                  <p className="lens-caption" data-late="">
+                    Carried over
+                  </p>
+                  {carried.map((todo) => (
+                    <MiniRow key={todo.id} todo={todo} late />
+                  ))}
+                  <p className="lens-caption">Today</p>
+                </>
+              )}
+              {items.map((todo) => (
+                <MiniRow
+                  key={todo.id}
+                  todo={todo}
+                  late={past && isOpen(todo)}
+                />
+              ))}
+              {items.length === 0 && (
+                <p className="lens-caption">Nothing due</p>
+              )}
+              {events.map((on) => (
+                <LensEventRow key={on.event.key} on={on} />
+              ))}
+            </ActiveList>
           </div>
-          <div className="lens-layer" data-layer="day" style={sizes.day}>
-            <div className="lens-pad">
-              <DayView day={date} onToday={onToday} />
-            </div>
+        </div>
+      )}
+      {(active || leaving) && (
+        <div
+          className="lens-layer"
+          data-layer="day"
+          style={sizes.day}
+          inert={!active}
+        >
+          <div className="lens-pad">
+            <DayView day={date} onToday={onToday} />
           </div>
-        </>
+        </div>
       )}
     </div>
   )
