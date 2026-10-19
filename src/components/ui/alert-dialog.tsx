@@ -45,7 +45,9 @@ function AlertDialogContent({
 }) {
   return (
     <AlertDialogPortal>
-      <AlertDialogOverlay />
+      {/* Not in the stock component: an alert dims the page even when it
+          opens from inside another dialog, such as an event's drawer. */}
+      <AlertDialogOverlay forceRender />
       <AlertDialogPrimitive.Popup
         data-slot="alert-dialog-content"
         data-size={size}

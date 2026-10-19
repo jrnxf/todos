@@ -16,6 +16,7 @@ import {
   BudgetSpent,
   RevokedError,
   calendarApi,
+  editsCalendars,
   readsCalendars,
   refreshAccess,
   revoke,
@@ -241,6 +242,8 @@ export interface CalendarStatus {
   lastSyncedAt: string | null
   /** Whether Google lets the app read the person's other calendars. */
   reads: boolean
+  /** Whether it also lets the app change and delete their events. */
+  edits: boolean
   /** How many of those the person chose to see in the views. */
   showing: number
 }
@@ -265,6 +268,7 @@ export async function calendarStatus(person: string): Promise<CalendarStatus> {
     problem: link?.problem ?? null,
     lastSyncedAt: link?.lastSyncedAt ?? null,
     reads: link !== undefined && readsCalendars(link.scopes.split(' ')),
+    edits: link !== undefined && editsCalendars(link.scopes.split(' ')),
     showing: shown?.n ?? 0,
   }
 }

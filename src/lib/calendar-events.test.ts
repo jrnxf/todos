@@ -1,5 +1,17 @@
 import { describe, expect, it } from 'vitest'
-import { eventSpan, eventsOn, fromGoogle } from './calendar-events'
+import {
+  barsHidden,
+  eventSpan,
+  eventsOn,
+  fromGoogle,
+  isBar,
+  parseEventKey,
+  plainText,
+  settlePick,
+  unsavedOnLeave,
+  weekBars,
+  whenRuns,
+} from './calendar-events'
 import type { CalendarEventView } from './calendar-events'
 import type { ReadEvent } from '@/calendar/google'
 
@@ -27,6 +39,9 @@ describe('reading an event from another calendar', () => {
       }),
     ).toEqual({
       key: 'work@example.com e1',
+      calendarId: 'work@example.com',
+      eventId: 'e1',
+      seriesId: null,
       title: 'Dentist',
       color: '#7986cb',
       calendar: 'Work',
@@ -99,7 +114,7 @@ describe('the events on a day', () => {
     expect(
       eventsOn(events, '2026-10-20').map((on) => [on.event.title, on.when]),
     ).toEqual([
-      ['Trip', 'All day'],
+      ['Trip', 'All day, day 2 of 3'],
       ['School run', '8:00 am'],
       ['Standup', '10:00 am'],
     ])
@@ -155,5 +170,204 @@ describe('when an event runs, said in full', () => {
     expect(eventSpan(eventsOn(late, '2026-10-20')[0])).toBe(
       '10:00 pm to 12:00 am',
     )
+  })
+})
+
+/** Oct 18 to 24, 2026: Sunday to Saturday. */
+const WEEK = [
+  '2026-10-18',
+  '2026-10-19',
+  '2026-10-20',
+  '2026-10-21',
+  '2026-10-22',
+  '2026-10-23',
+  '2026-10-24',
+]
+
+const allDay = (id: string, start: string, end: string, title = id) =>
+  read({
+    id,
+    summary: title,
+    start: { date: start },
+    end: { date: end },
+  }) as CalendarEventView
+
+describe('which events span their days as bars', () => {
+  it('draws anything all day as a bar, even a single day', () => {
+    expect(isBar(allDay('a', '2026-10-20', '2026-10-21'))).toBe(true)
+  })
+
+  it('draws a timed event of a day or more as a bar, and a shorter one not', () => {
+    // 9:00 am Oct 14 to 5:00 pm Oct 16, Chicago.
+    expect(isBar(timed('2026-10-14T14:00:00Z', '2026-10-16T22:00:00Z'))).toBe(
+      true,
+    )
+    // Exactly 24 hours.
+    expect(isBar(timed('2026-10-14T14:00:00Z', '2026-10-15T14:00:00Z'))).toBe(
+      true,
+    )
+    // A red-eye across midnight, under a day: a chip on both days.
+    expect(isBar(timed('2026-10-28T03:30:00Z', '2026-10-28T11:45:00Z'))).toBe(
+      false,
+    )
+  })
+})
+
+describe("a week's bars", () => {
+  it('cuts a bar at the week edges and says it carries on', () => {
+    const { pieces, lanes } = weekBars(
+      [allDay('trip', '2026-10-16', '2026-10-20')],
+      WEEK,
+    )
+    expect(lanes).toBe(1)
+    expect(pieces).toMatchObject([
+      { from: 0, to: 1, lane: 0, before: true, after: false },
+    ])
+    const later = weekBars([allDay('visit', '2026-10-21', '2026-10-26')], WEEK)
+    expect(later.pieces).toMatchObject([
+      { from: 3, to: 6, before: false, after: true },
+    ])
+  })
+
+  it('ends a timed bar on its last day, not the midnight after', () => {
+    const { pieces } = weekBars(
+      [timed('2026-10-20T05:00:00Z', '2026-10-22T05:00:00Z')],
+      WEEK,
+    )
+    // Midnight Oct 20 to midnight Oct 22, Chicago: Oct 20 and 21.
+    expect(pieces).toMatchObject([{ from: 2, to: 3 }])
+  })
+
+  it('leaves out what does not touch the week, and what is not a bar', () => {
+    const { pieces } = weekBars(
+      [
+        allDay('before', '2026-10-10', '2026-10-18'),
+        allDay('after', '2026-10-25', '2026-10-26'),
+        timed('2026-10-20T14:00:00Z', '2026-10-20T15:00:00Z'),
+      ],
+      WEEK,
+    )
+    expect(pieces).toEqual([])
+  })
+
+  it('packs lanes first-fit, earliest and then longest first', () => {
+    const { pieces, lanes } = weekBars(
+      [
+        allDay('short', '2026-10-19', '2026-10-20', 'Short'),
+        allDay('long', '2026-10-19', '2026-10-23', 'Long'),
+        allDay('later', '2026-10-21', '2026-10-23', 'Later'),
+        allDay('end', '2026-10-23', '2026-10-25', 'End'),
+      ],
+      WEEK,
+    )
+    const lane = Object.fromEntries(
+      pieces.map((piece) => [piece.event.title, piece.lane]),
+    )
+    // End starts after Long has ended, so it takes Long's lane again.
+    expect(lane).toEqual({ Long: 0, Short: 1, Later: 1, End: 0 })
+    expect(lanes).toBe(2)
+  })
+
+  it('counts the bars over a day that its row has no lane for', () => {
+    const { pieces } = weekBars(
+      [
+        allDay('a', '2026-10-19', '2026-10-22'),
+        allDay('b', '2026-10-19', '2026-10-21'),
+        allDay('c', '2026-10-20', '2026-10-21'),
+      ],
+      WEEK,
+    )
+    expect(barsHidden(pieces, 2, 3)).toBe(0)
+    expect(barsHidden(pieces, 2, 2)).toBe(1)
+    expect(barsHidden(pieces, 1, 2)).toBe(0)
+    expect(barsHidden(pieces, 2, 0)).toBe(3)
+  })
+})
+
+describe('an event, opened by its key', () => {
+  it('splits the key at the space between calendar and event', () => {
+    expect(
+      parseEventKey('family@group.calendar.google.com abc_20261024'),
+    ).toEqual({
+      calendarId: 'family@group.calendar.google.com',
+      eventId: 'abc_20261024',
+    })
+    expect(parseEventKey('nospace')).toBeNull()
+    expect(parseEventKey(' leading')).toBeNull()
+  })
+
+  it('says whether a when ends after it starts', () => {
+    const day = { startTime: null, endTime: null, allDay: true }
+    expect(
+      whenRuns({ ...day, startDate: '2026-10-20', endDate: '2026-10-21' }),
+    ).toBe(true)
+    expect(
+      whenRuns({ ...day, startDate: '2026-10-20', endDate: '2026-10-20' }),
+    ).toBe(false)
+    const at = (endDate: string, endTime: string) => ({
+      allDay: false,
+      startDate: '2026-10-20',
+      startTime: '09:00',
+      endDate,
+      endTime,
+    })
+    expect(whenRuns(at('2026-10-20', '09:00'))).toBe(true)
+    expect(whenRuns(at('2026-10-20', '08:30'))).toBe(false)
+    expect(whenRuns(at('2026-10-21', '08:30'))).toBe(true)
+  })
+
+  it("turns Google Calendar's HTML description into words", () => {
+    expect(plainText('Cabin door code 4417.')).toBe('Cabin door code 4417.')
+    expect(
+      plainText('Code <b>4417</b><br>Bring chains &amp; a shovel<br/>'),
+    ).toBe('Code 4417\nBring chains & a shovel')
+  })
+})
+
+describe('settling a picked day or time', () => {
+  const stay = { leaving: false, repeating: false }
+
+  it('keeps a whole pick that differs from what is saved', () => {
+    expect(settlePick('10:30', '09:00', stay)).toEqual({ keep: '10:30' })
+    expect(
+      settlePick('2026-10-21', '2026-10-20', { ...stay, repeating: true }),
+    ).toEqual({ keep: '2026-10-21' })
+  })
+
+  it('does nothing for no pick, a part of one, or the saved value', () => {
+    expect(settlePick(null, '09:00', stay)).toBeNull()
+    expect(settlePick('', '09:00', stay)).toBeNull()
+    expect(settlePick('09:00', '09:00', stay)).toBeNull()
+  })
+
+  it("still keeps a one-off event's pick as the panel closes", () => {
+    expect(
+      settlePick('10:30', '09:00', { leaving: true, repeating: false }),
+    ).toEqual({ keep: '10:30' })
+  })
+
+  it("drops a repeating event's pick as the panel closes, and says so", () => {
+    expect(
+      settlePick('10:30', '09:00', { leaving: true, repeating: true }),
+    ).toEqual({ dropped: 'Change to a repeating event not saved.' })
+    expect(
+      settlePick('09:00', '09:00', { leaving: true, repeating: true }),
+    ).toBeNull()
+  })
+})
+
+describe('closing on a repeating event still asking which days', () => {
+  it('says a change or a move waiting for its answer is not saved', () => {
+    expect(unsavedOnLeave({ kind: 'change' })).toBe(
+      'Change to a repeating event not saved.',
+    )
+    expect(unsavedOnLeave({ kind: 'move' })).toBe(
+      'Change to a repeating event not saved.',
+    )
+  })
+
+  it('says nothing when nothing waits, or only a delete was asked', () => {
+    expect(unsavedOnLeave(null)).toBeNull()
+    expect(unsavedOnLeave({ kind: 'delete' })).toBeNull()
   })
 })

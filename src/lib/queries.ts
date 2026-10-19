@@ -21,14 +21,25 @@ import {
   updateItem,
 } from '@/server/board'
 import {
+  deleteCalendarEvent,
   getCalendar,
+  getCalendarEvent,
   getCalendarEvents,
   getCalendars,
+  moveCalendarEvent,
   setCalendarShown,
+  updateCalendarEvent,
 } from '@/server/calendar'
 import type { Tag, TagColor, Todo } from '@/db/schema'
 import type { Board, ItemFields } from '@/server/board'
-import type { ShownCalendar } from './calendar-events'
+import { NO_TITLE } from './calendar-events'
+import type {
+  CalendarEventView,
+  EventChange,
+  EventDetail,
+  SeriesScope,
+  ShownCalendar,
+} from './calendar-events'
 import type { LocalDate } from './dates'
 
 export const boardQ = queryOptions({
@@ -74,6 +85,191 @@ export const calendarEventsQ = (from: LocalDate, to: LocalDate) =>
     refetchInterval: 5 * 60_000,
     refetchOnWindowFocus: true,
   })
+
+/**
+ * One event in full, for its panel: asked of Google when it opens, and
+ * again on focus, so it is never far behind Google Calendar.
+ */
+export const calendarEventQ = (calendarId: string, eventId: string) =>
+  queryOptions({
+    queryKey: ['calendar-event', calendarId, eventId],
+    queryFn: () => getCalendarEvent({ data: { calendarId, eventId } }),
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
+  })
+
+/** An event as it will be once a change lands. */
+function changed<T extends CalendarEventView>(
+  event: T,
+  change: EventChange,
+): T {
+  return {
+    ...event,
+    ...(change.title !== undefined
+      ? { title: change.title.trim() || NO_TITLE }
+      : {}),
+    ...(change.notes !== undefined ? { notes: change.notes } : {}),
+    ...(change.place !== undefined ? { place: change.place } : {}),
+    ...change.when,
+  }
+}
+
+/**
+ * Applies a change to every cached view of the events at once, and puts
+ * them back if Google does not take it. `pick` says which events it is for:
+ * the one, or the days of its series the change covers.
+ */
+function useEventChange<TVars, TResult>({
+  send,
+  pick,
+  apply,
+  failed,
+  done,
+}: {
+  send: (vars: TVars) => Promise<TResult>
+  pick: (vars: TVars) => (event: CalendarEventView) => boolean
+  apply: (vars: TVars, event: CalendarEventView) => CalendarEventView | null
+  failed: string
+  done?: (result: TResult, vars: TVars) => void
+}) {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: send,
+    onMutate: async (vars: TVars) => {
+      await client.cancelQueries({ queryKey: ['calendar-events'] })
+      await client.cancelQueries({ queryKey: ['calendar-event'] })
+      const lists = client.getQueriesData<Array<CalendarEventView>>({
+        queryKey: ['calendar-events'],
+      })
+      const details = client.getQueriesData<EventDetail | null>({
+        queryKey: ['calendar-event'],
+      })
+      const matches = pick(vars)
+      for (const [key, list] of lists) {
+        if (!list) continue
+        client.setQueryData(
+          key,
+          list.flatMap((event) => {
+            if (!matches(event)) return [event]
+            const next = apply(vars, event)
+            return next ? [next] : []
+          }),
+        )
+      }
+      for (const [key, detail] of details) {
+        if (detail && matches(detail)) {
+          const next = apply(vars, detail)
+          if (next) client.setQueryData(key, next)
+        }
+      }
+      return { lists, details }
+    },
+    onError: (_error, _vars, context) => {
+      for (const [key, data] of [
+        ...(context?.lists ?? []),
+        ...(context?.details ?? []),
+      ]) {
+        client.setQueryData(key, data)
+      }
+      toast.error(failed)
+    },
+    onSuccess: (result, vars) => done?.(result, vars),
+    onSettled: () =>
+      Promise.all([
+        client.invalidateQueries({ queryKey: ['calendar-events'] }),
+        client.invalidateQueries({ queryKey: ['calendar-event'] }),
+      ]),
+  })
+}
+
+/** Whether `event` is among the days of `of`'s series that `scope` covers. */
+function inScope(of: CalendarEventView, scope: SeriesScope) {
+  return (event: CalendarEventView) =>
+    event.key === of.key ||
+    (scope !== 'this' &&
+      of.seriesId !== null &&
+      event.seriesId === of.seriesId &&
+      (scope === 'all' || event.startDate >= of.startDate))
+}
+
+const NOT_SAVED = 'Not saved. Google Calendar did not take the change.'
+
+/**
+ * Changes an event, or the days of its series `scope` says. A change of
+ * when only moves the one shown at once; the series' other days follow
+ * when Google answers. `onKey` hears of the day's new key, when it has one.
+ */
+export function useChangeEvent(onKey: (from: string, to: string) => void) {
+  return useEventChange({
+    send: (vars: {
+      event: CalendarEventView
+      scope: SeriesScope
+      change: EventChange
+    }) =>
+      updateCalendarEvent({
+        data: {
+          calendarId: vars.event.calendarId,
+          eventId: vars.event.eventId,
+          scope: vars.scope,
+          change: vars.change,
+        },
+      }),
+    pick: ({ event, scope }) => inScope(event, scope),
+    apply: ({ event, change }, one) =>
+      changed(
+        one,
+        one.key === event.key ? change : { ...change, when: undefined },
+      ),
+    failed: NOT_SAVED,
+    done: (result, { event }) => {
+      toast(`Saved in ${event.calendar}.`)
+      if (result.key !== event.key) onKey(event.key, result.key)
+    },
+  })
+}
+
+/** Moves an event, a repeating one as a whole series, to another calendar. */
+export function useMoveEvent(onKey: (from: string, to: string) => void) {
+  return useEventChange({
+    send: (vars: { event: CalendarEventView; to: ShownCalendar }) =>
+      moveCalendarEvent({
+        data: {
+          calendarId: vars.event.calendarId,
+          eventId: vars.event.eventId,
+          to: vars.to.id,
+        },
+      }),
+    pick: ({ event }) => inScope(event, 'all'),
+    apply: ({ to }, one) => ({
+      ...one,
+      calendar: to.name,
+      color: to.color,
+    }),
+    failed: 'Not moved. Google Calendar did not take the change.',
+    done: (result, { event, to }) => {
+      toast(`Moved to ${to.name}.`)
+      if (result.key !== event.key) onKey(event.key, result.key)
+    },
+  })
+}
+
+/** Deletes an event, or the days of its series `scope` says. */
+export function useDeleteEvent() {
+  return useEventChange({
+    send: (vars: { event: CalendarEventView; scope: SeriesScope }) =>
+      deleteCalendarEvent({
+        data: {
+          calendarId: vars.event.calendarId,
+          eventId: vars.event.eventId,
+          scope: vars.scope,
+        },
+      }),
+    pick: ({ event, scope }) => inScope(event, scope),
+    apply: () => null,
+    failed: 'Not deleted. Google Calendar did not take the change.',
+    done: (_result, { event }) => toast(`Deleted from ${event.calendar}.`),
+  })
+}
 
 /** Shows one of the person's calendars in the views, or stops showing it. */
 export function useShowCalendar() {

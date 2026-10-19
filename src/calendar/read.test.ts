@@ -2,7 +2,12 @@
 // SQLite and a stand-in for Google's two read-only calls.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as schema from '@/db/schema'
-import { CALENDAR_SCOPE, READ_SCOPES } from './google'
+import {
+  CALENDAR_SCOPE,
+  EVENTS_READ_SCOPE,
+  LIST_SCOPE,
+  READ_SCOPES,
+} from './google'
 import { testDb } from './test-db'
 import type { Db } from './sync'
 
@@ -32,6 +37,7 @@ const CALENDARS = [
     id: 'kids@group.calendar.google.com',
     summary: 'Kids',
     backgroundColor: '#f6bf26',
+    accessRole: 'reader',
   },
   { id: TODOS, summary: 'Todos', backgroundColor: '#16a765' },
   {
@@ -40,8 +46,13 @@ const CALENDARS = [
     summaryOverride: 'Alex',
     backgroundColor: '#7986cb',
     primary: true,
+    accessRole: 'owner',
   },
-  { id: 'gone@group.calendar.google.com', summary: 'Gone' },
+  {
+    id: 'gone@group.calendar.google.com',
+    summary: 'Gone',
+    accessRole: 'writer',
+  },
 ]
 
 /** What Google is asked, and what it answers. */
@@ -107,6 +118,7 @@ describe('choosing calendars to show', () => {
         name: 'Alex',
         color: '#7986cb',
         primary: true,
+        writable: true,
         shown: false,
       },
       {
@@ -114,6 +126,7 @@ describe('choosing calendars to show', () => {
         name: 'Gone',
         color: '#9e9e9e',
         primary: false,
+        writable: true,
         shown: false,
       },
       {
@@ -121,10 +134,17 @@ describe('choosing calendars to show', () => {
         name: 'Kids',
         color: '#f6bf26',
         primary: false,
+        writable: false,
         shown: true,
       },
     ])
     expect(asked[0].searchParams.get('minAccessRole')).toBe('reader')
+  })
+
+  it('still reads for a person who gave reading alone, before editing', async () => {
+    await link(db(), [CALENDAR_SCOPE, LIST_SCOPE, EVENTS_READ_SCOPE])
+    vi.stubGlobal('fetch', google({}))
+    expect(await listCalendars('alex')).toHaveLength(3)
   })
 
   it('asks Google nothing for a link that was never let read', async () => {

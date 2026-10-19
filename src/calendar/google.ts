@@ -1,9 +1,9 @@
 // Google, as the calendar sync sees it: asking a person for access to a
 // calendar of the app's own, and the few Calendar API calls the sync makes.
-// Nothing else in the app talks to Google's calendar but the two read-only
-// calls that show a person's other calendars in the views (ReadingApi), and
-// the sync only ever sees the CalendarApi interface, which the tests stand
-// in for.
+// Nothing else in the app talks to Google's calendar but the calls that show
+// a person's other calendars in the views and change their events there
+// (ReadingApi), and the sync only ever sees the CalendarApi interface, which
+// the tests stand in for.
 import type { EventTime, GoogleEvent } from './mapping'
 
 /**
@@ -14,21 +14,40 @@ import type { EventTime, GoogleEvent } from './mapping'
 export const CALENDAR_SCOPE =
   'https://www.googleapis.com/auth/calendar.app.created'
 
+/** The person's list of calendars, with the colour each has. */
+export const LIST_SCOPE =
+  'https://www.googleapis.com/auth/calendar.calendarlist.readonly'
+/** Reading the events in those calendars, and changing and deleting them. */
+export const EVENTS_SCOPE = 'https://www.googleapis.com/auth/calendar.events'
+/**
+ * Reading the events only. What a person who turned the calendars on
+ * before they could be edited gave; it still reads, and they are asked for
+ * EVENTS_SCOPE the first time they go to change an event.
+ */
+export const EVENTS_READ_SCOPE =
+  'https://www.googleapis.com/auth/calendar.events.readonly'
+
 /**
  * Asked for only when a person chooses to see their other calendars next to
- * the to-dos: the list of their calendars, with the colour each has, and the
- * events in them, read-only. Together they read less than
- * `calendar.readonly`, which also reads each calendar's settings and
- * sharing, and neither can change anything.
+ * the to-dos, or to change their events there: the list of their calendars,
+ * and the events in them. Together they reach less than `calendar`, which
+ * also changes each calendar's settings and sharing. `calendar.events.owned`
+ * would leave out the calendars shared with the person to edit, such as a
+ * family's, which Google Calendar lets them change.
  */
-export const READ_SCOPES = [
-  'https://www.googleapis.com/auth/calendar.calendarlist.readonly',
-  'https://www.googleapis.com/auth/calendar.events.readonly',
-]
+export const READ_SCOPES = [LIST_SCOPE, EVENTS_SCOPE]
 
 /** Whether a grant's scopes let the app read the person's other calendars. */
 export function readsCalendars(scopes: Array<string>): boolean {
-  return READ_SCOPES.every((scope) => scopes.includes(scope))
+  return (
+    scopes.includes(LIST_SCOPE) &&
+    (scopes.includes(EVENTS_SCOPE) || scopes.includes(EVENTS_READ_SCOPE))
+  )
+}
+
+/** Whether a grant's scopes also let the app change and delete those events. */
+export function editsCalendars(scopes: Array<string>): boolean {
+  return scopes.includes(LIST_SCOPE) && scopes.includes(EVENTS_SCOPE)
 }
 
 const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
@@ -368,6 +387,8 @@ export interface ListedCalendar {
   /** The colour the person sees it in, as "#rrggbb". */
   backgroundColor?: string
   primary?: boolean
+  /** What the person may do there: change events only as owner or writer. */
+  accessRole?: 'freeBusyReader' | 'reader' | 'writer' | 'owner'
 }
 
 /** An event as read from another calendar: only what the views show. */
@@ -380,12 +401,45 @@ export interface ReadEvent {
   htmlLink?: string
   /** Only the person's own answer, when they were invited. */
   attendees?: Array<{ self?: boolean; responseStatus?: string }>
+  /** The series a repeating event's day belongs to. */
+  recurringEventId?: string
 }
 
 /**
- * The two calls that read a person's other calendars, needing the
- * READ_SCOPES. Neither can change anything, and each asks Google for no
- * more fields than the views show: no descriptions, places or guests.
+ * An event in full, read when the person opens it, and the series of a
+ * repeating one when they change it. Guests are read only to be kept when a
+ * series is split, never shown.
+ */
+export interface FullEvent extends ReadEvent {
+  description?: string
+  location?: string
+  /** RRULE, EXDATE and RDATE lines, on a series. */
+  recurrence?: Array<string>
+  /** Where a repeating event's day was meant to start, before any change. */
+  originalStartTime?: EventTime
+  /** `self` when the event belongs to the calendar it is read from. */
+  organizer?: { self?: boolean }
+  guestsCanModify?: boolean
+  /** 'default' for an ordinary event; birthdays and the like are Google's. */
+  eventType?: string
+  colorId?: string
+  transparency?: string
+  visibility?: string
+  reminders?: unknown
+  attendees?: Array<{
+    self?: boolean
+    responseStatus?: string
+    [field: string]: unknown
+  }>
+  guestsCanInviteOthers?: boolean
+  guestsCanSeeOtherGuests?: boolean
+}
+
+/**
+ * The calls that read a person's other calendars and change their events,
+ * needing the READ_SCOPES (the changes need EVENTS_SCOPE). The views' reads
+ * ask Google for no more fields than the views show: no descriptions,
+ * places or guests. Those are read for one event, when it is opened.
  */
 export interface ReadingApi {
   /** Every calendar the person can read events in, one page of up to 250. */
@@ -400,13 +454,51 @@ export interface ReadingApi {
       pageToken: string | null
     },
   ) => Promise<{ items: Array<ReadEvent>; nextPageToken?: string }>
+  /** The fields the panel shows, or with `everything`, all Google keeps. */
+  getEvent: (
+    calendarId: string,
+    eventId: string,
+    everything?: boolean,
+  ) => Promise<FullEvent>
+  /** One page of a series' days, deleted ones included. */
+  listInstances: (
+    calendarId: string,
+    seriesId: string,
+    window: {
+      timeMin?: string
+      timeMax?: string
+      timeZone: string
+      pageToken: string | null
+    },
+  ) => Promise<{ items: Array<FullEvent>; nextPageToken?: string }>
+  patchEvent: (
+    calendarId: string,
+    eventId: string,
+    body: Record<string, unknown>,
+  ) => Promise<FullEvent>
+  insertEvent: (
+    calendarId: string,
+    body: Record<string, unknown>,
+  ) => Promise<FullEvent>
+  /** Moves an event to another of the person's calendars. */
+  moveEvent: (
+    calendarId: string,
+    eventId: string,
+    destination: string,
+  ) => Promise<FullEvent>
+  deleteEvent: (calendarId: string, eventId: string) => Promise<void>
 }
+
+const FULL_FIELDS =
+  'id,status,summary,description,location,start,end,htmlLink,recurringEventId,recurrence,originalStartTime,organizer(self),guestsCanModify,eventType,attendees(self,responseStatus)'
 
 export function readingApi(
   accessToken: () => Promise<string>,
   fetcher: Fetch = fetch,
 ): ReadingApi {
   const call = caller(accessToken, fetcher)
+  const event = (calendarId: string, eventId: string) =>
+    `${calendar(calendarId)}/events/${encodeURIComponent(eventId)}`
   return {
     listCalendars: async () =>
       (
@@ -418,7 +510,8 @@ export function readingApi(
             maxResults: '250',
             // Free/busy-only calendars have no events to show.
             minAccessRole: 'reader',
-            fields: 'items(id,summary,summaryOverride,backgroundColor,primary)',
+            fields:
+              'items(id,summary,summaryOverride,backgroundColor,primary,accessRole)',
           },
         )
       ).items ?? [],
@@ -431,8 +524,38 @@ export function readingApi(
         orderBy: 'startTime',
         maxResults: '250',
         fields:
-          'items(id,status,summary,start,end,htmlLink,attendees(self,responseStatus)),nextPageToken',
+          'items(id,status,summary,start,end,htmlLink,recurringEventId,attendees(self,responseStatus)),nextPageToken',
         ...(window.pageToken ? { pageToken: window.pageToken } : {}),
       }),
+    getEvent: (calendarId, eventId, everything = false) =>
+      call(
+        'GET',
+        event(calendarId, eventId),
+        undefined,
+        everything ? undefined : { fields: FULL_FIELDS },
+      ),
+    listInstances: (calendarId, seriesId, window) =>
+      call('GET', `${event(calendarId, seriesId)}/instances`, undefined, {
+        timeZone: window.timeZone,
+        showDeleted: 'true',
+        maxResults: '2500',
+        fields: 'items(id,status,start,end,originalStartTime),nextPageToken',
+        ...(window.timeMin ? { timeMin: window.timeMin } : {}),
+        ...(window.timeMax ? { timeMax: window.timeMax } : {}),
+        ...(window.pageToken ? { pageToken: window.pageToken } : {}),
+      }),
+    patchEvent: (calendarId, eventId, body) =>
+      call('PATCH', event(calendarId, eventId), body, { fields: FULL_FIELDS }),
+    insertEvent: (calendarId, body) =>
+      call('POST', `${calendar(calendarId)}/events`, body, {
+        fields: FULL_FIELDS,
+      }),
+    moveEvent: (calendarId, eventId, destination) =>
+      call('POST', `${event(calendarId, eventId)}/move`, undefined, {
+        destination,
+        fields: FULL_FIELDS,
+      }),
+    deleteEvent: (calendarId, eventId) =>
+      call('DELETE', event(calendarId, eventId)),
   }
 }

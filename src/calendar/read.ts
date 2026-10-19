@@ -1,16 +1,21 @@
 // A person's other Google calendars, read for the day, week and month views
 // once they asked for that: which calendars they have, which they chose to
-// see, and those calendars' events over the days on screen. Read-only:
-// nothing here writes to Google, and nothing read is kept. Only the choice
-// of calendars is stored (calendars_shown); names, colours and events are
-// asked of Google each time the views ask, and the browser keeps them a
-// short while (src/lib/queries.ts).
+// see, and those calendars' events over the days on screen. Nothing here
+// writes to Google (src/calendar/events.ts changes events), and nothing read
+// is kept. Only the choice of calendars is stored (calendars_shown); names,
+// colours and events are asked of Google each time the views ask, and the
+// browser keeps them a short while (src/lib/queries.ts).
 import { and, eq, inArray } from 'drizzle-orm'
 import { getDb, schema } from '@/db/client'
 import { fromGoogle } from '@/lib/calendar-events'
 import { addDays } from '@/lib/dates'
 import { env } from '@/server/env'
-import { GoogleError, readingApi, readsCalendars } from './google'
+import {
+  GoogleError,
+  editsCalendars,
+  readingApi,
+  readsCalendars,
+} from './google'
 import { readerToken } from './run'
 import type { CalendarEventView, ShownCalendar } from '@/lib/calendar-events'
 import type { LocalDate } from '@/lib/dates'
@@ -24,10 +29,15 @@ const FALLBACK_COLOR = '#9e9e9e'
 /** Why Google refuses a calendar the person can no longer read. */
 const UNREADABLE = ['forbidden', 'insufficientPermissions']
 
-/** The person's link and a way to read, or null while they cannot. */
-async function reader(
-  person: string,
-): Promise<{ api: ReadingApi; todosCalendar: string | null } | null> {
+/**
+ * The person's link and a way to read, or null while they cannot; `edits`
+ * says whether Google also lets the app change their events.
+ */
+export async function reader(person: string): Promise<{
+  api: ReadingApi
+  todosCalendar: string | null
+  edits: boolean
+} | null> {
   if (!env.calendar.enabled) return null
   const link = await getDb()
     .select()
@@ -40,6 +50,7 @@ async function reader(
   return {
     api: readingApi(readerToken(link)),
     todosCalendar: link.calendarId,
+    edits: editsCalendars(link.scopes.split(' ')),
   }
 }
 
@@ -83,10 +94,12 @@ function named(listed: ListedCalendar): Omit<ShownCalendar, 'shown'> {
     name: listed.summaryOverride || listed.summary || listed.id,
     color: listed.backgroundColor ?? FALLBACK_COLOR,
     primary: listed.primary === true,
+    writable: listed.accessRole === 'owner' || listed.accessRole === 'writer',
   }
 }
 
-async function others(
+/** The person's calendars but the Todos one, named. */
+export async function others(
   api: ReadingApi,
   todosCalendar: string | null,
 ): Promise<Array<Omit<ShownCalendar, 'shown'>>> {
