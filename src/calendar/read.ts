@@ -5,7 +5,7 @@
 // of calendars is stored (calendars_shown); names, colours and events are
 // asked of Google each time the views ask, and the browser keeps them a
 // short while (src/lib/queries.ts).
-import { and, eq } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 import { getDb, schema } from '@/db/client'
 import { fromGoogle } from '@/lib/calendar-events'
 import { addDays } from '@/lib/dates'
@@ -21,6 +21,8 @@ export const MAX_SHOWN = 12
 /** Pages of 250 read from one calendar for one screen, at most. */
 const MAX_PAGES = 4
 const FALLBACK_COLOR = '#9e9e9e'
+/** Why Google refuses a calendar the person can no longer read. */
+const UNREADABLE = ['forbidden', 'insufficientPermissions']
 
 /** The person's link and a way to read, or null while they cannot. */
 async function reader(
@@ -49,6 +51,31 @@ async function shownIds(person: string): Promise<Set<string>> {
   return new Set(rows.map((row) => row.id))
 }
 
+/**
+ * The shown ids still among the person's calendars. Ones Google no longer
+ * lists are forgotten: the picker cannot offer them to switch off, and they
+ * would otherwise count against MAX_SHOWN.
+ */
+async function shownAmong(
+  person: string,
+  calendars: Array<{ id: string }>,
+): Promise<Set<string>> {
+  const listed = new Set(calendars.map((calendar) => calendar.id))
+  const shown = [...(await shownIds(person))]
+  const stale = shown.filter((id) => !listed.has(id))
+  if (stale.length > 0) {
+    await getDb()
+      .delete(schema.calendarsShown)
+      .where(
+        and(
+          eq(schema.calendarsShown.person, person),
+          inArray(schema.calendarsShown.calendarId, stale),
+        ),
+      )
+  }
+  return new Set(shown.filter((id) => listed.has(id)))
+}
+
 /** A calendar as the picker names it. The Todos calendar is not one. */
 function named(listed: ListedCalendar): Omit<ShownCalendar, 'shown'> {
   return {
@@ -74,10 +101,8 @@ export async function listCalendars(
 ): Promise<Array<ShownCalendar>> {
   const read = await reader(person)
   if (!read) return []
-  const [calendars, shown] = await Promise.all([
-    others(read.api, read.todosCalendar),
-    shownIds(person),
-  ])
+  const calendars = await others(read.api, read.todosCalendar)
+  const shown = await shownAmong(person, calendars)
   return calendars
     .map((calendar) => ({ ...calendar, shown: shown.has(calendar.id) }))
     .sort(
@@ -121,7 +146,8 @@ export async function showCalendar(
  * from `from` to `to`. Google is asked a day wider each side, in UTC, which
  * covers the household's day in any zone; the views place each event by
  * its household day. A calendar Google no longer lets the person read is
- * left out, and the rest still show.
+ * left out, and the rest still show. A calendar Google refuses only for now,
+ * as for too many requests, fails the whole read.
  */
 export async function eventsBetween(
   person: string,
@@ -130,11 +156,10 @@ export async function eventsBetween(
 ): Promise<Array<CalendarEventView>> {
   const read = await reader(person)
   if (!read) return []
-  const shown = await shownIds(person)
-  if (shown.size === 0) return []
-  const calendars = (await others(read.api, read.todosCalendar)).filter(
-    (calendar) => shown.has(calendar.id),
-  )
+  if ((await shownIds(person)).size === 0) return []
+  const listed = await others(read.api, read.todosCalendar)
+  const shown = await shownAmong(person, listed)
+  const calendars = listed.filter((calendar) => shown.has(calendar.id))
   const window = {
     timeMin: `${addDays(from, -1)}T00:00:00Z`,
     timeMax: `${addDays(to, 2)}T00:00:00Z`,
@@ -155,7 +180,11 @@ export async function eventsBetween(
           if (!pageToken) break
         }
       } catch (error) {
-        if (error instanceof GoogleError && [403, 404].includes(error.status)) {
+        if (
+          error instanceof GoogleError &&
+          (error.status === 404 ||
+            (error.status === 403 && UNREADABLE.includes(error.reason)))
+        ) {
           console.warn(`[calendar] cannot read a shown calendar: ${error}`)
           return []
         }

@@ -46,7 +46,9 @@ const CALENDARS = [
 
 /** What Google is asked, and what it answers. */
 let asked: Array<URL>
-function google(events: Record<string, Array<unknown> | number>) {
+function google(
+  events: Record<string, Array<unknown> | number | [number, string]>,
+) {
   return vi.fn<typeof fetch>(async (input) => {
     const url = new URL(String(input))
     asked.push(url)
@@ -55,10 +57,13 @@ function google(events: Record<string, Array<unknown> | number>) {
     }
     const id = decodeURIComponent(url.pathname.split('/')[4])
     const reply = events[id] ?? []
-    if (typeof reply === 'number') {
+    if (!Array.isArray(reply) || typeof reply[0] === 'number') {
+      const [status, reason] = Array.isArray(reply)
+        ? (reply as [number, string])
+        : [reply, 'notFound']
       return Response.json(
-        { error: { message: 'Not Found', errors: [{ reason: 'notFound' }] } },
-        { status: reply },
+        { error: { message: reason, errors: [{ reason }] } },
+        { status },
       )
     }
     return Response.json({ items: reply })
@@ -148,6 +153,26 @@ describe('choosing calendars to show', () => {
     }
     await expect(showCalendar('alex', 'one-more', true)).rejects.toThrow()
   })
+
+  it('forgets shown calendars Google no longer lists', async () => {
+    await link(db(), [CALENDAR_SCOPE, ...READ_SCOPES])
+    for (let n = 0; n < MAX_SHOWN - 1; n++) {
+      await db()
+        .insert(schema.calendarsShown)
+        .values({ person: 'alex', calendarId: `unsubscribed-${n}` })
+    }
+    await showCalendar('alex', 'kids@group.calendar.google.com', true)
+    vi.stubGlobal('fetch', google({}))
+    const listed = await listCalendars('alex')
+    expect(listed.filter((calendar) => calendar.shown)).toMatchObject([
+      { id: 'kids@group.calendar.google.com' },
+    ])
+    expect(await db().select().from(schema.calendarsShown)).toEqual([
+      { person: 'alex', calendarId: 'kids@group.calendar.google.com' },
+    ])
+    await showCalendar('alex', 'alex@example.com', true)
+    await showCalendar('alex', 'gone@group.calendar.google.com', true)
+  })
 })
 
 describe("reading the shown calendars' events", () => {
@@ -207,6 +232,33 @@ describe("reading the shown calendars' events", () => {
     expect(reads[0].searchParams.get('fields')).not.toMatch(
       /description|location/,
     )
+  })
+
+  it('fails the read while Google limits requests', async () => {
+    await link(db(), [CALENDAR_SCOPE, ...READ_SCOPES])
+    for (const id of ['alex@example.com', 'kids@group.calendar.google.com']) {
+      await db()
+        .insert(schema.calendarsShown)
+        .values({ person: 'alex', calendarId: id })
+    }
+    vi.stubGlobal(
+      'fetch',
+      google({
+        'alex@example.com': [403, 'rateLimitExceeded'],
+        'kids@group.calendar.google.com': [403, 'forbidden'],
+      }),
+    )
+    await expect(
+      eventsBetween('alex', '2026-09-27', '2026-11-07'),
+    ).rejects.toThrow(/rateLimitExceeded/)
+    vi.stubGlobal(
+      'fetch',
+      google({
+        'alex@example.com': [],
+        'kids@group.calendar.google.com': [403, 'forbidden'],
+      }),
+    )
+    expect(await eventsBetween('alex', '2026-09-27', '2026-11-07')).toEqual([])
   })
 
   it('shows nothing while the link has a problem', async () => {
