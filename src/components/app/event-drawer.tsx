@@ -69,6 +69,7 @@ import {
   lastDay,
   parseEventKey,
   settlePick,
+  unsavedOnLeave,
   whenRuns,
 } from '@/lib/calendar-events'
 import {
@@ -251,6 +252,17 @@ function EventPanel({
   const { data: calendars } = useQuery({ ...calendarsQ, enabled: canEdit })
   const [error, setError] = useState<string | null>(null)
   const [asking, setAsking] = useState<Asking>(null)
+  const askingNow = useRef(asking)
+  useEffect(() => {
+    askingNow.current = asking
+  })
+  useEffect(
+    () => () => {
+      const said = unsavedOnLeave(askingNow.current)
+      if (said) toast(said, { id: said })
+    },
+    [],
+  )
   const [scope, setScope] = useState<SeriesScope>('this')
   // Fields put back after a change was called off.
   const [reset, setReset] = useState(0)
@@ -699,7 +711,7 @@ function Native({
     pending.current = null
     const settled = settlePick(next, value, { leaving, repeating })
     if (settled && 'keep' in settled) onPick(settled.keep)
-    else if (settled) toast(settled.dropped)
+    else if (settled) toast(settled.dropped, { id: settled.dropped })
     else if (next !== null) setDraft(null)
   }
   const flush = useRef(commit)

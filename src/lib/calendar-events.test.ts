@@ -8,6 +8,7 @@ import {
   parseEventKey,
   plainText,
   settlePick,
+  unsavedOnLeave,
   weekBars,
   whenRuns,
 } from './calendar-events'
@@ -352,5 +353,21 @@ describe('settling a picked day or time', () => {
     expect(
       settlePick('09:00', '09:00', { leaving: true, repeating: true }),
     ).toBeNull()
+  })
+})
+
+describe('closing on a repeating event still asking which days', () => {
+  it('says a change or a move waiting for its answer is not saved', () => {
+    expect(unsavedOnLeave({ kind: 'change' })).toBe(
+      'Change to a repeating event not saved.',
+    )
+    expect(unsavedOnLeave({ kind: 'move' })).toBe(
+      'Change to a repeating event not saved.',
+    )
+  })
+
+  it('says nothing when nothing waits, or only a delete was asked', () => {
+    expect(unsavedOnLeave(null)).toBeNull()
+    expect(unsavedOnLeave({ kind: 'delete' })).toBeNull()
   })
 })

@@ -333,6 +333,16 @@ export function settlePick(
   return { keep: pick }
 }
 
+/**
+ * What the panel says as it closes on a repeating event's change or move
+ * still waiting for which days it is for, or null when nothing is lost.
+ */
+export function unsavedOnLeave(
+  asking: { kind: 'change' | 'move' | 'delete' } | null,
+): string | null {
+  return asking && asking.kind !== 'delete' ? SERIES_PICK_DROPPED : null
+}
+
 /** Which days of a repeating event a change or a delete is for. */
 export type SeriesScope = 'this' | 'following' | 'all'
 
