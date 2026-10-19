@@ -10,6 +10,9 @@
 //   active day's checklist, the full day), each laid out once at the size it
 //   will be shown at. The grid only uncovers them; no title re-wraps
 //   mid-move. Which one shows, and how it fades, is CSS in styles.css.
+//
+// Events from the person's other Google calendars, once they chose some,
+// sit after the day's to-dos in each drawing (calendar-events.tsx).
 import { memo, useCallback, useLayoutEffect, useRef, useState } from 'react'
 import { Link, useRouterState } from '@tanstack/react-router'
 import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react'
@@ -34,6 +37,12 @@ import {
   stepDay,
 } from '@/lib/lens'
 import { useBoard, useSetDone } from '@/lib/queries'
+import {
+  CalendarsButton,
+  EventMark,
+  LensEventRow,
+  useEventsOn,
+} from './calendar-events'
 import { DayView } from './day-view'
 import { ScreenHeader } from './shell'
 import { TagDot } from './tag'
@@ -176,7 +185,11 @@ export function Lens({
   return (
     <div className="flex flex-col gap-5 lg:mx-auto lg:w-full lg:max-w-5xl">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <ScreenHeader eyebrow={eyebrow} title={formatLongDay(day)} />
+        <ScreenHeader
+          eyebrow={eyebrow}
+          title={formatLongDay(day)}
+          phoneActions={<CalendarsButton />}
+        />
         <div className="flex items-center justify-between gap-2 lg:gap-4">
           <Tabs
             value={view}
@@ -191,6 +204,7 @@ export function Lens({
             </TabsList>
           </Tabs>
           <div className="flex items-center gap-1.5">
+            <CalendarsButton className="hidden lg:inline-flex" />
             <Button
               variant="outline"
               size="icon-lg"
@@ -364,6 +378,8 @@ function LensSquareView({
     (a, b) => Number(!isOpen(a)) - Number(!isOpen(b)) || byDue(a, b),
   )
   const past = date < today
+  const events = useEventsOn(date)
+  const chipCount = items.length + events.length + (carried.length ? 1 : 0)
   const number = (
     <span className="lens-number" aria-hidden>
       {Number(date.slice(8))}
@@ -392,11 +408,16 @@ function LensSquareView({
           </span>
         </span>
       ))}
-      {items.length + (carried.length ? 1 : 0) > 2 && (
-        <span className="lens-more">
-          {items.length + (carried.length ? 1 : 0) - 2} more
+      {events.map((on) => (
+        <span key={on.event.key} className="lens-chip" data-event="">
+          <EventMark color={on.event.color} />
+          <span>
+            {on.event.title}
+            {!on.wholeDay && <small>{on.when}</small>}
+          </span>
         </span>
-      )}
+      ))}
+      {chipCount > 2 && <span className="lens-more">{chipCount - 2} more</span>}
     </div>
   )
 
@@ -458,6 +479,9 @@ function LensSquareView({
                 {items.length === 0 && (
                   <p className="lens-caption">Nothing due</p>
                 )}
+                {events.map((on) => (
+                  <LensEventRow key={on.event.key} on={on} />
+                ))}
               </div>
             </div>
           </div>

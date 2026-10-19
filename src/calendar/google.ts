@@ -1,8 +1,10 @@
 // Google, as the calendar sync sees it: asking a person for access to a
 // calendar of the app's own, and the few Calendar API calls the sync makes.
-// Nothing else in the app talks to Google's calendar, and the sync only ever
-// sees the CalendarApi interface, which the tests stand in for.
-import type { GoogleEvent } from './mapping'
+// Nothing else in the app talks to Google's calendar but the two read-only
+// calls that show a person's other calendars in the views (ReadingApi), and
+// the sync only ever sees the CalendarApi interface, which the tests stand
+// in for.
+import type { EventTime, GoogleEvent } from './mapping'
 
 /**
  * The narrowest scope that works: make calendars of the app's own, and read
@@ -11,6 +13,23 @@ import type { GoogleEvent } from './mapping'
  */
 export const CALENDAR_SCOPE =
   'https://www.googleapis.com/auth/calendar.app.created'
+
+/**
+ * Asked for only when a person chooses to see their other calendars next to
+ * the to-dos: the list of their calendars, with the colour each has, and the
+ * events in them, read-only. Together they read less than
+ * `calendar.readonly`, which also reads each calendar's settings and
+ * sharing, and neither can change anything.
+ */
+export const READ_SCOPES = [
+  'https://www.googleapis.com/auth/calendar.calendarlist.readonly',
+  'https://www.googleapis.com/auth/calendar.events.readonly',
+]
+
+/** Whether a grant's scopes let the app read the person's other calendars. */
+export function readsCalendars(scopes: Array<string>): boolean {
+  return READ_SCOPES.every((scope) => scopes.includes(scope))
+}
 
 const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
 const TOKEN_URL = 'https://oauth2.googleapis.com/token'
@@ -53,17 +72,29 @@ export interface OAuthClient {
   redirectUri: string
 }
 
-/** Where a person is sent to let the app make and keep its calendar. */
+/**
+ * Where a person is sent to let the app make and keep its calendar, and,
+ * when they asked to see their other calendars, read those too.
+ */
 export function consentUrl(
   client: OAuthClient,
-  request: { state: string; challenge: string; loginHint: string | null },
+  request: {
+    state: string
+    challenge: string
+    loginHint: string | null
+    scopes: Array<string>
+  },
 ): string {
   const url = new URL(AUTH_URL)
   url.search = new URLSearchParams({
     client_id: client.clientId,
     redirect_uri: client.redirectUri,
     response_type: 'code',
-    scope: CALENDAR_SCOPE,
+    scope: request.scopes.join(' '),
+    // What the person already gave stays given: asking for the calendars
+    // later adds to the calendar sync's access instead of replacing it, and
+    // the grant that comes back says everything it covers.
+    include_granted_scopes: 'true',
     // A refresh token, so the sync runs while nobody has the app open...
     access_type: 'offline',
     // ...which Google only hands out again when asked to show consent.
@@ -232,12 +263,16 @@ export interface CalendarApi {
   stopChannel: (channelId: string, resourceId: string) => Promise<void>
 }
 
-/** The Calendar API over HTTP, as the person whose token it is. */
-export function calendarApi(
-  accessToken: () => Promise<string>,
-  fetcher: Fetch = fetch,
-): CalendarApi {
-  async function call<T>(
+type Call = <T>(
+  method: string,
+  path: string,
+  body?: unknown,
+  query?: Record<string, string>,
+) => Promise<T>
+
+/** One Calendar API request at a time, as the person whose token it is. */
+function caller(accessToken: () => Promise<string>, fetcher: Fetch): Call {
+  return async function call<T>(
     method: string,
     path: string,
     body?: unknown,
@@ -267,8 +302,16 @@ export function calendarApi(
     }
     return reply as T
   }
+}
 
-  const calendar = (id: string) => `/calendars/${encodeURIComponent(id)}`
+const calendar = (id: string) => `/calendars/${encodeURIComponent(id)}`
+
+/** The Calendar API over HTTP, as the person whose token it is. */
+export function calendarApi(
+  accessToken: () => Promise<string>,
+  fetcher: Fetch = fetch,
+): CalendarApi {
+  const call = caller(accessToken, fetcher)
 
   return {
     insertCalendar: (body) => call('POST', '/calendars', body),
@@ -313,5 +356,83 @@ export function calendarApi(
     },
     stopChannel: (channelId, resourceId) =>
       call('POST', '/channels/stop', { id: channelId, resourceId }),
+  }
+}
+
+/** A calendar in the person's list, as much of it as the app reads. */
+export interface ListedCalendar {
+  id: string
+  summary?: string
+  /** The name the person gave it themselves, over its owner's. */
+  summaryOverride?: string
+  /** The colour the person sees it in, as "#rrggbb". */
+  backgroundColor?: string
+  primary?: boolean
+}
+
+/** An event as read from another calendar: only what the views show. */
+export interface ReadEvent {
+  id: string
+  status?: 'confirmed' | 'tentative' | 'cancelled'
+  summary?: string
+  start?: EventTime
+  end?: EventTime
+  htmlLink?: string
+  /** Only the person's own answer, when they were invited. */
+  attendees?: Array<{ self?: boolean; responseStatus?: string }>
+}
+
+/**
+ * The two calls that read a person's other calendars, needing the
+ * READ_SCOPES. Neither can change anything, and each asks Google for no
+ * more fields than the views show: no descriptions, places or guests.
+ */
+export interface ReadingApi {
+  /** Every calendar the person can read events in, one page of up to 250. */
+  listCalendars: () => Promise<Array<ListedCalendar>>
+  /** One page of a calendar's events between two instants, repeats unrolled. */
+  listWindow: (
+    calendarId: string,
+    window: {
+      timeMin: string
+      timeMax: string
+      timeZone: string
+      pageToken: string | null
+    },
+  ) => Promise<{ items: Array<ReadEvent>; nextPageToken?: string }>
+}
+
+export function readingApi(
+  accessToken: () => Promise<string>,
+  fetcher: Fetch = fetch,
+): ReadingApi {
+  const call = caller(accessToken, fetcher)
+  return {
+    listCalendars: async () =>
+      (
+        await call<{ items?: Array<ListedCalendar> }>(
+          'GET',
+          '/users/me/calendarList',
+          undefined,
+          {
+            maxResults: '250',
+            // Free/busy-only calendars have no events to show.
+            minAccessRole: 'reader',
+            fields: 'items(id,summary,summaryOverride,backgroundColor,primary)',
+          },
+        )
+      ).items ?? [],
+    listWindow: (calendarId, window) =>
+      call('GET', `${calendar(calendarId)}/events`, undefined, {
+        timeMin: window.timeMin,
+        timeMax: window.timeMax,
+        timeZone: window.timeZone,
+        singleEvents: 'true',
+        orderBy: 'startTime',
+        maxResults: '250',
+        fields:
+          'items(id,status,summary,start,end,htmlLink,attendees(self,responseStatus)),nextPageToken',
+        ...(window.pageToken ? { pageToken: window.pageToken } : {}),
+      }),
   }
 }

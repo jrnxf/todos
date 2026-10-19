@@ -43,6 +43,13 @@
       "when": 1792364147094,
       "tag": "0005_calendar",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1792400508650,
+      "tag": "0006_calendars_shown",
+      "breakpoints": true
     }
   ]
 }

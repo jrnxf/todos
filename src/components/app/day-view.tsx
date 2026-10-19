@@ -2,7 +2,8 @@
 // in. Today keeps everything the old Today page had: the bar that fills as
 // the list shrinks, what was carried over, the alerts, and a look ahead once
 // nothing is left. Any other day is that day's list, with a pointer back to
-// today while something is late.
+// today while something is late. Under the to-dos, either way, come the
+// events of the calendars the person chose to see.
 import { Link } from '@tanstack/react-router'
 import {
   BellIcon,
@@ -39,6 +40,7 @@ import {
   localNow,
 } from '@/lib/dates'
 import { useBoard } from '@/lib/queries'
+import { DayEvents } from './calendar-events'
 import { useAdd } from './capture'
 import { alertName, useDayAlerts } from './day-alerts'
 import { Section, SectionHeading, TodoGroup } from './todo-row'
@@ -137,6 +139,8 @@ function TodayView() {
           All done for today.
         </p>
       )}
+
+      <DayEvents date={today} />
 
       {(alerts.sent.length > 0 || alerts.planned.length > 0) && (
         <section className="flex flex-col gap-2.5">
@@ -241,6 +245,7 @@ function OtherDayView({
           detail={nextDeadline(board.items, day)}
         />
       )}
+      <DayEvents date={day} />
       {!past && late.length > 0 && (
         <p className="px-1 text-sm text-destructive">
           {late.length} carried over, waiting on{' '}

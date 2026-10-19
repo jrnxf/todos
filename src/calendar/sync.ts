@@ -62,7 +62,7 @@ const CHANNEL_TTL_SECONDS = 7 * 24 * 60 * 60
 /** A channel this close to its end is replaced. */
 const RENEW_BEFORE_MS = 24 * 60 * 60 * 1000
 
-const { calendarEvents, calendarLinks, items, meta } = schema
+const { calendarEvents, calendarLinks, calendarsShown, items, meta } = schema
 
 /** Called before each request to Google; throws `LeaseLost` once another pass holds the lease. */
 type Keep = () => Promise<void>
@@ -605,7 +605,8 @@ export async function verifyPush(
 /**
  * Takes a person's calendar away: closes the channel, deletes the Todos
  * calendar from their Google account, withdraws the app's access, and
- * forgets all of it. The to-dos stay, those made in the calendar included.
+ * forgets all of it, the calendars chosen to be seen in the views too. The
+ * to-dos stay, those made in the calendar included.
  * Each step at Google is tried once; a failure there does not keep the
  * link, so a person whose access is already gone can still disconnect.
  */
@@ -628,6 +629,7 @@ export async function disconnect(
   if (link.calendarId) await quietly(api.deleteCalendar(link.calendarId))
   await quietly(withdraw(link))
   await db.delete(calendarEvents).where(eq(calendarEvents.person, person))
+  await db.delete(calendarsShown).where(eq(calendarsShown.person, person))
   await db.delete(calendarLinks).where(eq(calendarLinks.person, person))
 }
 

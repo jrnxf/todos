@@ -9,13 +9,14 @@
 //   renewed before they run out. In the minutes between, it finishes a pass
 //   that ran out of requests or was asked for while another ran.
 import { waitUntil } from 'cloudflare:workers'
-import { eq } from 'drizzle-orm'
+import { count, eq } from 'drizzle-orm'
 import { getDb, schema } from '@/db/client'
 import { env } from '@/server/env'
 import {
   BudgetSpent,
   RevokedError,
   calendarApi,
+  readsCalendars,
   refreshAccess,
   revoke,
 } from './google'
@@ -110,6 +111,14 @@ function accessToken(
 }
 
 /**
+ * A person's access token for reading their other calendars
+ * (src/calendar/read.ts): the same one the sync uses, outside its budget.
+ */
+export function readerToken(link: CalendarLink): () => Promise<string> {
+  return accessToken(getDb(), link, fetch)
+}
+
+/**
  * A sealed token, opened. One sealed under another CALENDAR_TOKEN_KEY can
  * never be opened again, which leaves the person as cut off as if they had
  * withdrawn access: they connect again.
@@ -178,6 +187,7 @@ export async function connectCalendar(
     refreshToken: await seal(key, grant.refreshToken, person),
     accessToken: await seal(key, grant.accessToken, person),
     accessTokenExpiresAt: grant.expiresAt,
+    scopes: grant.scopes.join(' '),
     problem: null,
   }
   const existing = await db
@@ -229,18 +239,32 @@ export interface CalendarStatus {
   problem: CalendarLink['problem']
   /** UTC instant of the last complete pass, null before the first. */
   lastSyncedAt: string | null
+  /** Whether Google lets the app read the person's other calendars. */
+  reads: boolean
+  /** How many of those the person chose to see in the views. */
+  showing: number
 }
 
 export async function calendarStatus(person: string): Promise<CalendarStatus> {
-  const link = await getDb()
-    .select()
-    .from(schema.calendarLinks)
-    .where(eq(schema.calendarLinks.person, person))
-    .get()
+  const db = getDb()
+  const [link, shown] = await Promise.all([
+    db
+      .select()
+      .from(schema.calendarLinks)
+      .where(eq(schema.calendarLinks.person, person))
+      .get(),
+    db
+      .select({ n: count() })
+      .from(schema.calendarsShown)
+      .where(eq(schema.calendarsShown.person, person))
+      .get(),
+  ])
   return {
     available: env.calendar.enabled,
     connected: link !== undefined,
     problem: link?.problem ?? null,
     lastSyncedAt: link?.lastSyncedAt ?? null,
+    reads: link !== undefined && readsCalendars(link.scopes.split(' ')),
+    showing: shown?.n ?? 0,
   }
 }

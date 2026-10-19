@@ -46,11 +46,14 @@ export function ScreenHeader({
   eyebrow,
   title,
   subtitle,
+  phoneActions,
 }: {
   /** A small word above the title, such as "Today". */
   eyebrow?: string
   title: string
   subtitle?: React.ReactNode
+  /** Beside the avatar on a phone, for what the screen has no room for. */
+  phoneActions?: React.ReactNode
 }) {
   return (
     <header className="flex items-start justify-between gap-3">
@@ -61,7 +64,10 @@ export function ScreenHeader({
         </h1>
         {subtitle && <p className="text-muted-foreground">{subtitle}</p>}
       </div>
-      <AccountLink className="mt-1 lg:hidden" />
+      <div className="mt-1 flex shrink-0 items-center gap-2.5 lg:hidden">
+        {phoneActions}
+        <AccountLink />
+      </div>
     </header>
   )
 }

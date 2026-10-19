@@ -14,12 +14,13 @@ your Worker is served at, such as `todos.jrnxf.co`.
 - Sign-in with Google (Better Auth), limited to a list of addresses. The
   address is public, but all it shows a stranger is the sign-in page.
 - Optionally, each person's own Google Calendar, kept in step with the list
-  both ways.
+  both ways, and their other Google calendars shown beside the to-dos.
 
 The database holds only what the household creates (to-dos, tags, sign-in
-sessions), each connected calendar's sealed tokens and its record of which
-event is which to-do, a few rows of scheduler state, and the migration
-history. Who lives in the house is a setting, not a table.
+sessions), each connected calendar's sealed tokens, what Google granted it
+and its record of which event is which to-do, the ids of the other
+calendars each person chose to see, a few rows of scheduler state, and the
+migration history. Who lives in the house is a setting, not a table.
 
 ## Setting up your own
 
@@ -147,9 +148,10 @@ in step with the list, both ways:
   alone.
 - When a to-do and its event both changed before the two caught up, the one
   changed last wins.
-- Nothing outside the Todos calendar is read or written. The app asks
-  Google for `calendar.app.created`, which reaches only calendars the app
-  made itself: not the primary calendar, and not any other.
+- Nothing outside the Todos calendar is written, and nothing outside it is
+  read unless the person asks to see their other calendars (below). The
+  app asks Google for `calendar.app.created`, which reaches only calendars
+  the app made itself: not the primary calendar, and not any other.
 
 **Disconnect** on the account page deletes the Todos calendar from that
 Google account, stops Google calling, withdraws the app's access and forgets
@@ -157,6 +159,56 @@ the tokens and which event is which to-do. It is there also when the link
 has a problem. When access was withdrawn in Google, the app can no longer
 delete the Todos calendar, so it stays in that Google account and can be
 deleted there. The to-dos stay, those made in the calendar too.
+
+### Seeing your other calendars
+
+Each person can also see the events of their other Google calendars (their
+own, a shared family one, a school's) in Day, Week and Month, beside the
+to-dos. It is off until they turn it on, and only they see their own.
+
+Where the sync was already running, before anyone turns this on: add the
+two scopes below in the Google Cloud console (step 1 of
+[Turning it on](#turning-it-on)), then `bun run db:migrate:remote` and
+`bun run deploy`, back to back.
+
+- **Turning it on.** Under Google Calendar on the account page, **Your
+  other calendars**, **Show**; or the calendar button by the arrows at
+  home (by the avatar on a phone), **Choose calendars**. Google asks once
+  more, for two read-only scopes on top of the one the sync already has:
+  - `calendar.calendarlist.readonly`, the list of the person's calendars
+    with the colour each has, to choose from;
+  - `calendar.events.readonly`, the events in them.
+
+  Together they read less than `calendar.readonly`, which would also read
+  each calendar's settings and who it is shared with, and neither can
+  change anything. Nobody who never turns this on is asked for them, and
+  the sync carries on as it was if the person says no.
+
+- **Choosing.** A switch for each calendar, on the account page and in that
+  button's popover. None is shown until the person picks one, the Todos
+  calendar is never offered (it is the to-dos themselves), and twelve at
+  most can be shown.
+- **What shows.** Each event once a day it touches, after the day's to-dos,
+  marked with its calendar's colour and outlined rather than filled, with
+  no box to tick. Tapping one in Day, or in the open square of Week or
+  Month, opens it in Google Calendar. Events the person declined, and
+  cancelled ones, are left out. An event is never a to-do and the app never
+  writes to these calendars.
+- **What is kept.** Only which calendars each person chose, by Google's
+  calendar id (`calendars_shown`), and the granted scopes on their link.
+  Names, colours and events are asked of Google while the home page is
+  open, one request for the list and one per shown calendar for the month
+  on screen, and are kept only in that browser: asked again when the page
+  comes back into view after two minutes, and every five minutes while it
+  stays open. Nothing of them is stored in the database or the Worker. Each ask fetches only an event's title, times, link, status and
+  the person's own answer to an invitation: no descriptions, places or
+  guests.
+- **Turning it off.** Turn every switch off, and no events are read; the
+  list of calendars is read only while the account page or the popover
+  shows it.
+  **Disconnect** forgets the choices with the rest and withdraws all of the
+  app's access, the read-only scopes included; connecting again later asks
+  for the calendar sync alone.
 
 How a change travels: Google calls `/api/calendar/notify` on every change
 to a Todos calendar (a push channel, renewed every week), and the app asks
@@ -170,7 +222,11 @@ requests to Google; a longer first fill carries on a minute later.
 1. In the Google Cloud console, in the project of the sign-in client:
    - **APIs & Services > Library**: enable the **Google Calendar API**.
    - **Google Auth Platform > Data Access** (the OAuth consent screen's
-     scopes): add `https://www.googleapis.com/auth/calendar.app.created`.
+     scopes): add `https://www.googleapis.com/auth/calendar.app.created`,
+     and, for seeing other calendars,
+     `https://www.googleapis.com/auth/calendar.calendarlist.readonly` and
+     `https://www.googleapis.com/auth/calendar.events.readonly`. Google
+     only grants a scope listed here.
    - **Google Auth Platform > Clients**, the sign-in client: add these
      authorised redirect URIs next to the sign-in ones:
 
@@ -217,6 +273,12 @@ one.
 bunx wrangler d1 execute DB --remote --command \
   "select person, problem, last_synced_at, channel_expires_at from calendar_links"
 ```
+
+When a person's other calendars stop showing, `scopes` on the same row says
+whether the two read-only scopes are still granted. Reconnecting after the
+Todos calendar was deleted keeps them (the app asks Google to keep what was
+given before); after access was withdrawn they went with the rest, and the
+account page offers **Show** again.
 
 `last_synced_at` is the last pass that completed for that person, UTC.
 
