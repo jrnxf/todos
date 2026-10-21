@@ -4,7 +4,7 @@ import { AddBar, AddProvider } from '@/components/app/capture'
 import { EventDrawer } from '@/components/app/event-drawer'
 import { TabBar, TopBar } from '@/components/app/shell'
 import { TodoDrawer } from '@/components/app/todo-drawer'
-import { boardQ } from '@/lib/queries'
+import { boardQ, calendarQ } from '@/lib/queries'
 
 export const Route = createFileRoute('/_app')({
   // The to-do, or the calendar event, that is open over the list is part of
@@ -14,8 +14,14 @@ export const Route = createFileRoute('/_app')({
     event: z.string().max(2100).optional(),
   }),
   // Every screen under here reads the board, so it is fetched once, first.
+  // The calendar's state comes alongside: it decides what the header and
+  // the day show, and asked for only once the page is up, it popped them in
+  // afterwards. A calendar that cannot be read is never worth a failed page.
   beforeLoad: async ({ context }) => {
-    await context.queryClient.ensureQueryData(boardQ)
+    await Promise.all([
+      context.queryClient.ensureQueryData(boardQ),
+      context.queryClient.ensureQueryData(calendarQ).catch(() => undefined),
+    ])
   },
   component: AppLayout,
 })

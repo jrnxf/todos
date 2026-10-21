@@ -190,8 +190,11 @@ export function Lens({
   const unit = size ? 'px' : 'fr'
   const template = (list: Array<number>) =>
     list.map((value) => `${value.toFixed(3)}${unit}`).join(' ')
-  // In Day the header steps in to sit over the centred page.
-  const inset = view === 'day' ? Math.max(0, (roomWidth - PAGE) / 2) : 0
+  // In Day the header steps in to sit over the centred page. CSS works the
+  // inset out from the header's own width, so the server's render already
+  // has it and nothing jumps once the page measures itself; a negative one
+  // clamps to none.
+  const inset = view === 'day' ? `calc((100% - ${PAGE}px) / 2)` : '0px'
 
   const weeks = monthWeeks(day)
   const thisWeek = weekStart(day)
@@ -256,19 +259,18 @@ export function Lens({
   const step = (direction: -1 | 1) =>
     onChange({ day: stepDay(day, view, direction) })
 
+  // A day reads as today does: the date above, how far it is from today
+  // as the title. Short, so stepping off today, when the Today button joins
+  // the header, never wraps the title and pushes the page down.
   const eyebrow =
     view === 'day'
-      ? day === today
-        ? formatLongDay(day)
-        : fromToday(day, today)
+      ? formatLongDay(day)
       : view === 'week'
         ? `Week of ${formatMonthDay(weekStart(day))}`
         : day.slice(0, 4)
   const title =
     view === 'day'
-      ? day === today
-        ? 'Today'
-        : formatLongDay(day)
+      ? fromToday(day, today)
       : view === 'week'
         ? weekSpan(day)
         : formatMonth(day).split(' ')[0]
@@ -285,7 +287,7 @@ export function Lens({
       >
         <div className="min-w-0">
           <p className="text-sm text-muted-foreground">{eyebrow}</p>
-          <h1 className="text-[1.75rem] leading-tight font-semibold tracking-tight">
+          <h1 className="truncate text-[1.75rem] leading-tight font-semibold tracking-tight">
             {title}
           </h1>
         </div>

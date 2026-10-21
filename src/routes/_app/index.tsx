@@ -7,30 +7,55 @@ import {
 } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
-import { ShownEventsProvider } from '@/components/app/calendar-events'
+import {
+  ShownEventsProvider,
+  gridSpan,
+  showsEvents,
+} from '@/components/app/calendar-events'
 import { useAddsTo } from '@/components/app/capture'
 import { HomePhone } from '@/components/app/home-phone'
 import { Lens } from '@/components/app/lens'
 import { useIsDesktop } from '@/components/app/picker'
 import { addDays } from '@/lib/dates'
 import { LENS_VIEWS, stepDay } from '@/lib/lens'
-import { boardQ, useBoard } from '@/lib/queries'
+import { boardQ, calendarEventsQ, calendarQ, useBoard } from '@/lib/queries'
 import type { LensChange } from '@/components/app/lens'
 import type { LensView } from '@/lib/lens'
 
+// The view and the day being stood on live in the URL, so a reload or a
+// shared link lands in the same place. Today, as a day, is the bare `/`.
+const homeSearch = z.object({
+  view: z.enum(LENS_VIEWS).optional(),
+  day: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+})
+
+/** How long the first page waits on Google for the calendars' events. */
+const EVENTS_WAIT = 1_000
+
 export const Route = createFileRoute('/_app/')({
-  // The view and the day being stood on live in the URL, so a reload or a
-  // shared link lands in the same place. Today, as a day, is the bare `/`.
-  validateSearch: z.object({
-    view: z.enum(LENS_VIEWS).optional(),
-    day: z
-      .string()
-      .regex(/^\d{4}-\d{2}-\d{2}$/)
-      .optional(),
-  }),
-  loader: async ({ context }) => ({
-    today: (await context.queryClient.ensureQueryData(boardQ)).today,
-  }),
+  validateSearch: homeSearch,
+  loader: async ({ context, location }) => {
+    const { queryClient } = context
+    const { today } = await queryClient.ensureQueryData(boardQ)
+    // The first page comes with the shown calendars' events in it, when
+    // Google answers in time; otherwise they follow the page down as they
+    // come. Moving about after that asks for them ahead (calendar-events.tsx).
+    if (
+      typeof window === 'undefined' &&
+      showsEvents(queryClient.getQueryData(calendarQ.queryKey))
+    ) {
+      const day = homeSearch.safeParse(location.search).data?.day ?? today
+      const [from, to] = gridSpan(day)
+      await Promise.race([
+        queryClient.prefetchQuery(calendarEventsQ(from, to)),
+        new Promise((resolve) => setTimeout(resolve, EVENTS_WAIT)),
+      ])
+    }
+    return { today }
+  },
   head: ({ match, loaderData }) => {
     const { view, day } = match.search
     const screen =

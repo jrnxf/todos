@@ -47,6 +47,7 @@ import type {
   CalendarEventView,
   DayEvent,
 } from '@/lib/calendar-events'
+import type { CalendarStatus } from '@/calendar/run'
 import type { LocalDate } from '@/lib/dates'
 import type { LensView } from '@/lib/lens'
 
@@ -55,11 +56,20 @@ export const READ_CALENDARS = '/api/calendar/connect?read'
 
 const NONE: ReadonlyArray<CalendarEventView> = []
 const ShownEvents = createContext<ReadonlyArray<CalendarEventView>>(NONE)
+/** Whether the events of the grid on screen are still on their way. */
+const EventsPending = createContext(false)
 
 /** The first and last day of the month grid that holds `day`. */
-function gridSpan(day: LocalDate): [LocalDate, LocalDate] {
+export function gridSpan(day: LocalDate): [LocalDate, LocalDate] {
   const weeks = monthWeeks(day)
   return [weeks[0][0], weeks[weeks.length - 1][6]]
+}
+
+/** Whether the person chose calendars to see, and they can be read. */
+export function showsEvents(status: CalendarStatus | undefined): boolean {
+  return Boolean(
+    status && status.reads && !status.problem && status.showing > 0,
+  )
 }
 
 /**
@@ -79,10 +89,8 @@ export function ShownEventsProvider({
 }) {
   const [from, to] = gridSpan(day)
   const { data: status } = useQuery(calendarQ)
-  const showing = Boolean(
-    status && status.reads && !status.problem && status.showing > 0,
-  )
-  const { data } = useQuery({
+  const showing = showsEvents(status)
+  const { data, isPlaceholderData } = useQuery({
     ...calendarEventsQ(from, to),
     enabled: showing,
     // Moving to another month keeps the days the two grids share filled.
@@ -104,7 +112,11 @@ export function ShownEventsProvider({
   }, [client, showing, from, beforeFrom, beforeTo, afterFrom, afterTo])
   return (
     <ShownEvents.Provider value={showing && data ? data : NONE}>
-      {children}
+      <EventsPending.Provider
+        value={showing && (data === undefined || isPlaceholderData)}
+      >
+        {children}
+      </EventsPending.Provider>
     </ShownEvents.Provider>
   )
 }
@@ -190,10 +202,15 @@ export function LensEventRow({ on }: { on: DayEvent }) {
   )
 }
 
-/** The day view's events: a card of rows below the to-dos. */
+/**
+ * The day view's events: a card of rows below the to-dos. Until they come,
+ * a row's outline holds their place, so what is under them does not jump
+ * when they land; a day another month's events already cover shows those.
+ */
 export function DayEvents({ date }: { date: LocalDate }) {
   const events = useEventsOn(date)
-  if (events.length === 0) return null
+  const pending = useContext(EventsPending)
+  if (events.length === 0) return pending ? <DayEventsLoading /> : null
   return (
     <section className="flex flex-col gap-2.5">
       <SectionHeading>On your calendars</SectionHeading>
@@ -201,6 +218,25 @@ export function DayEvents({ date }: { date: LocalDate }) {
         {events.map((on) => (
           <EventRow key={on.event.key} on={on} />
         ))}
+      </Rows>
+    </section>
+  )
+}
+
+function DayEventsLoading() {
+  return (
+    <section className="flex flex-col gap-2.5" aria-busy="true">
+      <SectionHeading>On your calendars</SectionHeading>
+      <Rows aria-label="Loading events">
+        <Row className="items-start gap-3">
+          <ItemMedia className="flex h-5.5 w-5.5 items-center justify-center">
+            <Skeleton className="h-4.5 w-1 rounded-full motion-reduce:animate-none" />
+          </ItemMedia>
+          <ItemContent className="min-w-0 gap-0.5">
+            <Skeleton className="my-0.5 h-4.5 w-44 motion-reduce:animate-none" />
+            <Skeleton className="my-0.5 h-3.5 w-36 motion-reduce:animate-none" />
+          </ItemContent>
+        </Row>
       </Rows>
     </section>
   )

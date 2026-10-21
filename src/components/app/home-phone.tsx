@@ -212,6 +212,11 @@ function Navigator({
     )
     .join(' ')
   const swipe = useSwipe(onSwipe)
+  // Only a month moved to fades in; the one the page opens on is just there.
+  const [grid, setGrid] = useState({ first: weeks[0][0], moved: false })
+  if (grid.first !== weeks[0][0] && !grid.moved) {
+    setGrid({ ...grid, moved: true })
+  }
 
   return (
     <div {...swipe} className="touch-pan-y">
@@ -224,6 +229,7 @@ function Navigator({
         // A new month is a new grid: it fades in instead of moving.
         key={weeks[0][0]}
         className="pnav"
+        data-new-month={grid.moved ? '' : undefined}
         role="grid"
         aria-label={formatMonth(day)}
         style={{ gridTemplateRows: rows }}

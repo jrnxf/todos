@@ -26,6 +26,7 @@ import {
   useState,
   useSyncExternalStore,
 } from 'react'
+import { useMatch } from '@tanstack/react-router'
 import { cn } from 'cn'
 import {
   ArrowUpIcon,
@@ -111,7 +112,17 @@ export function useAdd() {
 
 /** The day a new to-do starts on, while the calendar is on screen. */
 export function usePickedDay(): LocalDate | null {
-  return use(PickedContext).picked
+  const { picked } = use(PickedContext)
+  const { today } = useBoard()
+  // The calendar says its day once it is up; until then the URL's day
+  // stands in, so the server's page already names it and nothing changes
+  // its words as the page comes alive.
+  const fromUrl = useMatch({
+    from: '/_app/',
+    shouldThrow: false,
+    select: (match) => match.search.day ?? today,
+  })
+  return picked ?? fromUrl ?? null
 }
 
 /** Makes `day` the one a new to-do starts on, for as long as this is mounted. */
