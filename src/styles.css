@@ -238,6 +238,10 @@
   .lens:not([data-ready]) * {
     transition: none !important;
   }
+  /* A resize of the room lands at once (lens.tsx). */
+  .lens-home[data-resizing] :is(.lens-header, .lens-panel, .lens, .lens *) {
+    transition: none !important;
+  }
 
   .lens-weekdays,
   .lens-grid {

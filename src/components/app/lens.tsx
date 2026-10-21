@@ -134,16 +134,31 @@ export function Lens({
   // does not animate.
   const room = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState<{ width: number; height: number }>()
+  // When the room itself changes size, as the window does, the grid keeps
+  // up with it in the same frame. Only a change of view or day moves it;
+  // easing a resize too would leave the grid trailing what it sits in.
+  const [resizing, setResizing] = useState(false)
   useLayoutEffect(() => {
     const element = room.current
     if (!element) return
-    const measure = () =>
-      setSize({ width: element.clientWidth, height: element.clientHeight })
+    let last: { width: number; height: number } | undefined
+    const measure = () => {
+      const next = { width: element.clientWidth, height: element.clientHeight }
+      if (last?.width === next.width && last.height === next.height) return
+      if (last) setResizing(true)
+      last = next
+      setSize(next)
+    }
     measure()
     const observer = new ResizeObserver(measure)
     observer.observe(element)
     return () => observer.disconnect()
   }, [])
+  useLayoutEffect(() => {
+    if (!resizing) return
+    const frame = requestAnimationFrame(() => setResizing(false))
+    return () => cancelAnimationFrame(frame)
+  }, [size, resizing])
   const [ready, setReady] = useState(false)
   useLayoutEffect(() => {
     if (!size || ready) return
@@ -262,6 +277,7 @@ export function Lens({
     <div
       className="lens-home flex flex-col gap-5 lg:mx-auto lg:w-full lg:max-w-6xl"
       data-ready={ready ? '' : undefined}
+      data-resizing={resizing ? '' : undefined}
     >
       <header
         className="lens-header flex items-end justify-between gap-4"

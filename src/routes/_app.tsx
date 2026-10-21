@@ -1,10 +1,9 @@
 import { Outlet, createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
-import { cn } from 'cn'
 import { AddBar, AddProvider } from '@/components/app/capture'
-import { EventDrawer, useOpenEventKey } from '@/components/app/event-drawer'
+import { EventDrawer } from '@/components/app/event-drawer'
 import { TabBar, TopBar } from '@/components/app/shell'
-import { TodoDrawer, useOpenTodoId } from '@/components/app/todo-drawer'
+import { TodoDrawer } from '@/components/app/todo-drawer'
 import { boardQ } from '@/lib/queries'
 
 export const Route = createFileRoute('/_app')({
@@ -22,23 +21,15 @@ export const Route = createFileRoute('/_app')({
 })
 
 function AppLayout() {
-  const todoOpen = useOpenTodoId() !== undefined
-  const eventOpen = useOpenEventKey() !== undefined
-
   return (
     <AddProvider>
       {/* A phone gets one column with a tab bar. A laptop gets a bar across
-          the top, the screen under it, and room on the right for the to-do
-          or the event that slides in. */}
+          the top and the screen under it. The to-do or the event slides in
+          over the screen's right edge, and the screen stays where it is:
+          making room for it resized the home grid as the drawer moved, and
+          the grid's own moves then chased the drawer's. */}
       <div className="flex min-h-dvh flex-col">
-        <div
-          className={cn(
-            'mx-auto flex w-full max-w-md min-w-0 flex-1 flex-col lg:max-w-none',
-            // Make room as the drawer comes in, at the drawer's own pace.
-            'lg:transition-[padding] lg:duration-450 lg:ease-[cubic-bezier(0.22,1,0.36,1)]',
-            (todoOpen || eventOpen) && 'lg:pr-96',
-          )}
-        >
+        <div className="mx-auto flex w-full max-w-md min-w-0 flex-1 flex-col lg:max-w-none">
           <TopBar />
           <main className="flex flex-1 flex-col gap-5 px-4 pt-[max(1.25rem,env(safe-area-inset-top))] pb-44 lg:px-10 lg:pt-8 lg:pb-12">
             <Outlet />
