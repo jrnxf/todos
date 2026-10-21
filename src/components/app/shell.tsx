@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button'
 import { AccountMenu } from './account-menu'
 import { useAdd } from './capture'
 
-/** A screen's column; on a laptop it sits centred between the two panes. */
+/** A screen's column; on a laptop it sits centred on the page. */
 export function Column({
   className,
   children,
