@@ -175,7 +175,7 @@ export function Lens({
   const unit = size ? 'px' : 'fr'
   const template = (list: Array<number>) =>
     list.map((value) => `${value.toFixed(3)}${unit}`).join(' ')
-  // In Day the title steps in to sit over the centred page.
+  // In Day the header steps in to sit over the centred page.
   const inset = view === 'day' ? Math.max(0, (roomWidth - PAGE) / 2) : 0
 
   const weeks = monthWeeks(day)
@@ -263,8 +263,11 @@ export function Lens({
       className="lens-home flex flex-col gap-5 lg:mx-auto lg:w-full lg:max-w-6xl"
       data-ready={ready ? '' : undefined}
     >
-      <header className="flex items-end justify-between gap-4">
-        <div className="lens-title min-w-0" style={{ paddingLeft: inset }}>
+      <header
+        className="lens-header flex items-end justify-between gap-4"
+        style={{ paddingInline: inset }}
+      >
+        <div className="min-w-0">
           <p className="text-sm text-muted-foreground">{eyebrow}</p>
           <h1 className="text-[1.75rem] leading-tight font-semibold tracking-tight">
             {title}
