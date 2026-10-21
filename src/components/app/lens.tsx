@@ -1,15 +1,19 @@
-// The home page: always on one day, seen as a day, a week or a month. One
-// grid draws all three. Month shows every square, with the active day's
-// larger and tickable. Week closes the other rows, so that week stands tall.
-// Day closes the other columns too, and the one square left is the page.
+// The home page on a laptop: always on one day, seen as a day, a week or a
+// month, and one grid draws all three. Month shows every square, with the
+// picked day's whole list in a panel beside the grid. Week closes the other
+// rows, and every day in it is a list to tick. Day closes the other columns
+// too, and the one square left is the page, centred, its title stepping in
+// to sit over it. A phone has its own shape (home-phone.tsx).
 //
 // The motion is the point, so a few rules hold it together:
 // - Track sizes are pixels from src/lib/lens.ts, so every move runs at one
-//   pace in and out.
-// - A square holds four drawings of its day (month chips, week chips, the
-//   active day's checklist, the full day), each laid out once at the size it
-//   will be shown at. The grid only uncovers them; no title re-wraps
-//   mid-move. Which one shows, and how it fades, is CSS in styles.css.
+//   pace in and out. The grid's own width is pixels too, so the month's
+//   panel and the grid trade width at that same pace.
+// - A square holds three drawings of its day (month chips, the week's list,
+//   the full day), each laid out once at the size it will be shown at. The
+//   grid only uncovers them; no title re-wraps mid-move. Which one shows,
+//   and how it fades, is CSS in styles.css. The ones not shown are inert, so
+//   neither the keyboard nor a screen reader finds them.
 // - Nothing slow runs while the grid moves: the page waits for onSettled to
 //   route, and a day stepped away from keeps its page until it is gone.
 //
@@ -28,21 +32,11 @@ import {
   useRef,
   useState,
 } from 'react'
-import { Link, useRouterState } from '@tanstack/react-router'
 import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { byDue, isOpen, upNext, weekStart } from '@/lib/board'
-import {
-  addDays,
-  diffDays,
-  formatLongDay,
-  formatMonth,
-  formatMonthDay,
-  formatTime,
-} from '@/lib/dates'
+import { isOpen, weekStart } from '@/lib/board'
+import { formatLongDay, formatMonth, formatMonthDay } from '@/lib/dates'
 import {
   LENS_VIEWS,
   lensDirection,
@@ -50,57 +44,48 @@ import {
   monthWeeks,
   stepDay,
 } from '@/lib/lens'
-import { openInPlace } from '@/lib/in-place'
-import { useBoard, useSetDone } from '@/lib/queries'
+import { useBoard } from '@/lib/queries'
 import { barsHidden, isBar, weekBars } from '@/lib/calendar-events'
 import {
   CalendarsButton,
   EventMark,
   LensEventRow,
+  OpenEvent,
   WeekBars,
   useEventsOn,
   useShownEvents,
 } from './calendar-events'
 import { DayView } from './day-view'
-import { ScreenHeader } from './shell'
-import { TagDot } from './tag'
-import type { Tag, Todo } from '@/db/schema'
+import {
+  MiniRow,
+  OpenTodo,
+  TodayButton,
+  TodoDot,
+  dayTodos,
+  fromToday,
+  weekSpan,
+} from './home-parts'
 import type { LensView } from '@/lib/lens'
 import type { LocalDate } from '@/lib/dates'
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 /** The weekday names above the grid; they fold away for a day. */
 const HEADER_HEIGHT = 26
+/** The month's panel of the picked day, and the gap before it. */
+const PANEL = 360
+const PANEL_GAP = 24
+/** The day's page, as wide as the old Today page was. */
+const PAGE = 672
 /**
  * How many lanes of bars a week shows, by how tall its row is: a month's
- * row, the active day's row in a month, and a week. Bars past these are
+ * row, the picked day's row in a month, and a week. Bars past these are
  * counted in each day's "N more".
  */
 const LANES = { month: 3, activeMonth: 5, week: 10 }
-/** Narrower than this, the grid is a phone's: the active day takes more. */
-const COMPACT_WIDTH = 640
 
 export interface LensChange {
   view?: LensView
   day?: LocalDate
-}
-
-/** "Today", "Tomorrow", "In 4 days", "3 days ago". */
-function fromToday(day: LocalDate, today: LocalDate): string {
-  const days = diffDays(day, today)
-  if (days === 0) return 'Today'
-  if (days === 1) return 'Tomorrow'
-  if (days === -1) return 'Yesterday'
-  return days > 0 ? `In ${days} days` : `${-days} days ago`
-}
-
-/** "Oct 11 to 17", "Oct 25 to Nov 1" */
-function weekSpan(day: LocalDate): string {
-  const from = weekStart(day)
-  const to = addDays(from, 6)
-  return from.slice(0, 7) === to.slice(0, 7)
-    ? `${formatMonthDay(from)} to ${Number(to.slice(8))}`
-    : `${formatMonthDay(from)} to ${formatMonthDay(to)}`
 }
 
 export function Lens({
@@ -144,12 +129,13 @@ export function Lens({
     )
   }
 
-  // The panel's size in pixels. Until it is known (the server render, the
-  // first paint) the grid falls back to fractions and does not animate.
-  const panel = useRef<HTMLDivElement>(null)
+  // The room for the grid and the panel, in pixels. Until it is known (the
+  // server render, the first paint) the grid falls back to fractions and
+  // does not animate.
+  const room = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState<{ width: number; height: number }>()
   useLayoutEffect(() => {
-    const element = panel.current
+    const element = room.current
     if (!element) return
     const measure = () =>
       setSize({ width: element.clientWidth, height: element.clientHeight })
@@ -165,18 +151,22 @@ export function Lens({
     return () => cancelAnimationFrame(frame)
   }, [size, ready])
 
-  const width = size?.width ?? 7
+  const roomWidth = size?.width ?? 7
   const height = size?.height ?? 7
-  const compact = width < COMPACT_WIDTH
+  /** The grid gives the month's panel its room. */
+  const gridWidth = (forView: LensView) =>
+    forView === 'month' && size
+      ? Math.max(roomWidth - PANEL - PANEL_GAP, 7)
+      : roomWidth
   const gridHeight = (forView: LensView) =>
     forView === 'day' || !size ? height : height - HEADER_HEIGHT
   const tracksFor = (forView: LensView) =>
     lensTracks({
       view: forView,
       day,
-      width,
+      width: gridWidth(forView),
       height: gridHeight(forView),
-      compact,
+      compact: false,
     })
   const now = tracksFor(view)
   const month = tracksFor('month')
@@ -185,17 +175,18 @@ export function Lens({
   const unit = size ? 'px' : 'fr'
   const template = (list: Array<number>) =>
     list.map((value) => `${value.toFixed(3)}${unit}`).join(' ')
+  // In Day the title steps in to sit over the centred page.
+  const inset = view === 'day' ? Math.max(0, (roomWidth - PAGE) / 2) : 0
 
   const weeks = monthWeeks(day)
   const thisWeek = weekStart(day)
-  const undated = upNext(board.items, today).undated
   const events = useShownEvents()
   const firstOfMonth = `${day.slice(0, 7)}-01`
   const bars = useMemo(
     () => monthWeeks(firstOfMonth).map((dates) => weekBars(events, dates)),
     [events, firstOfMonth],
   )
-  /** The lanes a row shows in a view: the active row has more room. */
+  /** The lanes a row shows in a view: the picked row has more room. */
   const lanesShown = (row: number, forView: LensView) =>
     forView === 'month'
       ? row === now.row
@@ -252,23 +243,40 @@ export function Lens({
 
   const eyebrow =
     view === 'day'
-      ? fromToday(day, today)
+      ? day === today
+        ? formatLongDay(day)
+        : fromToday(day, today)
       : view === 'week'
-        ? `Week of ${weekSpan(day)}`
-        : formatMonth(day)
+        ? `Week of ${formatMonthDay(weekStart(day))}`
+        : day.slice(0, 4)
+  const title =
+    view === 'day'
+      ? day === today
+        ? 'Today'
+        : formatLongDay(day)
+      : view === 'week'
+        ? weekSpan(day)
+        : formatMonth(day).split(' ')[0]
 
   return (
-    <div className="flex flex-col gap-5 lg:mx-auto lg:w-full lg:max-w-5xl">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <ScreenHeader
-          eyebrow={eyebrow}
-          title={formatLongDay(day)}
-          phoneActions={<CalendarsButton />}
-        />
-        <div className="flex items-center justify-between gap-2 lg:gap-4">
+    <div
+      className="lens-home flex flex-col gap-5 lg:mx-auto lg:w-full lg:max-w-6xl"
+      data-ready={ready ? '' : undefined}
+    >
+      <header className="flex items-end justify-between gap-4">
+        <div className="lens-title min-w-0" style={{ paddingLeft: inset }}>
+          <p className="text-sm text-muted-foreground">{eyebrow}</p>
+          <h1 className="text-[1.75rem] leading-tight font-semibold tracking-tight">
+            {title}
+          </h1>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <TodayButton day={day} today={today} onToday={goToday} />
+          <CalendarsButton />
           <Tabs
             value={view}
             onValueChange={(picked: LensView) => onChange({ view: picked })}
+            className="ml-2.5"
           >
             <TabsList className="group-data-horizontal/tabs:h-9">
               {LENS_VIEWS.map((option) => (
@@ -278,162 +286,154 @@ export function Lens({
               ))}
             </TabsList>
           </Tabs>
-          <div className="flex items-center gap-1.5">
-            <CalendarsButton className="hidden lg:inline-flex" />
-            <Button
-              variant="outline"
-              size="icon-lg"
-              aria-label={`Earlier ${view}`}
-              onClick={() => step(-1)}
-            >
-              <ChevronLeftIcon />
-            </Button>
-            <Button
-              variant="outline"
-              size="icon-lg"
-              aria-label={`Later ${view}`}
-              onClick={() => step(1)}
-            >
-              <ChevronRightIcon />
-            </Button>
-            <Button
-              variant="outline"
-              size="lg"
-              onClick={() => onChange({ day: today })}
-            >
-              Today
-            </Button>
+          <Button
+            variant="outline"
+            size="icon-lg"
+            aria-label={`Earlier ${view}`}
+            onClick={() => step(-1)}
+            className="ml-2.5"
+          >
+            <ChevronLeftIcon />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon-lg"
+            aria-label={`Later ${view}`}
+            onClick={() => step(1)}
+          >
+            <ChevronRightIcon />
+          </Button>
+        </div>
+      </header>
+
+      <div ref={room} className="lens-room" data-view={view}>
+        <div
+          className="lens"
+          data-view={view}
+          data-dir={move.dir}
+          data-from={move.from}
+          data-ready={ready ? '' : undefined}
+          style={size ? { width: gridWidth(view) } : undefined}
+        >
+          <div
+            className="lens-weekdays"
+            aria-hidden
+            style={{ gridTemplateColumns: template(now.cols) }}
+          >
+            {WEEKDAYS.map((name, col) => (
+              <span key={name} data-active={col === now.col ? '' : undefined}>
+                {name}
+              </span>
+            ))}
           </div>
-        </div>
-      </div>
-
-      <div
-        ref={panel}
-        className="lens"
-        data-view={view}
-        data-dir={move.dir}
-        data-from={move.from}
-        data-ready={ready ? '' : undefined}
-        data-compact={compact ? '' : undefined}
-      >
-        <div
-          className="lens-weekdays"
-          aria-hidden
-          style={{ gridTemplateColumns: template(now.cols) }}
-        >
-          {WEEKDAYS.map((name, col) => (
-            <span key={name} data-active={col === now.col ? '' : undefined}>
-              <span className="hidden sm:inline">{name}</span>
-              <span className="sm:hidden">{name[0]}</span>
-            </span>
-          ))}
-        </div>
-        <div
-          // A new month is a new grid: it fades in instead of moving.
-          key={weeks[0][0]}
-          ref={grid}
-          className="lens-grid"
-          data-new-month={move.newMonth ? '' : undefined}
-          role="grid"
-          aria-label={formatMonth(day)}
-          style={{
-            gridTemplateColumns: template(now.cols),
-            gridTemplateRows: template(now.rows),
-          }}
-        >
-          {weeks.map((dates, row) => (
-            <div key={dates[0]} role="row" className="contents">
-              {dates.map((date, col) => {
-                const active = date === day
-                const sized = (w: number, h: number) =>
-                  size
-                    ? { width: Math.round(w), height: Math.round(h) }
-                    : { width: '100%', height: '100%' }
-                const { pieces, lanes } = bars[row]
-                const activeView = view === 'week' ? 'week' : 'month'
-                return (
-                  <LensSquare
-                    key={date}
-                    date={date}
+          <div
+            // A new month is a new grid: it fades in instead of moving.
+            key={weeks[0][0]}
+            ref={grid}
+            className="lens-grid"
+            data-new-month={move.newMonth ? '' : undefined}
+            role="grid"
+            aria-label={formatMonth(day)}
+            style={{
+              gridTemplateColumns: template(now.cols),
+              gridTemplateRows: template(now.rows),
+            }}
+          >
+            {weeks.map((dates, row) => (
+              <div key={dates[0]} role="row" className="contents">
+                {dates.map((date, col) => {
+                  const active = date === day
+                  const sized = (w: number, h: number) =>
+                    size
+                      ? { width: Math.round(w), height: Math.round(h) }
+                      : { width: '100%', height: '100%' }
+                  const { pieces, lanes } = bars[row]
+                  return (
+                    <LensSquare
+                      key={date}
+                      date={date}
+                      row={row}
+                      col={col}
+                      view={view}
+                      lanes={{
+                        month: Math.min(lanes, lanesShown(row, 'month')),
+                        week: Math.min(lanes, LANES.week),
+                      }}
+                      hidden={{
+                        month: barsHidden(
+                          pieces,
+                          col,
+                          lanesShown(row, 'month'),
+                        ),
+                        week: barsHidden(pieces, col, LANES.week),
+                      }}
+                      active={active}
+                      leaving={leaving.includes(date)}
+                      inWeek={weekStart(date) === thisWeek}
+                      outside={date.slice(0, 7) !== day.slice(0, 7)}
+                      onPick={pick}
+                      onToday={goToday}
+                      sizes={{
+                        month: sized(month.cols[col], month.rows[row]),
+                        week: sized(week.cols[col], week.rows[now.row]),
+                        day: sized(whole.cols[now.col], whole.rows[now.row]),
+                      }}
+                    />
+                  )
+                })}
+                {bars[row].lanes > 0 && (
+                  <WeekBars
                     row={row}
-                    col={col}
-                    lanes={{
-                      month: Math.min(lanes, lanesShown(row, 'month')),
-                      week: Math.min(lanes, LANES.week),
-                      active: Math.min(lanes, lanesShown(row, activeView)),
-                    }}
-                    hidden={{
-                      month: barsHidden(pieces, col, lanesShown(row, 'month')),
-                      active: barsHidden(
-                        pieces,
-                        col,
-                        lanesShown(row, activeView),
-                      ),
-                    }}
-                    active={active}
-                    leaving={leaving.includes(date)}
-                    inWeek={weekStart(date) === thisWeek}
-                    outside={date.slice(0, 7) !== day.slice(0, 7)}
-                    canOpen={active && view !== 'day'}
-                    onPick={pick}
-                    onToday={goToday}
-                    sizes={{
-                      month: sized(month.cols[col], month.rows[row]),
-                      week: sized(week.cols[col], week.rows[now.row]),
-                      active: sized(
-                        (view === 'month' ? month : week).cols[col],
-                        (view === 'month' ? month : week).rows[
-                          view === 'month' ? row : now.row
-                        ],
-                      ),
-                      day: sized(whole.cols[now.col], whole.rows[now.row]),
-                    }}
+                    week={row === now.row}
+                    pieces={bars[row].pieces}
+                    shown={lanesShown(row, view)}
                   />
-                )
-              })}
-              {bars[row].lanes > 0 && (
-                <WeekBars
-                  row={row}
-                  week={row === now.row}
-                  pieces={bars[row].pieces}
-                  shown={lanesShown(row, view)}
-                />
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {undated.length > 0 && (
-        <div className="-mt-1 flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
-          <span className="flex shrink-0 items-center gap-2">
-            No date
-            <Badge variant="secondary">{undated.length}</Badge>
-          </span>
-          <div className="lens-tray">
-            {undated.map((todo) => (
-              <OpenTodo
-                key={todo.id}
-                todo={todo}
-                className="flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1 text-foreground outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
-              >
-                <TodoDot todo={todo} tags={board.tags} />
-                {todo.title}
-              </OpenTodo>
+                )}
+              </div>
             ))}
           </div>
         </div>
-      )}
+        <aside
+          className="lens-panel"
+          aria-label={`${formatLongDay(day)}, the picked day`}
+          inert={view !== 'month'}
+        >
+          <div className="lens-panel-in">
+            <div className="flex items-baseline justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="text-xl font-semibold tracking-tight">
+                  {day === today ? 'Today' : formatLongDay(day).split(',')[0]}
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  {day === today
+                    ? formatLongDay(day)
+                    : `${formatMonthDay(day)} · ${fromToday(day, today)}`}
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground"
+                onClick={() => onChange({ view: 'day' })}
+              >
+                Day view
+                <ChevronRightIcon data-icon="inline-end" />
+              </Button>
+            </div>
+            <DayView key={day} day={day} onToday={goToday} />
+          </div>
+        </aside>
+      </div>
     </div>
   )
 }
 
 type Size = { width: number | string; height: number | string }
-type Sizes = { month: Size; week: Size; active: Size; day: Size }
+type Sizes = { month: Size; week: Size; day: Size }
 /** Lanes of bars each drawing leaves room for, under the day's number. */
-type Lanes = { month: number; week: number; active: number }
+type Lanes = { month: number; week: number }
 /** Bars over this day that its row has no room to show. */
-type Hidden = { month: number; active: number }
+type Hidden = { month: number; week: number }
 
 const sameSize = (a: Size, b: Size) =>
   a.width === b.width && a.height === b.height
@@ -444,16 +444,15 @@ const LensSquare = memo(
     a.date === b.date &&
     a.row === b.row &&
     a.col === b.col &&
+    a.view === b.view &&
     a.lanes.month === b.lanes.month &&
     a.lanes.week === b.lanes.week &&
-    a.lanes.active === b.lanes.active &&
     a.hidden.month === b.hidden.month &&
-    a.hidden.active === b.hidden.active &&
+    a.hidden.week === b.hidden.week &&
     a.active === b.active &&
     a.leaving === b.leaving &&
     a.inWeek === b.inWeek &&
     a.outside === b.outside &&
-    a.canOpen === b.canOpen &&
     a.onPick === b.onPick &&
     a.onToday === b.onToday &&
     (Object.keys(a.sizes) as Array<keyof Sizes>).every((key) =>
@@ -465,13 +464,13 @@ function LensSquareView({
   date,
   row,
   col,
+  view,
   lanes,
   hidden,
   active,
   leaving,
   inWeek,
   outside,
-  canOpen,
   sizes,
   onPick,
   onToday,
@@ -480,37 +479,33 @@ function LensSquareView({
   /** Where it sits in the grid, which the week's bars share. */
   row: number
   col: number
+  view: LensView
   lanes: Lanes
   hidden: Hidden
   active: boolean
   /** The day just stepped away from, as a day: its page stays until it is
       out of sight. */
   leaving: boolean
-  /** In the active day's week: the squares a week view shows. */
+  /** In the picked day's week: the squares a week view shows. */
   inWeek: boolean
   /** In the grid but not the month, such as Sep 27 in October. */
   outside: boolean
-  /** Picking it again opens it as a day. */
-  canOpen: boolean
   sizes: Sizes
   onPick: (date: LocalDate) => void
   onToday: () => void
 }) {
   const board = useBoard()
   const { today } = board
-  // What is late heads today's square.
-  const carried = date === today ? upNext(board.items, today).overdue : []
-  const due = board.items.filter((todo) => todo.dueDate === date)
-  // Open first, then what was ticked off, each in deadline order.
-  const items = due.sort(
-    (a, b) => Number(!isOpen(a)) - Number(!isOpen(b)) || byDue(a, b),
-  )
-  const past = date < today
+  const { late, due } = dayTodos(board.items, date, today)
   // What spans the week is drawn as a bar over the row instead.
   const events = useEventsOn(date).filter((on) => !isBar(on.event))
+  // Only the drawing on show can be reached.
+  const monthShown = view === 'month' || !inWeek
+  const weekShown = view === 'week' && inWeek
   const number = (
-    <span className="lens-number" aria-hidden>
-      {Number(date.slice(8))}
+    <span className="lens-head-line" aria-hidden>
+      <span className="lens-number">{Number(date.slice(8))}</span>
+      {date === today && <span className="lens-today">Today</span>}
     </span>
   )
   const room = (count: number) => (
@@ -519,40 +514,6 @@ function LensSquareView({
       className="lens-lanes"
       style={{ ['--shown' as string]: count }}
     />
-  )
-  const chips = (
-    <>
-      {carried.length > 0 && (
-        <span className="lens-chip" data-late="" data-carried="">
-          <span>{carried.length} carried over</span>
-        </span>
-      )}
-      {items.map((todo) => (
-        <span
-          key={todo.id}
-          className="lens-chip"
-          data-late={past && isOpen(todo) ? '' : undefined}
-          data-done={isOpen(todo) ? undefined : ''}
-        >
-          <TodoDot todo={todo} tags={board.tags} />
-          <span>
-            {todo.title}
-            {todo.dueTime && isOpen(todo) && (
-              <small>{formatTime(todo.dueTime)}</small>
-            )}
-          </span>
-        </span>
-      ))}
-      {events.map((on) => (
-        <span key={on.event.key} className="lens-chip" data-event="">
-          <EventMark color={on.event.color} />
-          <span>
-            {on.event.title}
-            {!on.wholeDay && <small>{on.when}</small>}
-          </span>
-        </span>
-      ))}
-    </>
   )
 
   return (
@@ -572,51 +533,79 @@ function LensSquareView({
       <button
         type="button"
         className="lens-pick"
-        aria-label={`${formatLongDay(date)}${canOpen ? ', open the day' : ''}`}
+        aria-label={`${formatLongDay(date)}${date === today ? ', today' : ''}${active && view !== 'day' ? ', open the day' : ''}`}
         aria-current={date === today ? 'date' : undefined}
+        tabIndex={view === 'day' ? -1 : undefined}
         onClick={() => onPick(date)}
       />
-      <div className="lens-layer" data-layer="month" style={sizes.month}>
+      <div
+        className="lens-layer"
+        data-layer="month"
+        style={sizes.month}
+        inert={!monthShown}
+      >
         <div className="lens-pad">
           {number}
           {room(lanes.month)}
           <FitList className="lens-chips" more={hidden.month}>
-            {chips}
+            {late.length > 0 && (
+              <OpenLate
+                className="lens-chip"
+                count={late.length}
+                onToday={onToday}
+              />
+            )}
+            {due.map((todo) => (
+              <OpenTodo
+                key={todo.id}
+                todo={todo}
+                className="lens-chip"
+                data-done={isOpen(todo) ? undefined : ''}
+              >
+                <TodoDot todo={todo} tags={board.tags} />
+                <span>{todo.title}</span>
+              </OpenTodo>
+            ))}
+            {events.map((on) => (
+              <OpenEvent
+                key={on.event.key}
+                event={on.event}
+                className="lens-chip"
+                data-event=""
+              >
+                <EventMark color={on.event.color} />
+                <span>{on.event.title}</span>
+              </OpenEvent>
+            ))}
           </FitList>
         </div>
       </div>
-      <div className="lens-layer" data-layer="week" style={sizes.week}>
-        <div className="lens-pad">
-          {number}
-          {room(lanes.week)}
-          <div className="lens-chips">{chips}</div>
-        </div>
-      </div>
-      {active && (
-        <div className="lens-layer" data-layer="active" style={sizes.active}>
+      {inWeek && (
+        <div
+          className="lens-layer"
+          data-layer="week"
+          style={sizes.week}
+          inert={!weekShown}
+        >
           <div className="lens-pad">
             {number}
-            {room(lanes.active)}
-            <FitList className="lens-list" more={hidden.active}>
-              {carried.length > 0 && (
+            {room(lanes.week)}
+            <FitList className="lens-list" more={hidden.week}>
+              {late.length > 0 && (
                 <>
                   <p className="lens-caption" data-late="">
-                    Carried over
+                    Late
                   </p>
-                  {carried.map((todo) => (
+                  {late.map((todo) => (
                     <MiniRow key={todo.id} todo={todo} late />
                   ))}
                   <p className="lens-caption">Today</p>
                 </>
               )}
-              {items.map((todo) => (
-                <MiniRow
-                  key={todo.id}
-                  todo={todo}
-                  late={past && isOpen(todo)}
-                />
+              {due.map((todo) => (
+                <MiniRow key={todo.id} todo={todo} late={false} />
               ))}
-              {items.length === 0 && (
+              {due.length === 0 && late.length === 0 && (
                 <p className="lens-caption">Nothing due</p>
               )}
               {events.map((on) => (
@@ -631,7 +620,7 @@ function LensSquareView({
           className="lens-layer"
           data-layer="day"
           style={sizes.day}
-          inert={!active}
+          inert={!active || view !== 'day'}
         >
           <div className="lens-pad">
             <DayView day={date} onToday={onToday} />
@@ -639,6 +628,29 @@ function LensSquareView({
         </div>
       )}
     </div>
+  )
+}
+
+/** Today's chip for what is late: it opens today as a day. */
+function OpenLate({
+  className,
+  count,
+  onToday,
+}: {
+  className: string
+  count: number
+  onToday: () => void
+}) {
+  return (
+    <button
+      type="button"
+      className={className}
+      data-late=""
+      data-carried=""
+      onClick={onToday}
+    >
+      <span>{count} late</span>
+    </button>
   )
 }
 
@@ -717,76 +729,5 @@ function FitList({
       </div>
       <span ref={more} className="lens-more" hidden />
     </>
-  )
-}
-
-/** One to-do in the active square: tick it, or open it. */
-function MiniRow({ todo, late }: { todo: Todo; late: boolean }) {
-  const setDone = useSetDone()
-  const done = !isOpen(todo)
-  return (
-    <div
-      className="lens-row"
-      data-late={late ? '' : undefined}
-      data-done={done ? '' : undefined}
-    >
-      <Checkbox
-        checked={done}
-        onCheckedChange={(checked) => setDone(todo, checked)}
-        aria-label={
-          done ? `Reopen "${todo.title}"` : `Mark "${todo.title}" done`
-        }
-        className="mt-px"
-      />
-      <OpenTodo todo={todo} className="lens-row-title">
-        <span>{todo.title}</span>
-        {!done && (todo.dueTime || late) && (
-          <small>
-            {late && todo.dueDate
-              ? formatMonthDay(todo.dueDate)
-              : formatTime(todo.dueTime as string)}
-          </small>
-        )}
-      </OpenTodo>
-    </div>
-  )
-}
-
-/** Opens the to-do's drawer over the page, as a row does. */
-function OpenTodo({
-  todo,
-  className,
-  children,
-}: {
-  todo: Todo
-  className?: string
-  children: React.ReactNode
-}) {
-  const anyOpen = useRouterState({
-    select: ({ location: { search } }) =>
-      search.item !== undefined || search.event !== undefined,
-  })
-  return (
-    <Link
-      to="."
-      search={(now) => ({ ...now, item: todo.id, event: undefined })}
-      state={openInPlace(anyOpen)}
-      replace={anyOpen}
-      className={className}
-    >
-      {children}
-    </Link>
-  )
-}
-
-function TodoDot({ todo, tags }: { todo: Todo; tags: Array<Tag> }) {
-  const tag = tags.find((one) => one.id === todo.tagId)
-  return tag ? (
-    <TagDot color={tag.color} className="size-1.5" />
-  ) : (
-    <span
-      aria-hidden
-      className="inline-block size-1.5 shrink-0 rounded-full bg-muted-foreground/50"
-    />
   )
 }

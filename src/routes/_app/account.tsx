@@ -7,6 +7,7 @@ import {
   CalendarRangeIcon,
   CheckIcon,
   SmartphoneIcon,
+  SunMoonIcon,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -16,9 +17,11 @@ import {
 import { CalendarRow } from '@/components/app/calendar-row'
 import { Row, Rows } from '@/components/app/rows'
 import { Column, ScreenHeader } from '@/components/app/shell'
+import { TagsManager } from '@/components/app/tags-manager'
 import { PersonAvatar, SectionHeading } from '@/components/app/todo-row'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   ItemActions,
   ItemContent,
@@ -28,6 +31,7 @@ import {
 } from '@/components/ui/item'
 import { useSignOut } from '@/lib/auth-client'
 import { calendarQ, useBoard } from '@/lib/queries'
+import { THEMES, parseTheme, setTheme, useTheme } from '@/lib/theme'
 import { sendTestAlert } from '@/server/board'
 
 export const Route = createFileRoute('/_app/account')({
@@ -38,9 +42,9 @@ export const Route = createFileRoute('/_app/account')({
   component: AccountScreen,
 })
 
-// Who is signed in on this device, the two things worth setting up on a new
-// phone, their Google Calendar and which of their other calendars the views
-// show, and the way out.
+// Who is signed in on this device, the things worth setting up on a new
+// phone, the theme, the household's tags, their Google Calendar and which of
+// their other calendars the views show, and the way out.
 function AccountScreen() {
   const board = useBoard()
   const { data: calendar } = useSuspenseQuery(calendarQ)
@@ -156,7 +160,13 @@ function AccountScreen() {
               </Button>
             </ItemActions>
           </Row>
+          <ThemeRow />
         </Rows>
+      </section>
+
+      <section id="tags" className="flex scroll-mt-20 flex-col gap-2.5">
+        <SectionHeading>Tags</SectionHeading>
+        <TagsManager />
       </section>
 
       <section className="flex flex-col gap-2.5">
@@ -200,6 +210,36 @@ function AccountScreen() {
         </section>
       )}
     </Column>
+  )
+}
+
+/** Light, dark, or as the device is; remembered on this device only. */
+function ThemeRow() {
+  const theme = useTheme()
+  return (
+    <Row>
+      <ItemMedia variant="icon">
+        <SunMoonIcon />
+      </ItemMedia>
+      <ItemContent>
+        <ItemTitle>Theme</ItemTitle>
+        <ItemDescription>On this device</ItemDescription>
+      </ItemContent>
+      <ItemActions>
+        <Tabs
+          value={theme}
+          onValueChange={(value: string) => setTheme(parseTheme(value))}
+        >
+          <TabsList>
+            {THEMES.map((option) => (
+              <TabsTrigger key={option} value={option} className="px-2.5">
+                {option[0].toUpperCase() + option.slice(1)}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+      </ItemActions>
+    </Row>
   )
 }
 

@@ -1,8 +1,10 @@
 import { useState } from 'react'
-import { createFileRoute } from '@tanstack/react-router'
-import { ChevronDownIcon, ListChecksIcon } from 'lucide-react'
+import { Link, createFileRoute } from '@tanstack/react-router'
+import { ChevronDownIcon, ListChecksIcon, PencilIcon } from 'lucide-react'
+import { cn } from 'cn'
 import { z } from 'zod'
 import { Column, ScreenHeader } from '@/components/app/shell'
+import { TagDot } from '@/components/app/tag'
 import { Section, SectionHeading, TodoGroup } from '@/components/app/todo-row'
 import {
   Collapsible,
@@ -23,8 +25,8 @@ import type { Tag, Todo } from '@/db/schema'
 
 export const Route = createFileRoute('/_app/list')({
   head: () => ({ meta: [{ title: 'List - todos' }] }),
-  // With a tag in the URL the list is that one tag; the laptop sidebar
-  // links here for each of them.
+  // With a tag in the URL the list is that one tag; the chips across the
+  // top link here for each of them.
   validateSearch: z.object({ tag: z.coerce.number().int().optional() }),
   component: ListScreen,
 })
@@ -58,6 +60,11 @@ function ListScreen() {
         subtitle={
           tag ? `${open.length} open` : `${open.length} open, grouped by tag`
         }
+      />
+      <TagChips
+        tags={board.tags}
+        todos={board.items.filter(isOpen)}
+        current={tag?.id}
       />
       <Tabs value={who} onValueChange={setWho} className="gap-5">
         <TabsList className="w-full group-data-horizontal/tabs:h-10 lg:w-fit">
@@ -109,6 +116,61 @@ function ListScreen() {
         </Collapsible>
       )}
     </Column>
+  )
+}
+
+const CHIP =
+  'flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-sm font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/50'
+
+/** Every tag as a way into its own list, with how many are open in it. */
+function TagChips({
+  tags,
+  todos,
+  current,
+}: {
+  tags: Array<Tag>
+  todos: Array<Todo>
+  current: number | undefined
+}) {
+  const chip = (active: boolean) =>
+    cn(
+      CHIP,
+      active
+        ? 'border-primary bg-primary text-primary-foreground'
+        : 'bg-background hover:bg-muted',
+    )
+  return (
+    <nav
+      aria-label="Tags"
+      className="-mx-4 flex gap-1.5 overflow-x-auto px-4 [scrollbar-width:none] lg:mx-0 lg:flex-wrap lg:px-0"
+    >
+      <Link to="/list" className={chip(current === undefined)}>
+        All
+        <span className="tabular-nums opacity-70">{todos.length}</span>
+      </Link>
+      {tags.map((tag) => (
+        <Link
+          key={tag.id}
+          to="/list"
+          search={{ tag: tag.id }}
+          className={chip(current === tag.id)}
+        >
+          <TagDot color={tag.color} className="size-1.5" />
+          {tag.name}
+          <span className="tabular-nums opacity-70">
+            {todos.filter((todo) => todo.tagId === tag.id).length}
+          </span>
+        </Link>
+      ))}
+      <Link
+        to="/account"
+        hash="tags"
+        className={cn(CHIP, 'text-muted-foreground hover:bg-muted')}
+      >
+        <PencilIcon className="size-3.5" />
+        Edit tags
+      </Link>
+    </nav>
   )
 }
 

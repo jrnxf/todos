@@ -1,20 +1,27 @@
 // One day as a page: what the home page shows once it is zoomed all the way
-// in. Today keeps everything the old Today page had: the bar that fills as
-// the list shrinks, what was carried over, the alerts, and a look ahead once
-// nothing is left. Any other day is that day's list, with a pointer back to
-// today while something is late. Under the to-dos, either way, come the
-// events of the calendars the person chose to see.
+// in, and the picked day's list beside or under the grid. Today keeps
+// everything the old Today page had: the bar that fills as the list shrinks,
+// what is late, the alerts, a look ahead once nothing is left, and what has
+// no date. Any other day is that day's list; a late to-do lives on today,
+// so the day it was due points there instead. Under the to-dos, either way,
+// come the events of the calendars the person chose to see, and a way to
+// add to that day.
 import { memo } from 'react'
-import { Link } from '@tanstack/react-router'
 import {
   BellIcon,
   CheckIcon,
+  ChevronDownIcon,
   PartyPopperIcon,
   PlusIcon,
   SunriseIcon,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
 import {
   Empty,
   EmptyContent,
@@ -122,7 +129,7 @@ function TodayView() {
         </div>
       )}
 
-      <Section title="Carried over" todos={carried} late />
+      <Section title="Late" todos={carried} late />
       {(dueToday.length > 0 || doneToday.length > 0) && (
         <section className="flex flex-col gap-2.5">
           <SectionHeading count={dueToday.length}>Today</SectionHeading>
@@ -144,6 +151,7 @@ function TodayView() {
       )}
 
       <DayEvents date={today} />
+      <AddHere day={today} today={today} />
 
       {(alerts.sent.length > 0 || alerts.planned.length > 0) && (
         <section className="flex flex-col gap-2.5">
@@ -206,6 +214,7 @@ function TodayView() {
           )}
         </div>
       )}
+      <NoDate todos={groups.undated} />
     </>
   )
 }
@@ -219,49 +228,92 @@ function OtherDayView({
 }) {
   const board = useBoard()
   const { today } = board
-  const due = board.items.filter((todo) => todo.dueDate === day)
-  const open = due.filter(isOpen).sort(byDue)
-  const done = due.filter((todo) => !isOpen(todo)).sort(byDue)
   const past = day < today
+  const due = board.items.filter((todo) => todo.dueDate === day)
+  // What is still open from a past day is late, and waits on today.
+  const waiting = past ? due.filter(isOpen) : []
+  const open = past ? [] : due.filter(isOpen).sort(byDue)
+  const done = due.filter((todo) => !isOpen(todo)).sort(byDue)
+  const shown = [...open, ...done]
   const late = upNext(board.items, today).overdue
 
   return (
     <>
-      {due.length > 0 ? (
+      {shown.length > 0 ? (
         <section className="flex flex-col gap-2.5">
-          {past &&
-            (open.length > 0 ? (
-              <SectionHeading count={open.length} late>
-                Still open from this day
-              </SectionHeading>
-            ) : (
-              <SectionHeading>Done that day</SectionHeading>
-            ))}
-          <TodoGroup
-            todos={[...open, ...done]}
-            secondary={past ? 'due' : 'time'}
-          />
+          {past ? (
+            <SectionHeading>Done that day</SectionHeading>
+          ) : (
+            <SectionHeading count={open.length}>To do</SectionHeading>
+          )}
+          <TodoGroup todos={shown} secondary="time" />
         </section>
       ) : (
-        <NothingDue
-          title={`Nothing due on ${formatLongWeekday(day)}`}
-          detail={nextDeadline(board.items, day)}
-        />
+        waiting.length === 0 && (
+          <NothingDue
+            title={`Nothing due on ${formatLongWeekday(day)}`}
+            detail={nextDeadline(board.items, day)}
+          />
+        )
+      )}
+      {past && waiting.length > 0 && (
+        <p className="px-1 text-sm text-destructive">
+          {waiting.length} from this day {waiting.length === 1 ? 'is' : 'are'}{' '}
+          late, waiting on <TodayLink onToday={onToday} />
+        </p>
       )}
       <DayEvents date={day} />
+      {!past && <AddHere day={day} today={today} />}
       {!past && late.length > 0 && (
         <p className="px-1 text-sm text-destructive">
-          {late.length} carried over, waiting on{' '}
-          <button
-            type="button"
-            onClick={onToday}
-            className="rounded-sm text-foreground underline underline-offset-4 outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-          >
-            Today
-          </button>
+          {late.length} late, waiting on <TodayLink onToday={onToday} />
         </p>
       )}
     </>
+  )
+}
+
+function TodayLink({ onToday }: { onToday: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onToday}
+      className="rounded-sm text-foreground underline underline-offset-4 outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+    >
+      Today
+    </button>
+  )
+}
+
+/** Adds to this day, saying which. */
+function AddHere({ day, today }: { day: LocalDate; today: LocalDate }) {
+  const add = useAdd()
+  return (
+    <Button
+      variant="outline"
+      size="lg"
+      className="justify-start border-dashed font-normal text-muted-foreground shadow-none"
+      onClick={() => add({ dueDate: day })}
+    >
+      <PlusIcon data-icon="inline-start" />
+      {day === today ? 'Add for today' : `Add to ${formatLongWeekday(day)}`}
+    </Button>
+  )
+}
+
+/** What has no date yet, folded away under today until asked for. */
+function NoDate({ todos }: { todos: Array<Todo> }) {
+  if (todos.length === 0) return null
+  return (
+    <Collapsible className="flex flex-col gap-2.5">
+      <CollapsibleTrigger className="group flex items-center justify-between rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+        <SectionHeading count={todos.length}>No date</SectionHeading>
+        <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-data-panel-open:rotate-180" />
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <TodoGroup todos={todos} />
+      </CollapsibleContent>
+    </Collapsible>
   )
 }
 
@@ -313,16 +365,11 @@ function NothingAhead({
           {fresh ? 'Nothing on the list yet' : 'Nothing due today'}
         </EmptyTitle>
         <EmptyDescription>
-          {fresh ? (
-            'Add a to-do and give it a date. On its day, it shows up here.'
-          ) : undated > 0 ? (
-            <>
-              No deadline is coming up either. {undated} without a date{' '}
-              {undated === 1 ? 'is' : 'are'} in <Link to="/list">List</Link>.
-            </>
-          ) : (
-            'No deadline is coming up either. The list is clear.'
-          )}
+          {fresh
+            ? 'Add a to-do and give it a date. On its day, it shows up here.'
+            : undated > 0
+              ? `No deadline is coming up either. ${undated} without a date ${undated === 1 ? 'is' : 'are'} below.`
+              : 'No deadline is coming up either. The list is clear.'}
         </EmptyDescription>
       </EmptyHeader>
       {fresh && (

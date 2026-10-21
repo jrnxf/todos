@@ -1,12 +1,10 @@
-import { Outlet, createFileRoute, useRouterState } from '@tanstack/react-router'
+import { Outlet, createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 import { cn } from 'cn'
-import { AppSidebar } from '@/components/app/app-sidebar'
 import { AddBar, AddProvider } from '@/components/app/capture'
 import { EventDrawer, useOpenEventKey } from '@/components/app/event-drawer'
-import { TabBar } from '@/components/app/shell'
+import { TabBar, TopBar } from '@/components/app/shell'
 import { TodoDrawer, useOpenTodoId } from '@/components/app/todo-drawer'
-import { SidebarProvider } from '@/components/ui/sidebar'
 import { boardQ } from '@/lib/queries'
 
 export const Route = createFileRoute('/_app')({
@@ -24,42 +22,36 @@ export const Route = createFileRoute('/_app')({
 })
 
 function AppLayout() {
-  // On the home page, Add starts from the day being stood on.
-  const homeDay = useRouterState({
-    select: (state) =>
-      state.location.pathname === '/' ? state.location.search.day : undefined,
-  })
-  const preset = homeDay ? { dueDate: homeDay } : undefined
   const todoOpen = useOpenTodoId() !== undefined
   const eventOpen = useOpenEventKey() !== undefined
 
   return (
     <AddProvider>
-      {/* A phone gets one column with a tab bar. A laptop gets the sidebar,
-          the list, and room on the right for the to-do or the event that
-          slides in. */}
-      <SidebarProvider>
-        <AppSidebar addPreset={preset} />
+      {/* A phone gets one column with a tab bar. A laptop gets a bar across
+          the top, the screen under it, and room on the right for the to-do
+          or the event that slides in. */}
+      <div className="flex min-h-dvh flex-col">
         <div
           className={cn(
-            'mx-auto flex min-h-dvh w-full max-w-md min-w-0 flex-col lg:mx-0 lg:max-w-none lg:flex-1',
+            'mx-auto flex w-full max-w-md min-w-0 flex-1 flex-col lg:max-w-none',
             // Make room as the drawer comes in, at the drawer's own pace.
             'lg:transition-[padding] lg:duration-450 lg:ease-[cubic-bezier(0.22,1,0.36,1)]',
             (todoOpen || eventOpen) && 'lg:pr-96',
           )}
         >
-          <main className="flex flex-1 flex-col gap-5 px-4 pt-[max(1.25rem,env(safe-area-inset-top))] pb-44 lg:px-10 lg:pt-10 lg:pb-12">
+          <TopBar />
+          <main className="flex flex-1 flex-col gap-5 px-4 pt-[max(1.25rem,env(safe-area-inset-top))] pb-44 lg:px-10 lg:pt-8 lg:pb-12">
             <Outlet />
           </main>
           <div className="fixed inset-x-0 bottom-0 z-10 mx-auto max-w-md bg-background pb-[env(safe-area-inset-bottom)] lg:hidden">
             <div className="pointer-events-none absolute inset-x-0 -top-6 h-6 bg-linear-to-t from-background to-transparent" />
             <div className="px-4 pb-3">
-              <AddBar preset={preset} />
+              <AddBar />
             </div>
             <TabBar />
           </div>
         </div>
-      </SidebarProvider>
+      </div>
       <TodoDrawer />
       <EventDrawer />
     </AddProvider>

@@ -1,26 +1,17 @@
-// The frame around the phone's screens: a title block with whoever is
-// signed in, and the tab bar underneath.
+// The frame around every screen: a top bar on a laptop, and a title block
+// with the avatar plus the tab bar on a phone. The avatar opens one menu on
+// both (account-menu.tsx); there is no sidebar.
 import { Link } from '@tanstack/react-router'
+import {
+  CalendarDaysIcon,
+  CheckIcon,
+  ListChecksIcon,
+  PlusIcon,
+} from 'lucide-react'
 import { cn } from 'cn'
-import { ListChecksIcon, SunriseIcon } from 'lucide-react'
-import { useBoard } from '@/lib/queries'
-import { PersonAvatar } from './todo-row'
-
-function AccountLink({ className }: { className?: string }) {
-  const { people, me } = useBoard()
-  return (
-    <Link
-      to="/account"
-      aria-label="Account"
-      className={cn(
-        'rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/50',
-        className,
-      )}
-    >
-      <PersonAvatar person={people.find((p) => p.id === me)} size="lg" />
-    </Link>
-  )
-}
+import { Button } from '@/components/ui/button'
+import { AccountMenu } from './account-menu'
+import { useAdd } from './capture'
 
 /** A screen's column; on a laptop it sits centred between the two panes. */
 export function Column({
@@ -66,21 +57,21 @@ export function ScreenHeader({
       </div>
       <div className="mt-1 flex shrink-0 items-center gap-2.5 lg:hidden">
         {phoneActions}
-        <AccountLink />
+        <AccountMenu />
       </div>
     </header>
   )
 }
 
-const TABS = [
-  { to: '/', label: 'Home', icon: SunriseIcon, exact: true },
+const VIEWS = [
+  { to: '/', label: 'Calendar', icon: CalendarDaysIcon, exact: true },
   { to: '/list', label: 'List', icon: ListChecksIcon, exact: false },
 ] as const
 
 export function TabBar() {
   return (
     <nav aria-label="Views" className="grid grid-cols-2 border-t">
-      {TABS.map((tab) => (
+      {VIEWS.map((tab) => (
         <Link
           key={tab.to}
           to={tab.to}
@@ -92,5 +83,48 @@ export function TabBar() {
         </Link>
       ))}
     </nav>
+  )
+}
+
+/** A laptop's bar over every screen: where you are, Add, and the avatar. */
+export function TopBar() {
+  const add = useAdd()
+  return (
+    <header className="sticky top-0 z-20 hidden h-14 shrink-0 items-center gap-3 border-b bg-background/95 px-5 backdrop-blur lg:flex">
+      <Link
+        to="/"
+        aria-label="todos, today"
+        className="flex items-center gap-2 rounded-md font-semibold outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+      >
+        <span className="flex size-6 items-center justify-center rounded-md bg-primary text-primary-foreground">
+          <CheckIcon className="size-3.5" strokeWidth={3} />
+        </span>
+        todos
+      </Link>
+      <nav aria-label="Views" className="ml-3 flex gap-0.5">
+        {VIEWS.map((view) => (
+          <Link
+            key={view.to}
+            to={view.to}
+            activeOptions={{ exact: view.exact, includeSearch: false }}
+            className={cn(
+              'flex h-8 items-center rounded-md px-3 text-sm font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50',
+              'data-[status=active]:bg-muted data-[status=active]:text-foreground',
+            )}
+          >
+            {view.label}
+          </Link>
+        ))}
+      </nav>
+      <span className="flex-1" />
+      <Button onClick={() => add()}>
+        <PlusIcon data-icon="inline-start" />
+        Add
+        <kbd className="ml-1 rounded border border-primary-foreground/30 px-1 font-mono text-[0.6875rem] leading-4">
+          N
+        </kbd>
+      </Button>
+      <AccountMenu />
+    </header>
   )
 }

@@ -5,6 +5,9 @@ import { useSyncExternalStore } from 'react'
 
 export type Theme = 'light' | 'dark' | 'system'
 
+/** Every choice, in the order they are offered. */
+export const THEMES: ReadonlyArray<Theme> = ['light', 'dark', 'system']
+
 export const THEME_KEY = 'theme'
 
 /** The browser chrome colours, matching --background in each theme. */

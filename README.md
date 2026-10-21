@@ -17,7 +17,7 @@ list.
   every to-do with a deadline, and a change on either side reaches the other.
   Each person can also see their other Google calendars' events beside the
   to-dos, and open, change or delete one there.
-- Works as a Home Screen app on a phone, and with a sidebar on a laptop.
+- Works as a Home Screen app on a phone, and in a browser on a laptop.
 
 It is a TanStack Start app on Cloudflare Workers with stock shadcn/ui, one D1
 database, a Cron Trigger for the alerts, and Better Auth for sign-in. Running
@@ -97,7 +97,7 @@ turn it on, what syncs and how, and what to look at when a calendar stops.
 | `src/calendar/read.ts`   | Reading the other calendars a person chose to see               |
 | `src/calendar/events.ts` | Opening, changing, moving and deleting one of their events      |
 | `src/routes/`            | Home, List, Done, Account, and sign-in                          |
-| `src/components/app/`    | Capture bar, pickers, the home grid, sidebar, the two drawers   |
+| `src/components/app/`    | Capture bar, pickers, the home grid, top bar, the two drawers   |
 | `src/components/ui/`     | Stock shadcn components. Add more with `bunx shadcn add`        |
 
 ## Four seams, kept on purpose

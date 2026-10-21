@@ -56,6 +56,8 @@ import {
   DrawerTitle,
 } from '@/components/ui/drawer'
 import { Input } from '@/components/ui/input'
+import { startingFields } from '@/lib/add-preset'
+import { formatDay } from '@/lib/dates'
 import { useAddItem, useBoard } from '@/lib/queries'
 import { readTitle } from '@/lib/read'
 import { answerHolds, heldReadings, steadyChips } from '@/lib/steady'
@@ -68,6 +70,7 @@ import { TagFields, HeadsUpFields, WhoFields } from './small-pickers'
 import { WhenFields } from './when-picker'
 import type { LucideIcon } from 'lucide-react'
 import type { TagColor } from '@/db/schema'
+import type { LocalDate } from '@/lib/dates'
 import type { ReadField } from '@/lib/read'
 import type { HeldReadings } from '@/lib/steady'
 import type { Verdict } from '@/lib/verify'
@@ -92,10 +95,32 @@ const DESCRIPTION =
 const AddContext = createContext<(preset?: Partial<ItemFields>) => void>(
   () => {},
 )
+/** The day the calendar has picked, and how the calendar says so. */
+const PickedContext = createContext<{
+  picked: LocalDate | null
+  setPicked: (day: LocalDate | null) => void
+}>({ picked: null, setPicked: () => {} })
 
-/** Opens the capture bar, optionally with fields already set. */
+/**
+ * Opens the capture bar, optionally with fields already set. With no
+ * deadline among them, it starts on the day the calendar has picked.
+ */
 export function useAdd() {
   return use(AddContext)
+}
+
+/** The day a new to-do starts on, while the calendar is on screen. */
+export function usePickedDay(): LocalDate | null {
+  return use(PickedContext).picked
+}
+
+/** Makes `day` the one a new to-do starts on, for as long as this is mounted. */
+export function useAddsTo(day: LocalDate) {
+  const { setPicked } = use(PickedContext)
+  useEffect(() => {
+    setPicked(day)
+  }, [day, setPicked])
+  useEffect(() => () => setPicked(null), [setPicked])
 }
 
 // The date parser is a sizeable library that only this bar needs, so it is
@@ -224,13 +249,16 @@ export function AddProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState(0)
   const desktop = useIsDesktop()
   const visibleHeight = useVisibleHeight()
+  const [picked, setPicked] = useState<LocalDate | null>(null)
+  const pickedRef = useRef(picked)
+  pickedRef.current = picked
 
-  const start = (fields: Partial<ItemFields> = {}) => {
-    setPreset(fields)
+  const start = (fields?: Partial<ItemFields>) => {
+    setPreset(startingFields(fields, pickedRef.current))
     setSession((count) => count + 1)
     setOpen(true)
   }
-  // "N" for new, from anywhere that is not a text box.
+  // "N" for new, from anywhere that is not a text box: the same as Add.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'n' || event.metaKey || event.ctrlKey || event.altKey)
@@ -242,7 +270,7 @@ export function AddProvider({ children }: { children: React.ReactNode }) {
       )
         return
       event.preventDefault()
-      setPreset({})
+      setPreset(startingFields(undefined, pickedRef.current))
       setSession((count) => count + 1)
       setOpen(true)
     }
@@ -256,7 +284,7 @@ export function AddProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AddContext value={start}>
-      {children}
+      <PickedContext value={{ picked, setPicked }}>{children}</PickedContext>
       {desktop ? (
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogContent
@@ -1058,18 +1086,29 @@ function CaptureBar({
   )
 }
 
-/** The bar every screen ends with. */
-export function AddBar({ preset }: { preset?: Partial<ItemFields> }) {
+/** The bar every phone screen ends with. On the calendar it names its day. */
+export function AddBar() {
   const add = useAdd()
+  const picked = usePickedDay()
+  const { today } = useBoard()
   return (
     <Button
       variant="outline"
       size="xl"
       className="w-full justify-start font-normal text-muted-foreground shadow-xs"
-      onClick={() => add(preset)}
+      onClick={() => add()}
     >
       <PlusIcon data-icon="inline-start" />
-      Add a to-do
+      {picked === null ? (
+        'Add a to-do'
+      ) : (
+        <span>
+          {picked === today ? 'Add for ' : 'Add to '}
+          <span className="font-medium text-foreground">
+            {picked === today ? 'today' : formatDay(picked)}
+          </span>
+        </span>
+      )}
     </Button>
   )
 }
