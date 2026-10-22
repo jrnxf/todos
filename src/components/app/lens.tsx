@@ -18,7 +18,9 @@
 //   route, and a day stepped away from keeps its page until it is gone.
 // - Stepping from day to day moves no tracks. The grid jumps to the next
 //   day at once, the page left behind takes the next day's place, and the
-//   two slide across together, one pushing the other out of sight.
+//   next glides in as it fades out, the title rolling with them. A held
+//   arrow key steps in short nudges instead, and a page still leaving when
+//   the next press lands gets out of the way, so pages never pile up.
 //
 // Events from the person's other Google calendars, once they chose some,
 // sit after the day's to-dos in each drawing (calendar-events.tsx). One that
@@ -91,6 +93,10 @@ const PAGE = 672
  * counted in each day's "N more".
  */
 const LANES = { month: 3, activeMonth: 5, week: 10 }
+/** A step this soon after the last is part of a run, as a held key makes. */
+const BURST_MS = 280
+/** How long a page still leaving takes to clear out of the next one's way. */
+const HURRY_MS = 80
 
 export interface LensChange {
   view?: LensView
@@ -120,6 +126,9 @@ export function Lens({
     newMonth: boolean
     /** A step from day to day, and which way time went. */
     step?: 'next' | 'prev'
+    /** When the step was made, and whether it came soon after the last. */
+    at?: number
+    burst?: boolean
   }>({ dir: 'same', from: view, newMonth: false })
   // Days stepped away from as a day keep their page while it slides out of
   // sight, instead of blinking into chips.
@@ -131,12 +140,16 @@ export function Lens({
     const stepping = shown.view === 'day' && view === 'day'
     const newMonth =
       !stepping && monthWeeks(shown.day)[0][0] !== monthWeeks(day)[0][0]
+    const at = stepping ? performance.now() : undefined
     setShown({ view, day })
     setMove({
       dir: lensDirection(shown.view, view),
       from: shown.view,
       newMonth,
       step: stepping ? (day > shown.day ? 'next' : 'prev') : undefined,
+      at,
+      burst:
+        at !== undefined && move.at !== undefined && at - move.at < BURST_MS,
     })
     setLeaving(
       stepping ? [...leaving.filter((date) => date !== day), shown.day] : [],
@@ -279,6 +292,82 @@ export function Lens({
         : { day: date },
     )
   }, [])
+  // Each page left goes once it has faded. One still leaving when the next
+  // press lands is dropped if nearly gone, or else fades out at once from
+  // where it is, title and all, so a held key never piles pages up.
+  const header = useRef<HTMLElement>(null)
+  useLayoutEffect(() => {
+    const drop = (date: LocalDate) =>
+      setLeaving((list) => list.filter((one) => one !== date))
+    const parts = (date: LocalDate) =>
+      [grid.current, header.current].flatMap((root) =>
+        Array.from(
+          root?.querySelectorAll<HTMLElement>(
+            `[data-date="${date}"] > [data-layer='day'], .lens-title[data-date="${date}"]`,
+          ) ?? [],
+        ),
+      )
+    leaving.forEach((date, index) => {
+      const found = parts(date)
+      const page = found.at(0)
+      if (!page || page.dataset.going === 'hurry') return
+      if (index === leaving.length - 1) {
+        if (page.dataset.going) return
+        page.dataset.going = 'retire'
+        const done = (event: TransitionEvent) => {
+          if (
+            event.target === page &&
+            event.propertyName === 'opacity' &&
+            page.dataset.going === 'retire'
+          ) {
+            drop(date)
+          }
+        }
+        page.addEventListener('transitionend', done)
+        page.addEventListener('transitioncancel', done)
+        return
+      }
+      page.dataset.going = 'hurry'
+      const opacity = Number(getComputedStyle(page).opacity)
+      if (opacity < 0.15) {
+        drop(date)
+        return
+      }
+      for (const part of found) {
+        const from = getComputedStyle(part)
+        const transform = from.transform
+        const start = Number(from.opacity)
+        part.getAnimations().forEach((one) => one.cancel())
+        Object.assign(part.style, {
+          transition: 'none',
+          opacity: '0',
+          transform,
+        })
+        part.animate([{ opacity: start }, { opacity: 0 }], {
+          duration: HURRY_MS,
+          easing: 'linear',
+        })
+      }
+      page.getAnimations()[0]?.finished.then(
+        () => drop(date),
+        () => drop(date),
+      )
+    })
+    // A page stepped back to before it had gone moves on from where it is.
+    const back = parts(day)
+    const going = back.at(0)?.dataset.going
+    for (const part of going ? back : []) {
+      delete part.dataset.going
+      if (going === 'hurry') {
+        part.getAnimations().forEach((one) => one.cancel())
+        Object.assign(part.style, {
+          transition: '',
+          opacity: '',
+          transform: '',
+        })
+      }
+    }
+  }, [leaving, day])
   const goToday = useCallback(
     () => latest.current.onChange({ day: latest.current.today }),
     [],
@@ -330,18 +419,22 @@ export function Lens({
   // A day reads as today does: the date above, how far it is from today
   // as the title. Short, so stepping off today, when the Today button joins
   // the header, never wraps the title and pushes the page down.
-  const eyebrow =
-    view === 'day'
-      ? formatLongDay(day)
-      : view === 'week'
-        ? `Week of ${formatMonthDay(weekStart(day))}`
-        : day.slice(0, 4)
-  const title =
-    view === 'day'
-      ? fromToday(day, today)
-      : view === 'week'
-        ? weekSpan(day)
-        : formatMonth(day).split(' ')[0]
+  // The days left keep their titles while they roll out.
+  const titles = [...leaving, day].map((date) => ({
+    date,
+    eyebrow:
+      view === 'day'
+        ? formatLongDay(date)
+        : view === 'week'
+          ? `Week of ${formatMonthDay(weekStart(date))}`
+          : date.slice(0, 4),
+    title:
+      view === 'day'
+        ? fromToday(date, today)
+        : view === 'week'
+          ? weekSpan(date)
+          : formatMonth(date).split(' ')[0],
+  }))
 
   return (
     <div
@@ -350,14 +443,30 @@ export function Lens({
       data-resizing={resizing ? '' : undefined}
     >
       <header
+        ref={header}
         className="lens-header flex items-end justify-between gap-4"
         style={{ paddingInline: inset }}
+        data-step={view === 'day' ? move.step : undefined}
+        data-burst={move.burst ? '' : undefined}
       >
-        <div className="min-w-0">
-          <p className="text-sm text-muted-foreground">{eyebrow}</p>
-          <h1 className="truncate text-[1.75rem] leading-tight font-semibold tracking-tight">
-            {title}
-          </h1>
+        <div className="lens-titles min-w-0">
+          {titles.map(({ date, eyebrow, title }) => (
+            <div
+              key={date}
+              className="lens-title"
+              data-date={date}
+              data-active={date === day ? '' : undefined}
+              data-leaving={
+                date === day ? undefined : date < day ? 'before' : 'after'
+              }
+              aria-hidden={date === day ? undefined : true}
+            >
+              <p className="text-sm text-muted-foreground">{eyebrow}</p>
+              <h1 className="truncate text-[1.75rem] leading-tight font-semibold tracking-tight">
+                {title}
+              </h1>
+            </div>
+          ))}
         </div>
         <div className="flex items-center gap-1.5">
           <TodayButton day={day} today={today} onToday={goToday} />
@@ -402,6 +511,7 @@ export function Lens({
           data-dir={move.dir}
           data-from={move.from}
           data-step={move.step}
+          data-burst={move.burst ? '' : undefined}
           data-ready={ready ? '' : undefined}
           style={size ? { width: gridWidth(view) } : undefined}
         >
@@ -579,6 +689,7 @@ function LensSquareView({
       aria-selected={active}
       className="lens-square"
       style={{ gridRow: row + 1, gridColumn: col + 1 }}
+      data-date={date}
       data-active={active ? '' : undefined}
       data-leaving={leaving}
       data-week={inWeek ? '' : undefined}

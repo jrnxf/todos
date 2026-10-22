@@ -379,29 +379,56 @@
     .lens-layer {
     transition: none;
   }
-  /* Stepping from day to day is a short nudge the way time went, made
-     often, so quick and small: the grid lands on the next day at once, the
-     page left fades out drifting back, and the next fades in from a little
-     ahead. The page left shares the next one's place and is nearly gone
-     before the next shows, so the two never read as one smudged page. Transitions,
-     so a quick run of steps carries on from wherever the pages are. No
-     square shows its chips on the way, not even for a frame. */
+  /* Stepping from day to day glides the way time went. The grid lands on
+     the next day at once and the page left takes its place: it fades out
+     drifting back, and once it is nearly gone the next glides in from
+     ahead on a long ease-out, quick to show, so its travel is seen. The
+     title rolls with it. A press soon after the last, as a held arrow key
+     makes, is a burst (lens.tsx): half the distance, no wait, at the add
+     bar's pace, so a run of steps keeps up with the keys. Transitions, so a
+     press mid-move carries on from wherever the pages are. No square shows
+     its chips on the way, not even for a frame. */
+  .lens-home {
+    /* easeOutQuart: a long glide that keeps moving to the end. */
+    --ease-glide: cubic-bezier(0.25, 1, 0.5, 1);
+  }
+  .lens[data-view='day'] {
+    --step-nudge: 32px;
+  }
+  .lens[data-view='day'][data-burst] {
+    --step-nudge: 16px;
+  }
   .lens[data-view='day'][data-dir='same'] :is(.lens-grid, .lens-weekdays) {
     transition: none;
   }
-  .lens[data-view='day'][data-dir='same'] .lens-square [data-layer='day'] {
-    --step-nudge: 24px;
+  .lens[data-view='day'][data-dir='same']
+    .lens-square[data-active]
+    [data-layer='day'] {
     transition:
-      transform 200ms var(--ease-settle),
-      opacity 160ms var(--ease-settle) 40ms;
+      transform 340ms var(--ease-glide) 50ms,
+      opacity 150ms ease-out 50ms;
   }
   .lens[data-view='day'][data-dir='same']
     .lens-square[data-leaving]
     [data-layer='day'] {
     opacity: 0;
     transition:
-      transform 100ms var(--ease-settle),
-      opacity 100ms var(--ease-settle);
+      transform 220ms var(--ease-glide),
+      opacity 110ms ease;
+  }
+  .lens[data-view='day'][data-dir='same'][data-burst]
+    .lens-square[data-active]
+    [data-layer='day'] {
+    transition:
+      transform 160ms var(--ease-settle),
+      opacity 120ms var(--ease-settle);
+  }
+  .lens[data-view='day'][data-dir='same'][data-burst]
+    .lens-square[data-leaving]
+    [data-layer='day'] {
+    transition:
+      transform 90ms var(--ease-settle),
+      opacity 90ms var(--ease-settle);
   }
   .lens[data-view='day']
     .lens-square[data-leaving='before']
@@ -431,6 +458,60 @@
       [data-layer='day'] {
       opacity: 1;
       transform: none;
+    }
+  }
+  /* The title left keeps its place while it rolls out under the next. */
+  .lens-titles {
+    display: grid;
+  }
+  .lens-title {
+    grid-area: 1 / 1;
+    min-width: 0;
+  }
+  .lens-title[data-leaving] {
+    pointer-events: none;
+  }
+  .lens-header {
+    --title-nudge: 10px;
+  }
+  .lens-header[data-burst] {
+    --title-nudge: 6px;
+  }
+  .lens-header[data-step] .lens-title {
+    transition:
+      transform 300ms var(--ease-glide) 40ms,
+      opacity 130ms ease-out 40ms;
+  }
+  .lens-header[data-step] .lens-title[data-leaving] {
+    opacity: 0;
+    transition:
+      transform 180ms var(--ease-glide),
+      opacity 90ms ease;
+  }
+  .lens-header[data-step][data-burst] .lens-title[data-active] {
+    transition:
+      transform 140ms var(--ease-settle),
+      opacity 100ms var(--ease-settle);
+  }
+  .lens-header[data-step][data-burst] .lens-title[data-leaving] {
+    transition:
+      transform 80ms var(--ease-settle),
+      opacity 80ms var(--ease-settle);
+  }
+  .lens-title[data-leaving='before'] {
+    transform: translateX(calc(var(--title-nudge) * -1));
+  }
+  .lens-title[data-leaving='after'] {
+    transform: translateX(var(--title-nudge));
+  }
+  @starting-style {
+    .lens-header[data-step='next'] .lens-title[data-active] {
+      opacity: 0;
+      transform: translateX(var(--title-nudge));
+    }
+    .lens-header[data-step='prev'] .lens-title[data-active] {
+      opacity: 0;
+      transform: translateX(calc(var(--title-nudge) * -1));
     }
   }
   .lens[data-view='day'][data-dir='same']
@@ -1041,9 +1122,19 @@
       transition-delay: 0s !important;
       animation: none !important;
     }
-    /* Stepping from day to day, the pages trade places in a fade. */
-    .lens[data-view='day'] .lens-square[data-leaving] [data-layer='day'] {
+    /* Stepping from day to day, the pages and titles trade places in a
+       fade: the one left goes a little faster than the next comes. */
+    .lens[data-view='day'] [data-layer='day'],
+    .lens-title {
+      transition-property: opacity !important;
+      transition-duration: 0.2s !important;
+      transition-timing-function: ease !important;
+      transition-delay: 0s !important;
+    }
+    .lens[data-view='day'] .lens-square[data-leaving] [data-layer='day'],
+    .lens-title[data-leaving] {
       transform: none;
+      transition-duration: 150ms !important;
     }
   }
 }
