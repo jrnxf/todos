@@ -379,11 +379,59 @@
     .lens-layer {
     transition: none;
   }
-  /* Stepping from day to day is one page sliding out as the next slides
-     in. The day left keeps its page until its column has closed, and no
+  /* Stepping from day to day is a short nudge the way time went, made
+     often, so quick and small: the grid lands on the next day at once, the
+     page left fades out drifting back, and the next fades in from a little
+     ahead. The page left shares the next one's place and is nearly gone
+     before the next shows, so the two never read as one smudged page. Transitions,
+     so a quick run of steps carries on from wherever the pages are. No
      square shows its chips on the way, not even for a frame. */
-  .lens[data-view='day'] .lens-square[data-leaving] [data-layer='day'] {
-    opacity: 1;
+  .lens[data-view='day'][data-dir='same'] :is(.lens-grid, .lens-weekdays) {
+    transition: none;
+  }
+  .lens[data-view='day'][data-dir='same'] .lens-square [data-layer='day'] {
+    --step-nudge: 24px;
+    transition:
+      transform 200ms var(--ease-settle),
+      opacity 160ms var(--ease-settle) 40ms;
+  }
+  .lens[data-view='day'][data-dir='same']
+    .lens-square[data-leaving]
+    [data-layer='day'] {
+    opacity: 0;
+    transition:
+      transform 100ms var(--ease-settle),
+      opacity 100ms var(--ease-settle);
+  }
+  .lens[data-view='day']
+    .lens-square[data-leaving='before']
+    [data-layer='day'] {
+    transform: translateX(calc(var(--step-nudge) * -1));
+  }
+  .lens[data-view='day'] .lens-square[data-leaving='after'] [data-layer='day'] {
+    transform: translateX(var(--step-nudge));
+  }
+  @starting-style {
+    .lens[data-view='day'][data-step='next']
+      .lens-square[data-active]
+      [data-layer='day'] {
+      opacity: 0;
+      transform: translateX(var(--step-nudge));
+    }
+    .lens[data-view='day'][data-step='prev']
+      .lens-square[data-active]
+      [data-layer='day'] {
+      opacity: 0;
+      transform: translateX(calc(var(--step-nudge) * -1));
+    }
+    /* A page drawn afresh as it leaves, into another month's grid, starts
+       from where it was. */
+    .lens[data-view='day'][data-dir='same']
+      .lens-square[data-leaving]
+      [data-layer='day'] {
+      opacity: 1;
+      transform: none;
+    }
   }
   .lens[data-view='day'][data-dir='same']
     .lens-square
@@ -992,6 +1040,10 @@
       transition-duration: 0.2s !important;
       transition-delay: 0s !important;
       animation: none !important;
+    }
+    /* Stepping from day to day, the pages trade places in a fade. */
+    .lens[data-view='day'] .lens-square[data-leaving] [data-layer='day'] {
+      transform: none;
     }
   }
 }

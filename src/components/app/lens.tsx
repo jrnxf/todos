@@ -16,6 +16,9 @@
 //   neither the keyboard nor a screen reader finds them.
 // - Nothing slow runs while the grid moves: the page waits for onSettled to
 //   route, and a day stepped away from keeps its page until it is gone.
+// - Stepping from day to day moves no tracks. The grid jumps to the next
+//   day at once, the page left behind takes the next day's place, and the
+//   two slide across together, one pushing the other out of sight.
 //
 // Events from the person's other Google calendars, once they chose some,
 // sit after the day's to-dos in each drawing (calendar-events.tsx). One that
@@ -115,24 +118,30 @@ export function Lens({
     dir: 'in' | 'out' | 'same'
     from: LensView
     newMonth: boolean
+    /** A step from day to day, and which way time went. */
+    step?: 'next' | 'prev'
   }>({ dir: 'same', from: view, newMonth: false })
-  // Days stepped away from as a day keep their page while their column
-  // closes, so the page slides out instead of blinking into chips.
+  // Days stepped away from as a day keep their page while it slides out of
+  // sight, instead of blinking into chips.
   const [leaving, setLeaving] = useState<Array<LocalDate>>([])
+  // A new month is a new grid, except while stepping from day to day: then
+  // the tracks do not move, and the grid only redraws its squares.
+  const [gridKey, setGridKey] = useState(0)
   if (shown.view !== view || shown.day !== day) {
+    const stepping = shown.view === 'day' && view === 'day'
+    const newMonth =
+      !stepping && monthWeeks(shown.day)[0][0] !== monthWeeks(day)[0][0]
     setShown({ view, day })
     setMove({
       dir: lensDirection(shown.view, view),
       from: shown.view,
-      newMonth: shown.day.slice(0, 7) !== day.slice(0, 7),
+      newMonth,
+      step: stepping ? (day > shown.day ? 'next' : 'prev') : undefined,
     })
     setLeaving(
-      shown.view === 'day' &&
-        view === 'day' &&
-        monthWeeks(shown.day)[0][0] === monthWeeks(day)[0][0]
-        ? [...leaving.filter((date) => date !== day), shown.day]
-        : [],
+      stepping ? [...leaving.filter((date) => date !== day), shown.day] : [],
     )
+    if (newMonth) setGridKey(gridKey + 1)
   }
 
   // The room for the grid and the panel, in pixels. Until it is known (the
@@ -244,11 +253,13 @@ export function Lens({
     if (!element) return
     let live = true
     const settle = async () => {
-      for (
-        let running = element.getAnimations();
-        running.length > 0;
-        running = element.getAnimations()
-      ) {
+      // The pages sliding in its squares count; a loading shimmer that
+      // never ends does not.
+      const moving = () =>
+        element
+          .getAnimations({ subtree: true })
+          .filter((one) => one.effect?.getComputedTiming().endTime !== Infinity)
+      for (let running = moving(); running.length > 0; running = moving()) {
         await Promise.allSettled(running.map((one) => one.finished))
       }
       if (!live) return
@@ -275,6 +286,46 @@ export function Lens({
 
   const step = (direction: -1 | 1) =>
     onChange({ day: stepDay(day, view, direction) })
+
+  const square = (date: LocalDate, row: number, col: number) => {
+    const active = date === day
+    // A page sliding out shares the shown day's place in the grid.
+    const left = leaving.includes(date)
+    const at = left ? now : { row, col }
+    const sized = (w: number, h: number) =>
+      size
+        ? { width: Math.round(w), height: Math.round(h) }
+        : { width: '100%', height: '100%' }
+    const { pieces, lanes } = bars[row]
+    return (
+      <LensSquare
+        key={date}
+        date={date}
+        row={at.row}
+        col={at.col}
+        view={view}
+        lanes={{
+          month: Math.min(lanes, lanesShown(row, 'month')),
+          week: Math.min(lanes, LANES.week),
+        }}
+        hidden={{
+          month: barsHidden(pieces, col, lanesShown(row, 'month')),
+          week: barsHidden(pieces, col, LANES.week),
+        }}
+        active={active}
+        leaving={left ? (date < day ? 'before' : 'after') : undefined}
+        inWeek={weekStart(date) === thisWeek}
+        outside={date.slice(0, 7) !== day.slice(0, 7)}
+        onPick={pick}
+        onToday={goToday}
+        sizes={{
+          month: sized(month.cols[col], month.rows[row]),
+          week: sized(week.cols[col], week.rows[now.row]),
+          day: sized(whole.cols[now.col], whole.rows[now.row]),
+        }}
+      />
+    )
+  }
 
   // A day reads as today does: the date above, how far it is from today
   // as the title. Short, so stepping off today, when the Today button joins
@@ -350,6 +401,7 @@ export function Lens({
           data-view={view}
           data-dir={move.dir}
           data-from={move.from}
+          data-step={move.step}
           data-ready={ready ? '' : undefined}
           style={size ? { width: gridWidth(view) } : undefined}
         >
@@ -366,7 +418,7 @@ export function Lens({
           </div>
           <div
             // A new month is a new grid: it fades in instead of moving.
-            key={weeks[0][0]}
+            key={gridKey}
             ref={grid}
             className="lens-grid"
             data-new-month={move.newMonth ? '' : undefined}
@@ -379,46 +431,7 @@ export function Lens({
           >
             {weeks.map((dates, row) => (
               <div key={dates[0]} role="row" className="contents">
-                {dates.map((date, col) => {
-                  const active = date === day
-                  const sized = (w: number, h: number) =>
-                    size
-                      ? { width: Math.round(w), height: Math.round(h) }
-                      : { width: '100%', height: '100%' }
-                  const { pieces, lanes } = bars[row]
-                  return (
-                    <LensSquare
-                      key={date}
-                      date={date}
-                      row={row}
-                      col={col}
-                      view={view}
-                      lanes={{
-                        month: Math.min(lanes, lanesShown(row, 'month')),
-                        week: Math.min(lanes, LANES.week),
-                      }}
-                      hidden={{
-                        month: barsHidden(
-                          pieces,
-                          col,
-                          lanesShown(row, 'month'),
-                        ),
-                        week: barsHidden(pieces, col, LANES.week),
-                      }}
-                      active={active}
-                      leaving={leaving.includes(date)}
-                      inWeek={weekStart(date) === thisWeek}
-                      outside={date.slice(0, 7) !== day.slice(0, 7)}
-                      onPick={pick}
-                      onToday={goToday}
-                      sizes={{
-                        month: sized(month.cols[col], month.rows[row]),
-                        week: sized(week.cols[col], week.rows[now.row]),
-                        day: sized(whole.cols[now.col], whole.rows[now.row]),
-                      }}
-                    />
-                  )
-                })}
+                {dates.map((date, col) => square(date, row, col))}
                 {bars[row].lanes > 0 && (
                   <WeekBars
                     row={row}
@@ -429,6 +442,11 @@ export function Lens({
                 )}
               </div>
             ))}
+            {/* A day left for another month keeps its page here until it
+                has slid out of sight. */}
+            {leaving
+              .filter((date) => !weeks.some((dates) => dates.includes(date)))
+              .map((date) => square(date, now.row, now.col))}
           </div>
         </div>
         <aside
@@ -521,9 +539,10 @@ function LensSquareView({
   lanes: Lanes
   hidden: Hidden
   active: boolean
-  /** The day just stepped away from, as a day: its page stays until it is
-      out of sight. */
-  leaving: boolean
+  /** A day just stepped away from, as a day, and which side of the shown
+      day it is on: its page slides off that way and stays until it is out
+      of sight. */
+  leaving?: 'before' | 'after'
   /** In the picked day's week: the squares a week view shows. */
   inWeek: boolean
   /** In the grid but not the month, such as Sep 27 in October. */
@@ -561,7 +580,7 @@ function LensSquareView({
       className="lens-square"
       style={{ gridRow: row + 1, gridColumn: col + 1 }}
       data-active={active ? '' : undefined}
-      data-leaving={leaving ? '' : undefined}
+      data-leaving={leaving}
       data-week={inWeek ? '' : undefined}
       data-today={date === today ? '' : undefined}
       data-outside={outside ? '' : undefined}
