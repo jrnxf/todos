@@ -2,16 +2,12 @@
 // with the avatar plus the tab bar on a phone. The avatar opens one menu on
 // both (account-menu.tsx); there is no sidebar.
 import { Link } from '@tanstack/react-router'
-import {
-  CalendarDaysIcon,
-  CheckIcon,
-  ListChecksIcon,
-  PlusIcon,
-} from 'lucide-react'
+import { CalendarDaysIcon, CheckIcon, ListChecksIcon } from 'lucide-react'
 import { cn } from 'cn'
 import { Button } from '@/components/ui/button'
 import { AccountMenu } from './account-menu'
 import { useAdd } from './capture'
+import { Key, useOpenShortcuts } from './hotkeys'
 
 /** A screen's column; on a laptop it sits centred on the page. */
 export function Column({
@@ -86,9 +82,13 @@ export function TabBar() {
   )
 }
 
-/** A laptop's bar over every screen: where you are, Add, and the avatar. */
+/**
+ * A laptop's bar over every screen: where you are, Add, and the avatar. The
+ * key hints show only where a keyboard is likely: not on a touch screen.
+ */
 export function TopBar() {
   const add = useAdd()
+  const openShortcuts = useOpenShortcuts()
   return (
     <header className="sticky top-0 z-20 hidden h-14 shrink-0 items-center gap-3 border-b bg-background/95 px-5 backdrop-blur lg:flex">
       <Link
@@ -117,10 +117,18 @@ export function TopBar() {
         ))}
       </nav>
       <span className="flex-1" />
+      <button
+        type="button"
+        onClick={openShortcuts}
+        aria-label="Keyboard shortcuts"
+        className="flex h-8 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 pointer-coarse:hidden"
+      >
+        <Key>?</Key>
+        Shortcuts
+      </button>
       <Button onClick={() => add()}>
-        <PlusIcon data-icon="inline-start" />
         Add
-        <kbd className="ml-1 rounded border border-primary-foreground/30 px-1 font-mono text-[0.6875rem] leading-4">
+        <kbd className="ml-1 rounded border border-primary-foreground/30 px-1 font-mono text-[0.6875rem] leading-4 pointer-coarse:hidden">
           N
         </kbd>
       </Button>

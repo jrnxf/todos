@@ -59,6 +59,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { startingFields } from '@/lib/add-preset'
 import { formatDay } from '@/lib/dates'
+import { hotkeyOf, typingIn } from '@/lib/hotkeys'
 import { useAddItem, useBoard } from '@/lib/queries'
 import { readTitle } from '@/lib/read'
 import { answerHolds, heldReadings, steadyChips } from '@/lib/steady'
@@ -272,12 +273,9 @@ export function AddProvider({ children }: { children: React.ReactNode }) {
   // "N" for new, from anywhere that is not a text box: the same as Add.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'n' || event.metaKey || event.ctrlKey || event.altKey)
-        return
-      const target = event.target as HTMLElement | null
       if (
-        target?.isContentEditable ||
-        ['INPUT', 'TEXTAREA', 'SELECT'].includes(target?.tagName ?? '')
+        hotkeyOf(event) !== 'add' ||
+        typingIn(event.target as HTMLElement | null)
       )
         return
       event.preventDefault()

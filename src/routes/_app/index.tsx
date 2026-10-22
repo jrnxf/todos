@@ -17,6 +17,7 @@ import { HomePhone } from '@/components/app/home-phone'
 import { Lens } from '@/components/app/lens'
 import { useIsDesktop } from '@/components/app/picker'
 import { addDays } from '@/lib/dates'
+import { typingIn } from '@/lib/hotkeys'
 import { LENS_VIEWS, stepDay } from '@/lib/lens'
 import { boardQ, calendarEventsQ, calendarQ, useBoard } from '@/lib/queries'
 import type { LensChange } from '@/components/app/lens'
@@ -186,8 +187,7 @@ function useHomeKeys({
       if (now.busy || event.metaKey || event.ctrlKey || event.altKey) return
       const target = event.target as HTMLElement | null
       if (
-        target?.isContentEditable ||
-        ['INPUT', 'TEXTAREA', 'SELECT'].includes(target?.tagName ?? '') ||
+        typingIn(target) ||
         document.querySelector(
           '[role="dialog"], [role="alertdialog"], [role="menu"]',
         )
