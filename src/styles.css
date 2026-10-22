@@ -202,13 +202,17 @@
       width 560ms cubic-bezier(0.22, 1, 0.36, 1),
       margin 560ms cubic-bezier(0.22, 1, 0.36, 1),
       opacity 300ms ease-out,
-      border-color 300ms;
+      border-color 300ms,
+      border-width 560ms cubic-bezier(0.22, 1, 0.36, 1);
   }
+  /* Shut, the panel takes no room at all, its border neither, so the grid
+     has the room's whole width before and after the page measures it. */
   .lens-room:not([data-view='month']) .lens-panel {
     width: 0;
     margin-left: 0;
     opacity: 0;
     border-color: transparent;
+    border-left-width: 0;
   }
   .lens-panel-in {
     display: flex;

@@ -71,6 +71,12 @@ import type { LocalDate } from '@/lib/dates'
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 /** The weekday names above the grid; they fold away for a day. */
 const HEADER_HEIGHT = 26
+/**
+ * What the grid's frame takes from its room: the lens's border on each
+ * side, and the weekdays' bottom border, which stays when they fold away.
+ */
+const FRAME = 2
+const FOLDED_HEADER = 1
 /** The month's panel of the picked day, and the gap before it. */
 const PANEL = 360
 const PANEL_GAP = 24
@@ -173,13 +179,18 @@ export function Lens({
     forView === 'month' && size
       ? Math.max(roomWidth - PANEL - PANEL_GAP, 7)
       : roomWidth
+  // The tracks fill the inside of the lens's border exactly, so the
+  // squares are as large as the server's render drew them and the day's
+  // page stays centred under the header.
   const gridHeight = (forView: LensView) =>
-    forView === 'day' || !size ? height : height - HEADER_HEIGHT
+    !size
+      ? height
+      : height - FRAME - (forView === 'day' ? FOLDED_HEADER : HEADER_HEIGHT)
   const tracksFor = (forView: LensView) =>
     lensTracks({
       view: forView,
       day,
-      width: gridWidth(forView),
+      width: size ? gridWidth(forView) - FRAME : roomWidth,
       height: gridHeight(forView),
       compact: false,
     })
@@ -187,9 +198,15 @@ export function Lens({
   const month = tracksFor('month')
   const week = tracksFor('week')
   const whole = tracksFor('day')
-  const unit = size ? 'px' : 'fr'
+  // Fractions floor at nothing: a closed column stays shut even when a
+  // calendar's bar in it asks for room, as a bare fraction would give it,
+  // squeezing the day's page off centre until the pixels arrive.
   const template = (list: Array<number>) =>
-    list.map((value) => `${value.toFixed(3)}${unit}`).join(' ')
+    list
+      .map((value) =>
+        size ? `${value.toFixed(3)}px` : `minmax(0, ${value.toFixed(3)}fr)`,
+      )
+      .join(' ')
   // In Day the header steps in to sit over the centred page. CSS works the
   // inset out from the header's own width, so the server's render already
   // has it and nothing jumps once the page measures itself; a negative one
