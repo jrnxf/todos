@@ -1,7 +1,8 @@
 // Quick ways to move a to-do that did not get done: to the next planning
 // day, or to another day. The laptop gets them in a menu at the end of the
-// row; a phone gets them by swiping the row to the left.
+// row; a phone moves it to the next planning day by swiping the row left.
 import { useRef, useState } from 'react'
+import { useNavigate, useRouterState } from '@tanstack/react-router'
 import { cn } from 'cn'
 import {
   CalendarArrowUpIcon,
@@ -24,6 +25,10 @@ import {
   formatMonthDay,
   formatWeekday,
 } from '@/lib/dates'
+import { openInPlace } from '@/lib/in-place'
+import { nextPlanDay } from '@/lib/plan-week'
+import { useBoard, useMoveTo } from '@/lib/queries'
+import type { Todo } from '@/db/schema'
 import type { LocalDate } from '@/lib/dates'
 
 export interface Moves {
@@ -102,27 +107,34 @@ function MoveItem({
   )
 }
 
-/** How far the row slides to show both targets, and where it snaps open. */
-const TARGET = 88
-const OPEN = TARGET * 2
-const SNAP = 56
+/** How far a drag goes before letting go moves the to-do. */
+const COMMIT = 96
+/** How far the row can be dragged at most. */
+const MAX = 160
 /** Movement before a touch counts as a sideways drag and not a scroll. */
 const SLOP = 8
 
 /**
- * The phone's swipe: drag the row left and two targets show under it, "Pick
- * day" and "Next Tue". A sideways drag here is the row's, not the list's, so
- * it does not also step to the next day. A drag to the right is left to the
- * list unless the row is open.
+ * The phone's swipe: drag a row to the left and "Next Tue" shows in the gap
+ * it leaves. Let go past the mark and the to-do moves there; the toast undoes
+ * it. A sideways drag here is the row's, not the list's, so it does not also
+ * step to the next day. A drag to the right is left to the list.
  */
 export function SwipeToMove({
-  moves,
   target,
+  onMove,
+  role,
+  rounded = false,
+  className,
   children,
 }: {
-  moves: Moves
   /** The next planning day: the swipe exists only with one. */
   target: LocalDate
+  onMove: () => void
+  role?: React.AriaRole
+  /** Rounds the gap's corners, for a row that is not in a card. */
+  rounded?: boolean
+  className?: string
   children: (row: {
     className: string
     style: React.CSSProperties
@@ -130,32 +142,27 @@ export function SwipeToMove({
 }) {
   const [offset, setOffset] = useState(0)
   const [dragging, setDragging] = useState(false)
-  const drag = useRef<{
-    x: number
-    y: number
-    from: number
-    sideways: boolean | null
-  } | null>(null)
+  const drag = useRef<{ x: number; y: number; sideways: boolean | null }>(null)
   // A drag ends in a click on the link under the finger; that click must
   // not open the to-do.
   const swallowClick = useRef(false)
-  const open = offset !== 0 && !dragging
-  const close = () => setOffset(0)
-
-  const left = Math.max(-OPEN, Math.min(0, offset))
+  const armed = offset <= -COMMIT
+  const settle = (commit: boolean) => {
+    drag.current = null
+    setDragging(false)
+    setOffset(0)
+    if (commit) onMove()
+  }
 
   return (
     <div
-      role="listitem"
-      className="relative overflow-hidden"
+      role={role}
+      // Sideways only: the row slides under its own edge, while a focus ring
+      // or the gap's rounded ends may still reach above and below.
+      className={cn('relative overflow-x-clip', className)}
       onPointerDown={(event) => {
         if (event.pointerType === 'mouse') return
-        drag.current = {
-          x: event.clientX,
-          y: event.clientY,
-          from: offset,
-          sideways: null,
-        }
+        drag.current = { x: event.clientX, y: event.clientY, sideways: null }
       }}
       onPointerMove={(event) => {
         const now = drag.current
@@ -164,9 +171,7 @@ export function SwipeToMove({
         const dy = event.clientY - now.y
         if (now.sideways === null) {
           if (Math.abs(dx) < SLOP && Math.abs(dy) < SLOP) return
-          // Right from shut is the list's: it steps back a day.
-          now.sideways =
-            Math.abs(dx) > Math.abs(dy) * 1.5 && (dx < 0 || now.from !== 0)
+          now.sideways = dx < 0 && Math.abs(dx) > Math.abs(dy) * 1.5
           if (!now.sideways) {
             drag.current = null
             return
@@ -174,82 +179,76 @@ export function SwipeToMove({
           event.currentTarget.setPointerCapture(event.pointerId)
           setDragging(true)
         }
-        setOffset(Math.max(-OPEN, Math.min(0, now.from + dx)))
+        setOffset(Math.max(-MAX, Math.min(0, dx)))
       }}
       onPointerUp={(event) => {
-        const now = drag.current
-        drag.current = null
-        if (!now?.sideways) return
+        if (!drag.current?.sideways) {
+          drag.current = null
+          return
+        }
         // The list's own swipe must not see this one.
         event.stopPropagation()
         swallowClick.current = true
-        setDragging(false)
-        setOffset((at) => (at < -SNAP ? -OPEN : 0))
+        settle(armed)
       }}
-      onPointerCancel={() => {
-        drag.current = null
-        setDragging(false)
-        setOffset((at) => (at < -SNAP ? -OPEN : 0))
-      }}
+      onPointerCancel={() => settle(false)}
       onClickCapture={(event) => {
-        if (swallowClick.current) {
-          swallowClick.current = false
-          event.preventDefault()
-          event.stopPropagation()
-          return
-        }
-        // A tap on an open row shuts it, and does nothing else.
-        const onTarget = (event.target as Element).closest('[data-move]')
-        if (open && !onTarget) {
-          event.preventDefault()
-          event.stopPropagation()
-          close()
-        }
+        if (!swallowClick.current) return
+        swallowClick.current = false
+        event.preventDefault()
+        event.stopPropagation()
       }}
     >
-      <div
-        className="absolute inset-y-0 right-0 flex"
-        style={{ width: OPEN }}
-        // Out of the way of a screen reader: the laptop menu and the to-do's
-        // own page offer the same moves.
-        aria-hidden={!open}
-        inert={!open}
-      >
-        <button
-          type="button"
-          data-move=""
-          className="flex flex-1 flex-col items-center justify-center gap-1 bg-muted text-xs font-medium text-foreground"
-          onClick={() => {
-            close()
-            moves.pickDay()
-          }}
+      {offset < 0 && (
+        <div
+          aria-hidden
+          // The gap the row leaves as it moves over.
+          className={cn(
+            'absolute inset-y-0 right-0 flex items-center justify-end gap-1.5 overflow-hidden px-3 text-xs font-medium whitespace-nowrap transition-colors duration-150',
+            rounded && '-my-1 rounded-md',
+            armed
+              ? 'bg-primary text-primary-foreground'
+              : 'bg-muted text-muted-foreground',
+          )}
+          style={{ width: -offset }}
         >
-          <CalendarIcon className="size-4" />
-          Pick day
-        </button>
-        <button
-          type="button"
-          data-move=""
-          className="flex flex-1 flex-col items-center justify-center gap-1 bg-primary text-xs font-medium text-primary-foreground"
-          onClick={() => {
-            close()
-            moves.moveTo(target)
-          }}
-        >
-          <CalendarArrowUpIcon className="size-4" />
-          {`Next ${formatWeekday(target)}`}
-          <span className="font-normal opacity-80">
-            {formatMonthDay(target)}
-          </span>
-        </button>
-      </div>
+          <CalendarArrowUpIcon className="size-4 shrink-0" />
+          Next {formatWeekday(target)}
+        </div>
+      )}
       {children({
         className: cn(
-          'bg-card touch-pan-y',
+          'touch-pan-y',
           !dragging && 'transition-transform duration-200 ease-out',
         ),
-        style: { transform: left ? `translateX(${left}px)` : undefined },
+        style: { transform: offset ? `translateX(${offset}px)` : undefined },
       })}
     </div>
   )
+}
+
+/**
+ * The moves for one to-do, from the board: where "next" lands, and what
+ * moving and picking a day do.
+ */
+export function useMoves(todo: Todo): Moves {
+  const { today, planDay } = useBoard()
+  const moveTo = useMoveTo()
+  const navigate = useNavigate()
+  const anyOpen = useRouterState({
+    select: ({ location: { search } }) =>
+      search.item !== undefined || search.event !== undefined,
+  })
+  return {
+    planDay: planDay === null ? null : nextPlanDay(today, planDay),
+    today,
+    moveTo: (date) => moveTo(todo, date),
+    pickDay: () =>
+      void navigate({
+        to: '.',
+        search: (now) => ({ ...now, item: todo.id, event: undefined }),
+        state: openInPlace(anyOpen),
+        replace: anyOpen,
+      }),
+  }
 }

@@ -2,6 +2,7 @@
 // shows, a to-do as one short tickable row, and the words for where a day
 // sits from today.
 import { Link, useRouterState } from '@tanstack/react-router'
+import { cn } from 'cn'
 import { ArrowLeftIcon, ArrowRightIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -9,6 +10,7 @@ import { byDue, isOpen, upNext, weekStart } from '@/lib/board'
 import { addDays, diffDays, formatMonthDay, formatTime } from '@/lib/dates'
 import { openInPlace } from '@/lib/in-place'
 import { useSetDone } from '@/lib/queries'
+import { SwipeToMove, useMoves } from './row-moves'
 import { TagDot } from './tag'
 import type { Tag, Todo } from '@/db/schema'
 import type { LocalDate } from '@/lib/dates'
@@ -73,10 +75,12 @@ export function TodayButton({
 /** One to-do as a short row: tick it, or open it. */
 export function MiniRow({ todo, late }: { todo: Todo; late: boolean }) {
   const setDone = useSetDone()
+  const moves = useMoves(todo)
   const done = !isOpen(todo)
-  return (
+  const row = (moving?: { className: string; style: React.CSSProperties }) => (
     <div
-      className="lens-row"
+      className={cn('lens-row', moving?.className)}
+      style={moving?.style}
       data-late={late ? '' : undefined}
       data-done={done ? '' : undefined}
     >
@@ -99,6 +103,13 @@ export function MiniRow({ todo, late }: { todo: Todo; late: boolean }) {
         )}
       </OpenTodo>
     </div>
+  )
+  const target = moves.planDay
+  if (done || !target) return row()
+  return (
+    <SwipeToMove rounded target={target} onMove={() => moves.moveTo(target)}>
+      {row}
+    </SwipeToMove>
   )
 }
 
