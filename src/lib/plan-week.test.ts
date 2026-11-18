@@ -3,6 +3,7 @@ import { dueLabel } from './board'
 import {
   byPlanDay,
   leftFromLastWeek,
+  planWeekTodos,
   nextPlanDay,
   planWeekEnd,
   planWeekStart,
@@ -127,5 +128,25 @@ describe('what is left from last week', () => {
       TUESDAY,
     )
     expect(left.map((one) => one.id)).toEqual([1])
+  })
+})
+
+describe('what is on a plan week', () => {
+  const todo = (fields: Partial<Todo>) =>
+    ({ id: 1, dueTime: null, doneAt: null, planWeek: false, ...fields }) as Todo
+
+  it('runs from its planning day to the day before the next one', () => {
+    const shown = planWeekTodos(
+      [
+        todo({ id: 1, dueDate: '2026-11-16' }),
+        todo({ id: 2, dueDate: '2026-11-17' }),
+        todo({ id: 3, dueDate: '2026-11-23', doneAt: '2026-11-18T09:00Z' }),
+        todo({ id: 4, dueDate: '2026-11-24' }),
+        todo({ id: 5, dueDate: '2026-11-24', planWeek: true }),
+      ],
+      '2026-11-17',
+      TUESDAY,
+    )
+    expect(shown.map((one) => one.id)).toEqual([2, 5, 3])
   })
 })

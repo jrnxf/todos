@@ -62,6 +62,7 @@ import {
   useShownEvents,
 } from './calendar-events'
 import { DayView } from './day-view'
+import { PlatesButton } from './plates'
 import {
   MiniRow,
   OpenTodo,
@@ -477,6 +478,7 @@ export function Lens({
         </div>
         <div className="flex items-center gap-1.5">
           <TodayButton day={day} today={today} onToday={goToday} />
+          <PlatesButton day={day} />
           <CalendarsButton />
           <Tabs
             value={view}

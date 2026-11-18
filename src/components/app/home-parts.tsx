@@ -9,7 +9,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { byDue, isOpen, upNext, weekStart } from '@/lib/board'
 import { addDays, diffDays, formatMonthDay, formatTime } from '@/lib/dates'
 import { openInPlace } from '@/lib/in-place'
-import { byPlanDay, planWeekSpan, planWeekStart } from '@/lib/plan-week'
+import { planWeekSpan, planWeekStart, planWeekTodos } from '@/lib/plan-week'
 import { useBoard, useSetDone } from '@/lib/queries'
 import { SwipeToMove, useMoves } from './row-moves'
 import { TagDot } from './tag'
@@ -34,14 +34,7 @@ export function usePlanWeekNote(day: LocalDate): string | null {
   const { planDay, items } = useBoard()
   if (planDay === null) return null
   const start = planWeekStart(day, planDay)
-  const end = addDays(start, 6)
-  const left = items.filter(
-    (todo) =>
-      isOpen(todo) &&
-      todo.dueDate !== null &&
-      ((todo.dueDate >= start && todo.dueDate <= end) ||
-        (todo.dueDate === addDays(end, 1) && byPlanDay(todo, planDay))),
-  ).length
+  const left = planWeekTodos(items, start, planDay).filter(isOpen).length
   return `Plan week ${planWeekSpan(start)} · ${left === 0 ? 'nothing' : left} left`
 }
 
