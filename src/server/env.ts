@@ -6,6 +6,8 @@
 import { env as bindings } from 'cloudflare:workers'
 import { createEnv } from '@t3-oss/env-core'
 import { z } from 'zod'
+import { WEEKDAY_NAMES } from '@/lib/plan-week'
+import type { PlanDay } from '@/lib/plan-week'
 
 const clock = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'expected HH:MM')
 
@@ -63,6 +65,20 @@ const _env = createEnv({
       .string()
       .default('')
       .transform((value) => Object.fromEntries(pairs(value))),
+
+    // Optional: the weekday the household plans its week on, such as
+    // "tuesday". By that day last week's to-dos should be done and the next
+    // week's planned (src/lib/plan-week.ts). It adds a "next planning day"
+    // shortcut and the views of the planning week. Empty: none of that.
+    PLAN_DAY: z
+      .enum(WEEKDAY_NAMES)
+      .optional()
+      .catch(() => {
+        console.error(
+          '[env] PLAN_DAY must be a weekday name such as tuesday; planning is off until it is',
+        )
+        return undefined
+      }),
 
     DIGEST_TIME: clock.default('07:30'),
     HEADS_UP_TIME: clock.default('19:00'),
@@ -208,6 +224,11 @@ export const env = {
     get url() {
       return _env.TYPESAFE_API_URL
     },
+  },
+  /** The weekday the household plans on, or null when it has none. */
+  get planDay(): PlanDay | null {
+    const day = _env.PLAN_DAY
+    return day ? WEEKDAY_NAMES.indexOf(day) : null
   },
   get heartbeatUrl() {
     return _env.HEARTBEAT_URL

@@ -20,6 +20,7 @@ import type { AlertConfig } from '@/alerts/rules'
 import type { Tag, Todo } from '@/db/schema'
 import type { LocalDate, Stamp } from '@/lib/dates'
 import type { PersonView } from '@/lib/people'
+import type { PlanDay } from '@/lib/plan-week'
 import type { Verdict } from '@/lib/verify'
 
 /** How long a finished to-do stays on the board. */
@@ -43,6 +44,8 @@ export interface Board {
   alertConfig: AlertConfig
   /** How alerts reach `me`: 'log' means none are really sent. */
   channel: Channel
+  /** The weekday the household plans on (0 is Sunday), or null for none. */
+  planDay: PlanDay | null
   /** Whether the add bar may have Jev check a title (TYPESAFE_API_KEY is set). */
   jev: boolean
 }
@@ -100,6 +103,7 @@ export const getBoard = createServerFn({ method: 'GET' }).handler(
       alertConfig: { ...env.alerts },
       channel: channelFor(me),
       jev: env.typesafe.apiKey !== '',
+      planDay: env.planDay,
     }
   },
 )

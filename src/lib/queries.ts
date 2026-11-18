@@ -40,6 +40,7 @@ import type {
   SeriesScope,
   ShownCalendar,
 } from './calendar-events'
+import { formatDay } from './dates'
 import type { LocalDate } from './dates'
 
 export const boardQ = queryOptions({
@@ -375,6 +376,33 @@ export function useUpdateItem() {
       updateItem({ data: vars }),
     (board, { id, patch }) => patchItem(board, id, patch),
   )
+}
+
+/**
+ * Moves a to-do to another day, keeping its time, tag and person. The toast
+ * names the day and puts the old one back.
+ */
+export function useMoveTo() {
+  const change = useUpdateItem()
+  return (item: Todo, dueDate: LocalDate) => {
+    if (item.dueDate === dueDate) return
+    const before = item.dueDate
+    change.mutate({ id: item.id, patch: { dueDate } })
+    toast(`Moved to ${formatDay(dueDate)}`, {
+      description: item.title,
+      action: {
+        label: 'Undo',
+        onClick: () =>
+          change.mutate({
+            id: item.id,
+            // A to-do with no date had no time either.
+            patch: before
+              ? { dueDate: before }
+              : { dueDate: null, dueTime: null },
+          }),
+      },
+    })
+  }
 }
 
 /** Tick or untick. Ticking offers an undo for a few seconds. */

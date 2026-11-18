@@ -124,6 +124,8 @@ export function TodoRowView({
   today,
   onDoneChange,
   renderOpen,
+  menu,
+  rowProps,
 }: RowOptions & {
   todo: Todo
   lead?: React.ReactNode
@@ -137,6 +139,10 @@ export function TodoRowView({
     className: string
     children: React.ReactNode
   }) => React.ReactElement
+  /** A menu of quick changes, put at the end of the row. */
+  menu?: React.ReactNode
+  /** Passed on to the row, for a wrapper that moves it. */
+  rowProps?: React.ComponentProps<typeof Row>
 }) {
   const done = Boolean(todo.doneAt)
   const assignee = people.find((p) => p.id === todo.assignee)
@@ -150,8 +156,10 @@ export function TodoRowView({
 
   return (
     <Row
+      {...rowProps}
       className={cn(
-        'relative items-start gap-3 hover:bg-muted/50',
+        'group/row relative items-start gap-3 hover:bg-muted/50',
+        rowProps?.className,
         selected && 'bg-muted hover:bg-muted',
       )}
     >
@@ -213,6 +221,7 @@ export function TodoRowView({
           // Keeps the tag labels in one column on a laptop.
           <span className="hidden size-6 lg:block" />
         )}
+        {menu}
       </ItemActions>
     </Row>
   )

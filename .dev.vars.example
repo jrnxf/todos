@@ -9,6 +9,10 @@ PEOPLE=alex:Alex,sam:Sam
 # alert times are wall-clock times in it.
 HOUSEHOLD_TZ=UTC
 
+# Optional. The weekday the household plans its week on, such as tuesday:
+# adds a "next planning day" shortcut and the planning-week views. Empty: off.
+PLAN_DAY=tuesday
+
 # Dev server only: be this person (an id from PEOPLE) without signing in.
 # Empty it to go through real sign-in, which then needs the four settings
 # under it.

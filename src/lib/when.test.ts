@@ -2,7 +2,7 @@
 // deadline on the wrong day, so it gets a few cases.
 import * as chrono from 'chrono-node'
 import { describe, expect, it } from 'vitest'
-import { parseWhen } from './when'
+import { datePresets, parseWhen } from './when'
 
 const today = '2026-10-12' // a Monday
 
@@ -284,5 +284,36 @@ describe('a date typed into a title', () => {
   it('leaves a title alone when there is no date, or nothing but a date', () => {
     expect(parseWhen(chrono, 'Fix closet door', today)).toBeNull()
     expect(parseWhen(chrono, 'Tomorrow', today)).toBeNull()
+  })
+})
+
+describe('the shortcut to the next planning day', () => {
+  const TUESDAY = 2
+  const dates = (day: string) =>
+    datePresets(day, TUESDAY).map((preset) => preset.date)
+
+  it('lands a week on from a planning day, in place of "Next week"', () => {
+    const presets = datePresets('2026-11-17', TUESDAY)
+    const next = presets.find((preset) => preset.date === '2026-11-24')
+    expect(next?.label).toBe('Next Tue')
+    expect(presets.map((preset) => preset.label)).not.toContain('Next week')
+  })
+
+  it('leaves the day before the planning day to "Tomorrow"', () => {
+    const presets = datePresets('2026-11-23', TUESDAY)
+    expect(presets.find((p) => p.date === '2026-11-24')?.label).toBe('Tomorrow')
+  })
+
+  it('keeps every shortcut a different day, soonest first', () => {
+    for (const day of ['2026-11-17', '2026-11-18', '2026-11-21']) {
+      const list = dates(day)
+      expect(new Set(list).size).toBe(list.length)
+      expect([...list].sort()).toEqual(list)
+    }
+  })
+
+  it('is left out without a planning day', () => {
+    const labels = datePresets('2026-11-18').map((preset) => preset.label)
+    expect(labels.filter((label) => /^Next \w{3}$/.test(label))).toEqual([])
   })
 })

@@ -31,8 +31,8 @@ export function WhenFields({
   onChange: (when: When) => void
   onDone: () => void
 }) {
-  const { today } = useBoard()
-  const presets = datePresets(today)
+  const { today, planDay } = useBoard()
+  const presets = datePresets(today, planDay)
   const [asked, setAsked] = useState(false)
   const month = calendar === 'shown' || asked
   const setDate = (dueDate: string | null) =>
