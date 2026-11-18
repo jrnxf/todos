@@ -3,8 +3,10 @@
 // and next week's planned. The week runs from one planning day to the day
 // before the next. The calendar keeps its own Sunday-first weeks; this is a
 // second way to cut the same days. Pure, and runs on both sides.
+import { byDue, isOpen } from './board'
 import { addDays, formatMonthDay, formatWeekday, weekday } from './dates'
 import type { LocalDate } from './dates'
+import type { Todo } from '@/db/schema'
 
 /** 0 is Sunday, as `weekday` counts. */
 export type PlanDay = number
@@ -98,4 +100,41 @@ export function settlePlanWeek<
   return 'dueDate' in patch && !('planWeek' in patch)
     ? { ...patch, planWeek: false }
     : patch
+}
+
+/**
+ * What is left from before this plan week: open to-dos due before it
+ * began, and the "this week" ones that were due by its planning day.
+ * Soonest first.
+ */
+export function leftFromLastWeek(
+  items: Array<Todo>,
+  today: LocalDate,
+  planDay: PlanDay,
+): Array<Todo> {
+  const start = planWeekStart(today, planDay)
+  return items
+    .filter(
+      (todo) =>
+        isOpen(todo) &&
+        todo.dueDate !== null &&
+        (todo.dueDate < start ||
+          (todo.dueDate === start && byPlanDay(todo, planDay))),
+    )
+    .sort(byDue)
+}
+
+/**
+ * The "this week" to-dos due by the coming planning day, open first. On a
+ * planning day that is next week's: today is when it gets planned.
+ */
+export function thisWeekTodos(
+  items: Array<Todo>,
+  today: LocalDate,
+  planDay: PlanDay,
+): Array<Todo> {
+  const by = nextPlanDay(today, planDay)
+  return items
+    .filter((todo) => todo.dueDate === by && byPlanDay(todo, planDay))
+    .sort((a, b) => Number(!isOpen(a)) - Number(!isOpen(b)) || byDue(a, b))
 }

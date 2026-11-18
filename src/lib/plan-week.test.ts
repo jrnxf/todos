@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { dueLabel } from './board'
 import {
   byPlanDay,
+  leftFromLastWeek,
   nextPlanDay,
   planWeekEnd,
   planWeekStart,
@@ -91,5 +92,40 @@ describe('a this-week to-do', () => {
     expect(dueLabel(todo, '2026-11-21')).toMatchObject({ tone: 'plain' })
     expect(dueLabel(todo, '2026-11-23')).toMatchObject({ tone: 'soon' })
     expect(dueLabel(todo, '2026-11-25')).toMatchObject({ tone: 'late' })
+  })
+})
+
+describe('what is left from last week', () => {
+  const todo = (fields: Partial<Todo>) =>
+    ({
+      id: 1,
+      dueTime: null,
+      doneAt: null,
+      planWeek: false,
+      ...fields,
+    }) as Todo
+
+  it('is what is open and was due before this plan week', () => {
+    const left = leftFromLastWeek(
+      [
+        todo({ id: 1, dueDate: '2026-11-16' }),
+        todo({ id: 2, dueDate: '2026-11-16', doneAt: '2026-11-16T09:00Z' }),
+        todo({ id: 3, dueDate: '2026-11-17' }),
+        todo({ id: 4, dueDate: '2026-11-18' }),
+        todo({ id: 5, dueDate: null }),
+      ],
+      '2026-11-17',
+      TUESDAY,
+    )
+    expect(left.map((one) => one.id)).toEqual([1])
+  })
+
+  it('takes in a this-week to-do that was due by the planning day', () => {
+    const left = leftFromLastWeek(
+      [todo({ id: 1, dueDate: '2026-11-17', planWeek: true })],
+      '2026-11-19',
+      TUESDAY,
+    )
+    expect(left.map((one) => one.id)).toEqual([1])
   })
 })
