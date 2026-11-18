@@ -332,6 +332,31 @@
   .lens-square[data-active] .lens-pick {
     cursor: zoom-in;
   }
+
+  /* Where each plan week starts: a thin line on the day's leading edge. In
+     a week, the days before it belong to the plan week before, so they get
+     a light hatch. The grid itself still starts on Sunday. */
+  .lens-square[data-plan-start]::before {
+    content: '';
+    position: absolute;
+    inset-block: 0;
+    left: 0;
+    z-index: 2;
+    width: 2px;
+    background: color-mix(in oklab, var(--primary) 55%, transparent);
+    pointer-events: none;
+    transition: opacity calc(var(--lens-duration) * 0.6);
+  }
+  .lens[data-view='day'] .lens-square[data-plan-start]::before {
+    opacity: 0;
+  }
+  .lens[data-view='week'] .lens-square[data-before-plan] {
+    background-image: repeating-linear-gradient(
+      135deg,
+      color-mix(in oklab, var(--foreground) 7%, transparent) 0 1px,
+      transparent 1px 7px
+    );
+  }
   @media (hover: hover) and (pointer: fine) {
     .lens-square:not([data-active]):hover {
       background: color-mix(in oklab, var(--muted) 50%, transparent);
@@ -974,6 +999,24 @@
   }
   .pnav-day[data-outside] .pnav-number {
     color: color-mix(in oklab, var(--muted-foreground) 60%, transparent);
+  }
+  /* The plan week's line and hatch, as on the laptop's grid. */
+  .pnav-day[data-plan-start]::before {
+    content: '';
+    position: absolute;
+    inset-block: 6px;
+    left: 0;
+    width: 2px;
+    border-radius: 1px;
+    background: color-mix(in oklab, var(--primary) 55%, transparent);
+    pointer-events: none;
+  }
+  .pnav-day[data-before-plan] {
+    background-image: repeating-linear-gradient(
+      135deg,
+      color-mix(in oklab, var(--foreground) 7%, transparent) 0 1px,
+      transparent 1px 7px
+    );
   }
   .pnav-marks {
     display: flex;
