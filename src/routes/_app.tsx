@@ -4,6 +4,7 @@ import { AddBar, AddProvider } from '@/components/app/capture'
 import { EventDrawer } from '@/components/app/event-drawer'
 import { ShortcutsProvider } from '@/components/app/hotkeys'
 import { TabBar, TopBar } from '@/components/app/shell'
+import { ReviewDrawer } from '@/components/app/review'
 import { TodoDrawer } from '@/components/app/todo-drawer'
 import { boardQ, calendarQ } from '@/lib/queries'
 
@@ -13,6 +14,8 @@ export const Route = createFileRoute('/_app')({
   validateSearch: z.object({
     item: z.coerce.number().int().optional(),
     event: z.string().max(2100).optional(),
+    // The planning-day review (components/app/review.tsx).
+    review: z.literal(1).optional().catch(undefined),
   }),
   // Every screen under here reads the board, so it is fetched once, first.
   // The calendar's state comes alongside: it decides what the header and
@@ -53,6 +56,7 @@ function AppLayout() {
         </div>
         <TodoDrawer />
         <EventDrawer />
+        <ReviewDrawer />
       </ShortcutsProvider>
     </AddProvider>
   )

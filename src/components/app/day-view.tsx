@@ -47,11 +47,12 @@ import {
   formatTime,
   localNow,
 } from '@/lib/dates'
-import { byPlanDay, nextPlanDay } from '@/lib/plan-week'
+import { nextPlanDay, thisWeekTodos } from '@/lib/plan-week'
 import { useBoard } from '@/lib/queries'
 import { DayEvents } from './calendar-events'
 import { useAdd } from './capture'
 import { alertName, useDayAlerts } from './day-alerts'
+import { ReviewBanner } from './review'
 import { Section, SectionHeading, TodoGroup } from './todo-row'
 import type { Todo } from '@/db/schema'
 import type { LocalDate } from '@/lib/dates'
@@ -118,6 +119,7 @@ function TodayView() {
 
   return (
     <>
+      <ReviewBanner />
       {total > 0 && (
         <div className="flex items-center gap-3 text-sm text-muted-foreground">
           <Progress
@@ -231,19 +233,12 @@ function TodayView() {
   )
 }
 
-/**
- * The "this week" to-dos due by the coming planning day, open first, and
- * how many are done. On a planning day that is next week's: today is when
- * it gets planned, and what was due today is in today's list.
- */
+/** The "this week" to-dos, and the planning day they are due by. */
 function useThisWeek(): { by: LocalDate; todos: Array<Todo> } | null {
   const { items, today, planDay } = useBoard()
   if (planDay === null) return null
-  const by = nextPlanDay(today, planDay)
-  const todos = items
-    .filter((todo) => todo.dueDate === by && byPlanDay(todo, planDay))
-    .sort((a, b) => Number(!isOpen(a)) - Number(!isOpen(b)) || byDue(a, b))
-  return todos.length === 0 ? null : { by, todos }
+  const todos = thisWeekTodos(items, today, planDay)
+  return todos.length === 0 ? null : { by: nextPlanDay(today, planDay), todos }
 }
 
 function ThisWeek({ by, todos }: { by: LocalDate; todos: Array<Todo> }) {
