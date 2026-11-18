@@ -47,6 +47,7 @@ export async function tick(instant: Date = new Date()): Promise<void> {
     from,
     to,
     config: env.alerts,
+    planDay: env.planDay,
   })
 
   let failed = false

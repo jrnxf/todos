@@ -176,3 +176,46 @@ describe('the item screen', () => {
     ])
   })
 })
+
+describe('planning day', () => {
+  const TUESDAY = 2
+  const items = [
+    todo({ title: 'Fan', assignee: 'alex', dueDate: '2026-11-20' }),
+    todo({
+      title: 'Insurance',
+      assignee: 'alex',
+      dueDate: '2026-11-24',
+      planWeek: true,
+    }),
+    todo({ title: 'Dentist', assignee: 'sam', dueDate: '2026-11-16' }),
+    todo({ title: 'Bins', assignee: 'alex', dueDate: '2026-11-24' }),
+  ]
+  const at = (from: string, to: string) =>
+    alertsInWindow({ items, people, from, to, config, planDay: TUESDAY })
+
+  it('turns the morning digest into one that opens the review', () => {
+    const sent = at('2026-11-24T07:29', '2026-11-24T07:30')
+    const alex = sent.find((a) => a.person === 'alex')
+    expect(alex?.title).toBe('Planning day, Tue, Nov 24')
+    expect(alex?.message).toBe(
+      'You have 2 left from last week, and Sam has 1. Today: Bins. Tap to review them and plan the week.',
+    )
+    expect(alex?.path).toBe('/?review=1')
+    expect(sent.find((a) => a.person === 'sam')?.message).toBe(
+      'You have 1 left from last week, and Alex has 2. Tap to review them and plan the week.',
+    )
+  })
+
+  it('says what is left of the week the evening before, to its owner', () => {
+    const sent = at('2026-11-23T18:59', '2026-11-23T19:00')
+    expect(sent.map((a) => [a.person, a.title])).toEqual([
+      ['alex', 'Planning day tomorrow: 1 this-week to-do left'],
+      ['alex', 'Bins: due tomorrow'],
+    ])
+  })
+
+  it('leaves other mornings as they were', () => {
+    const sent = at('2026-11-25T07:29', '2026-11-25T07:30')
+    expect(sent.every((a) => !a.title.startsWith('Planning'))).toBe(true)
+  })
+})
