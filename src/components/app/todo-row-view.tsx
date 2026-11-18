@@ -1,6 +1,7 @@
 // The row's markup, free of the router and the board's queries so it can be
 // rendered on its own (see todo-row.test.tsx). todo-row.tsx wires it up.
 import { cn } from 'cn'
+import { Fragment } from 'react'
 import { CalendarIcon, ClockIcon, FlagIcon } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -66,7 +67,15 @@ export function DueLine({
       className={cn('flex items-center gap-1.5', TONE[due.tone], className)}
     >
       <Icon className="size-3.5 shrink-0" />
-      <span className="truncate">{due.text}</span>
+      {/* A narrow row breaks between the parts, never inside one. */}
+      <span className="min-w-0">
+        {due.text.split(' · ').map((part, index) => (
+          <Fragment key={part}>
+            {index > 0 && ' · '}
+            <span className="whitespace-nowrap">{part}</span>
+          </Fragment>
+        ))}
+      </span>
       {todo.mustNotMiss && (
         <FlagIcon className="size-3.5 shrink-0" aria-label="Must not miss" />
       )}

@@ -18,6 +18,8 @@ import type { PlanDay } from './plan-week'
 export interface When {
   dueDate: LocalDate | null
   dueTime: LocalTime | null
+  /** Due "this week", by the planning day `dueDate` is on. */
+  planWeek?: boolean
 }
 
 export interface DatePreset {
@@ -78,9 +80,10 @@ function dayWord(date: LocalDate, today: LocalDate): string | null {
   return null
 }
 
-/** "Fri, Oct 16, 5:00 pm", "Today", "No date". */
+/** "Fri, Oct 16, 5:00 pm", "Today", "By Tue, Nov 24", "No date". */
 export function whenLabel(when: When, today: LocalDate): string {
   if (!when.dueDate) return 'No date'
+  if (when.planWeek) return `By ${formatDay(when.dueDate)}`
   const day = dayWord(when.dueDate, today) ?? formatDay(when.dueDate)
   return when.dueTime ? `${day}, ${formatTime(when.dueTime)}` : day
 }
@@ -88,6 +91,7 @@ export function whenLabel(when: When, today: LocalDate): string {
 /** The same, short enough for a pill: "Oct 30", "Tomorrow, 5:00 pm". */
 export function shortWhenLabel(when: When, today: LocalDate): string {
   if (!when.dueDate) return ''
+  if (when.planWeek) return 'This week'
   const day = dayWord(when.dueDate, today) ?? formatMonthDay(when.dueDate)
   return when.dueTime ? `${day}, ${formatTime(when.dueTime)}` : day
 }

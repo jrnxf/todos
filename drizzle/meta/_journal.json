@@ -50,6 +50,13 @@
       "when": 1792400508650,
       "tag": "0006_calendars_shown",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1795007327915,
+      "tag": "0007_plan_week",
+      "breakpoints": true
     }
   ]
 }

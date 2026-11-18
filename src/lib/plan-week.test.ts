@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { nextPlanDay, planWeekEnd, planWeekStart } from './plan-week'
+import { dueLabel } from './board'
+import {
+  byPlanDay,
+  nextPlanDay,
+  planWeekEnd,
+  planWeekStart,
+  settlePlanWeek,
+} from './plan-week'
+import type { Todo } from '@/db/schema'
 
 const TUESDAY = 2
 
@@ -38,5 +46,50 @@ describe('the next planning day', () => {
   it('works for a Sunday planning day', () => {
     expect(nextPlanDay('2026-11-21', 0)).toBe('2026-11-22')
     expect(nextPlanDay('2026-11-22', 0)).toBe('2026-11-29')
+  })
+})
+
+describe('a this-week to-do', () => {
+  it('stops being one when a day is picked for it', () => {
+    expect(settlePlanWeek({ dueDate: '2026-11-20' })).toEqual({
+      dueDate: '2026-11-20',
+      planWeek: false,
+    })
+    expect(settlePlanWeek({ dueDate: null })).toEqual({
+      dueDate: null,
+      planWeek: false,
+    })
+  })
+
+  it('stays one through changes that leave its date alone', () => {
+    expect(
+      settlePlanWeek<{ title?: string; dueDate?: string }>({
+        title: 'Book the vet',
+      }),
+    ).toEqual({
+      title: 'Book the vet',
+    })
+    expect(settlePlanWeek({ dueDate: '2026-11-24', planWeek: true })).toEqual({
+      dueDate: '2026-11-24',
+      planWeek: true,
+    })
+  })
+
+  it('counts only while its date is a planning day', () => {
+    const todo = { planWeek: true, dueDate: '2026-11-24' }
+    expect(byPlanDay(todo, TUESDAY)).toBe(true)
+    expect(byPlanDay({ ...todo, dueDate: '2026-11-25' }, TUESDAY)).toBe(false)
+    expect(byPlanDay(todo, null)).toBe(false)
+  })
+
+  it('turns amber only the day before its planning day, then red', () => {
+    const todo = {
+      dueDate: '2026-11-24',
+      dueTime: null,
+      planWeek: true,
+    } as Todo
+    expect(dueLabel(todo, '2026-11-21')).toMatchObject({ tone: 'plain' })
+    expect(dueLabel(todo, '2026-11-23')).toMatchObject({ tone: 'soon' })
+    expect(dueLabel(todo, '2026-11-25')).toMatchObject({ tone: 'late' })
   })
 })

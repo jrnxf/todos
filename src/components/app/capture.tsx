@@ -88,6 +88,7 @@ export const EMPTY_FIELDS: ItemFields = {
   dueTime: null,
   headsUpDays: [1],
   mustNotMiss: false,
+  planWeek: false,
 }
 
 const TITLE = 'Add a to-do'
@@ -463,7 +464,11 @@ function fieldsOf(
 ): Partial<ItemFields> {
   switch (field) {
     case 'when':
-      return { dueDate: read.dueDate, dueTime: read.dueTime ?? null }
+      return {
+        dueDate: read.dueDate,
+        dueTime: read.dueTime ?? null,
+        planWeek: false,
+      }
     case 'tag':
       return { tagId: read.tagId }
     case 'who':
@@ -645,7 +650,11 @@ function CaptureBar({
   // What will be sent: the pills set by hand, under what the title says.
   const now: ItemFields = { ...fields, ...read.fields }
   const title = read.title
-  const when: When = { dueDate: now.dueDate, dueTime: now.dueTime }
+  const when: When = {
+    dueDate: now.dueDate,
+    dueTime: now.dueTime,
+    planWeek: now.planWeek,
+  }
   // What Jev is being asked about right now, to mark until it answers.
   const questions = jev.asking ? request?.questions : undefined
   const asking = {
@@ -685,6 +694,7 @@ function CaptureBar({
   const shownWhen: When = {
     dueDate: shownFields.dueDate,
     dueTime: shownFields.dueTime,
+    planWeek: shownFields.planWeek,
   }
   const tag = board.tags.find((one) => one.id === now.tagId)
   const shownTag = board.tags.find((one) => one.id === shownFields.tagId)

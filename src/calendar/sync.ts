@@ -353,6 +353,8 @@ async function applyEvent(
         notes: merged.notes,
         dueDate: merged.dueDate,
         dueTime: merged.dueTime,
+        // A day moved in the calendar is a day picked by hand.
+        ...(merged.dueDate === item.dueDate ? {} : { planWeek: false }),
         ...doneChange(item, merged.done, person, event, deps),
         deletedAt: null,
         updatedAt: stamp(event, deps),

@@ -11,6 +11,7 @@ import { getDb, schema } from '@/db/client'
 import { TAG_COLORS } from '@/db/schema'
 import { addDays, localNow } from '@/lib/dates'
 import { withPictures } from '@/lib/people'
+import { settlePlanWeek } from '@/lib/plan-week'
 import { READ_FIELDS } from '@/lib/read'
 import { SIGNED_OUT } from '@/lib/signed-out'
 import { env } from './env'
@@ -120,6 +121,7 @@ const fields = z.object({
   dueTime: time.nullable(),
   headsUpDays: z.array(z.number().int().min(1).max(365)).max(8),
   mustNotMiss: z.boolean(),
+  planWeek: z.boolean(),
 })
 
 export type ItemFields = z.infer<typeof fields>
@@ -140,6 +142,7 @@ export const addItem = createServerFn({ method: 'POST' })
         assignee: knownPerson(data.assignee),
         // A time means nothing without a date.
         dueTime: data.dueDate ? data.dueTime : null,
+        planWeek: data.dueDate ? data.planWeek : false,
         createdAt: new Date().toISOString(),
         createdBy: me,
       })
@@ -151,11 +154,14 @@ export const addItem = createServerFn({ method: 'POST' })
 export const updateItem = createServerFn({ method: 'POST' })
   .validator(z.object({ id: z.number().int(), patch: fields.partial() }))
   .handler(async ({ data }): Promise<void> => {
-    const patch = { ...data.patch }
+    const patch = settlePlanWeek({ ...data.patch })
     if ('assignee' in patch) {
       patch.assignee = knownPerson(patch.assignee ?? null)
     }
-    if (patch.dueDate === null) patch.dueTime = null
+    if (patch.dueDate === null) {
+      patch.dueTime = null
+      patch.planWeek = false
+    }
     const db = getDb()
     await db.update(schema.items).set(patch).where(eq(schema.items.id, data.id))
     requestCalendarSync()

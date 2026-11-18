@@ -1,0 +1,1 @@
+ALTER TABLE `items` ADD `plan_week` integer DEFAULT false NOT NULL;
