@@ -3,7 +3,7 @@
 // and next week's planned. The week runs from one planning day to the day
 // before the next. The calendar keeps its own Sunday-first weeks; this is a
 // second way to cut the same days. Pure, and runs on both sides.
-import { addDays, weekday } from './dates'
+import { addDays, formatMonthDay, formatWeekday, weekday } from './dates'
 import type { LocalDate } from './dates'
 
 /** 0 is Sunday, as `weekday` counts. */
@@ -35,4 +35,38 @@ export function planWeekEnd(date: LocalDate, planDay: PlanDay): LocalDate {
  */
 export function nextPlanDay(today: LocalDate, planDay: PlanDay): LocalDate {
   return addDays(planWeekStart(today, planDay), 7)
+}
+
+/**
+ * Whether the calendar draws a plan week's line at the start of this day.
+ * A plan week that starts on Sunday starts with the grid's own row, so it
+ * needs none.
+ */
+export function startsPlanWeek(
+  date: LocalDate,
+  planDay: PlanDay | null,
+): boolean {
+  return planDay !== null && planDay !== 0 && weekday(date) === planDay
+}
+
+/**
+ * Whether a day sits before the line in its Sunday-first row: it belongs to
+ * the plan week before the one that starts in that row.
+ */
+export function beforePlanLine(
+  date: LocalDate,
+  planDay: PlanDay | null,
+): boolean {
+  return planDay !== null && weekday(date) < planDay
+}
+
+/** "Tue 17 to Mon 23", with the months named when it crosses one. */
+export function planWeekSpan(start: LocalDate): string {
+  const end = addDays(start, 6)
+  const sameMonth = start.slice(0, 7) === end.slice(0, 7)
+  const day = (date: LocalDate) =>
+    sameMonth
+      ? `${formatWeekday(date)} ${Number(date.slice(8))}`
+      : `${formatWeekday(date)}, ${formatMonthDay(date)}`
+  return `${day(start)} to ${day(end)}`
 }

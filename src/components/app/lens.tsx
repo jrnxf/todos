@@ -49,6 +49,7 @@ import {
   monthWeeks,
   stepDay,
 } from '@/lib/lens'
+import { beforePlanLine, startsPlanWeek } from '@/lib/plan-week'
 import { useBoard } from '@/lib/queries'
 import { barsHidden, isBar, weekBars } from '@/lib/calendar-events'
 import {
@@ -68,6 +69,7 @@ import {
   TodoDot,
   dayTodos,
   fromToday,
+  usePlanWeekNote,
   weekSpan,
 } from './home-parts'
 import type { LensView } from '@/lib/lens'
@@ -116,7 +118,8 @@ export function Lens({
   onSettled: () => void
 }) {
   const board = useBoard()
-  const { today } = board
+  const { today, planDay } = board
+  const planNote = usePlanWeekNote(day)
 
   // Which way the last change went, for the CSS to time it.
   const [shown, setShown] = useState({ view, day })
@@ -404,6 +407,8 @@ export function Lens({
         active={active}
         leaving={left ? (date < day ? 'before' : 'after') : undefined}
         inWeek={weekStart(date) === thisWeek}
+        planStart={startsPlanWeek(date, planDay)}
+        beforePlan={beforePlanLine(date, planDay)}
         outside={date.slice(0, 7) !== day.slice(0, 7)}
         onPick={pick}
         onToday={goToday}
@@ -426,8 +431,10 @@ export function Lens({
       view === 'day'
         ? formatLongDay(date)
         : view === 'week'
-          ? `Week of ${formatMonthDay(weekStart(date))}`
-          : date.slice(0, 4),
+          ? (planNote ?? `Week of ${formatMonthDay(weekStart(date))}`)
+          : planNote
+            ? `${date.slice(0, 4)} · ${planNote}`
+            : date.slice(0, 4),
     title:
       view === 'day'
         ? fromToday(date, today)
@@ -618,6 +625,8 @@ const LensSquare = memo(
     a.active === b.active &&
     a.leaving === b.leaving &&
     a.inWeek === b.inWeek &&
+    a.planStart === b.planStart &&
+    a.beforePlan === b.beforePlan &&
     a.outside === b.outside &&
     a.onPick === b.onPick &&
     a.onToday === b.onToday &&
@@ -636,6 +645,8 @@ function LensSquareView({
   active,
   leaving,
   inWeek,
+  planStart,
+  beforePlan,
   outside,
   sizes,
   onPick,
@@ -655,6 +666,10 @@ function LensSquareView({
   leaving?: 'before' | 'after'
   /** In the picked day's week: the squares a week view shows. */
   inWeek: boolean
+  /** A plan week starts here: a line on its leading edge. */
+  planStart: boolean
+  /** Before the line in its row, so in the plan week before. */
+  beforePlan: boolean
   /** In the grid but not the month, such as Sep 27 in October. */
   outside: boolean
   sizes: Sizes
@@ -693,6 +708,8 @@ function LensSquareView({
       data-active={active ? '' : undefined}
       data-leaving={leaving}
       data-week={inWeek ? '' : undefined}
+      data-plan-start={planStart ? '' : undefined}
+      data-before-plan={beforePlan ? '' : undefined}
       data-today={date === today ? '' : undefined}
       data-outside={outside ? '' : undefined}
     >

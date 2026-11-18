@@ -9,7 +9,8 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { byDue, isOpen, upNext, weekStart } from '@/lib/board'
 import { addDays, diffDays, formatMonthDay, formatTime } from '@/lib/dates'
 import { openInPlace } from '@/lib/in-place'
-import { useSetDone } from '@/lib/queries'
+import { planWeekSpan, planWeekStart } from '@/lib/plan-week'
+import { useBoard, useSetDone } from '@/lib/queries'
 import { SwipeToMove, useMoves } from './row-moves'
 import { TagDot } from './tag'
 import type { Tag, Todo } from '@/db/schema'
@@ -22,6 +23,25 @@ export function fromToday(day: LocalDate, today: LocalDate): string {
   if (days === 1) return 'Tomorrow'
   if (days === -1) return 'Yesterday'
   return days > 0 ? `In ${days} days` : `${-days} days ago`
+}
+
+/**
+ * "Plan week Tue 17 to Mon 23 · 5 left": the plan week the picked day is
+ * in, and its open to-dos. Null when the household plans on no set day.
+ */
+export function usePlanWeekNote(day: LocalDate): string | null {
+  const { planDay, items } = useBoard()
+  if (planDay === null) return null
+  const start = planWeekStart(day, planDay)
+  const end = addDays(start, 6)
+  const left = items.filter(
+    (todo) =>
+      isOpen(todo) &&
+      todo.dueDate !== null &&
+      todo.dueDate >= start &&
+      todo.dueDate <= end,
+  ).length
+  return `Plan week ${planWeekSpan(start)} · ${left === 0 ? 'nothing' : left} left`
 }
 
 /** "Oct 11 to 17", "Oct 25 to Nov 1" */

@@ -20,6 +20,7 @@ import {
   weekday,
 } from '@/lib/dates'
 import { LENS_VIEWS, monthWeeks, stepDay } from '@/lib/lens'
+import { beforePlanLine, startsPlanWeek } from '@/lib/plan-week'
 import { useBoard } from '@/lib/queries'
 import { AccountMenu } from './account-menu'
 import {
@@ -35,6 +36,7 @@ import {
   TodoDot,
   dayTodos,
   fromToday,
+  usePlanWeekNote,
   weekSpan,
 } from './home-parts'
 import type { LensChange } from './lens'
@@ -62,6 +64,7 @@ export function HomePhone({
   onSettled: () => void
 }) {
   const { today } = useBoard()
+  const planNote = usePlanWeekNote(day)
 
   const pick = (date: LocalDate) =>
     onChange(date === day && view !== 'day' ? { view: 'day' } : { day: date })
@@ -110,6 +113,9 @@ export function HomePhone({
         <CalendarsButton />
         <AccountMenu />
       </header>
+      {planNote && view !== 'day' && (
+        <p className="-mt-2 text-sm text-muted-foreground">{planNote}</p>
+      )}
       <div className="flex items-center gap-1">
         <Button
           variant="ghost"
@@ -203,6 +209,7 @@ function Navigator({
   onSwipe: (direction: -1 | 1) => void
 }) {
   const board = useBoard()
+  const { planDay } = board
   const events = useShownEvents()
   const weeks = monthWeeks(day)
   const row = weeks.findIndex((week) => week.includes(day))
@@ -245,6 +252,8 @@ function Navigator({
                   picked={date === day}
                   today={today}
                   outside={date.slice(0, 7) !== day.slice(0, 7)}
+                  planStart={startsPlanWeek(date, planDay)}
+                  beforePlan={view === 'week' && beforePlanLine(date, planDay)}
                   open={open}
                   marks={marks(board.items, events, board.tags, date, today)}
                   bar={barOn(events, date)}
@@ -307,6 +316,8 @@ function NavDay({
   picked,
   today,
   outside,
+  planStart,
+  beforePlan,
   open,
   marks: dots,
   bar,
@@ -316,6 +327,10 @@ function NavDay({
   picked: boolean
   today: LocalDate
   outside: boolean
+  /** A plan week starts here: a line on its leading edge. */
+  planStart: boolean
+  /** In a week, before the line, so in the plan week before. */
+  beforePlan: boolean
   /** Its row is showing. */
   open: boolean
   marks: React.ReactNode
@@ -335,6 +350,8 @@ function NavDay({
       data-picked={picked ? '' : undefined}
       data-today={date === today ? '' : undefined}
       data-outside={outside ? '' : undefined}
+      data-plan-start={planStart ? '' : undefined}
+      data-before-plan={beforePlan ? '' : undefined}
       onClick={() => onPick(date)}
     >
       <span className="pnav-number">{Number(date.slice(8))}</span>
