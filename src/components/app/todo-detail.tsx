@@ -4,6 +4,7 @@
 import { useState } from 'react'
 import {
   BellIcon,
+  CalendarArrowUpIcon,
   CalendarIcon,
   CheckIcon,
   ChevronRightIcon,
@@ -26,8 +27,21 @@ import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { upcomingAlerts } from '@/alerts/rules'
 import { dueLabel, headsUpSummary } from '@/lib/board'
-import { addDays, formatDay, formatInstantDay, formatTime } from '@/lib/dates'
-import { useBoard, useDelete, useSetDone, useUpdateItem } from '@/lib/queries'
+import {
+  addDays,
+  formatDay,
+  formatInstantDay,
+  formatTime,
+  formatWeekday,
+} from '@/lib/dates'
+import { nextPlanDay } from '@/lib/plan-week'
+import {
+  useBoard,
+  useDelete,
+  useMoveTo,
+  useSetDone,
+  useUpdateItem,
+} from '@/lib/queries'
 import { whenLabel } from '@/lib/when'
 import { TagDot } from './tag'
 import { Picker } from './picker'
@@ -358,10 +372,13 @@ export function TodoDetailActions({
   todo: Todo
   onLeave: () => void
 }) {
+  const { today, planDay } = useBoard()
   const setDone = useSetDone()
+  const moveTo = useMoveTo()
   const remove = useDelete()
   const done = Boolean(todo.doneAt)
   const leave = onLeave
+  const next = planDay === null ? null : nextPlanDay(today, planDay)
 
   return (
     <>
@@ -386,6 +403,19 @@ export function TodoDetailActions({
         >
           <CheckIcon data-icon="inline-start" />
           Mark done
+        </Button>
+      )}
+      {!done && next && (
+        <Button
+          size="xl"
+          variant="outline"
+          // Stays put when the to-do is already there, so the row of
+          // buttons does not jump.
+          disabled={todo.dueDate === next}
+          onClick={() => moveTo(todo, next)}
+        >
+          <CalendarArrowUpIcon data-icon="inline-start" />
+          Next {formatWeekday(next)}
         </Button>
       )}
       <Button

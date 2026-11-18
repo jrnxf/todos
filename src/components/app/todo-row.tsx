@@ -3,6 +3,7 @@ import { cn } from 'cn'
 import { Badge } from '@/components/ui/badge'
 import { useBoard, useSetDone } from '@/lib/queries'
 import { openInPlace } from '@/lib/in-place'
+import { MovesMenu, SwipeToMove, useMoves } from './row-moves'
 import { Rows } from './rows'
 import { TodoRowView } from './todo-row-view'
 import type { RowOptions } from './todo-row-view'
@@ -28,9 +29,16 @@ export function TodoRow(
       search.item !== undefined || search.event !== undefined,
   })
 
-  return (
+  const moves = useMoves(todo)
+  const done = Boolean(todo.doneAt)
+  const row = (rowProps?: {
+    className: string
+    style: React.CSSProperties
+  }) => (
     <TodoRowView
       {...props}
+      rowProps={rowProps && { ...rowProps, role: undefined }}
+      menu={done ? undefined : <MovesMenu title={todo.title} moves={moves} />}
       selected={openId === todo.id}
       people={people}
       tags={tags}
@@ -50,6 +58,18 @@ export function TodoRow(
         </Link>
       )}
     />
+  )
+
+  const target = moves.planDay
+  if (done || !target) return row()
+  return (
+    <SwipeToMove
+      role="listitem"
+      target={target}
+      onMove={() => moves.moveTo(target)}
+    >
+      {row}
+    </SwipeToMove>
   )
 }
 

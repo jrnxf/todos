@@ -11,7 +11,9 @@ import {
   toPickerDate,
   weekday,
 } from './dates'
+import { nextPlanDay } from './plan-week'
 import type { LocalDate, LocalTime } from './dates'
+import type { PlanDay } from './plan-week'
 
 export interface When {
   dueDate: LocalDate | null
@@ -25,13 +27,23 @@ export interface DatePreset {
   hint: string
 }
 
-/** The one-tap dates, soonest first, without two that mean the same day. */
-export function datePresets(today: LocalDate): Array<DatePreset> {
+/**
+ * The one-tap dates, soonest first, without two that mean the same day.
+ * With a planning day, the next one is among them as "Next Tue".
+ */
+export function datePresets(
+  today: LocalDate,
+  planDay: PlanDay | null = null,
+): Array<DatePreset> {
   // The coming Saturday; from a Saturday, the one after.
   const saturday = addDays(today, ((6 - weekday(today) + 6) % 7) + 1)
+  const plan = planDay === null ? null : nextPlanDay(today, planDay)
+  // Listed in the order that wins a tie: "Tomorrow" says more than "Next
+  // Mon", and "Next Tue" more than "Next week".
   return [
     { date: today, label: 'Today' },
     { date: addDays(today, 1), label: 'Tomorrow' },
+    ...(plan ? [{ date: plan, label: `Next ${formatWeekday(plan)}` }] : []),
     { date: saturday, label: formatWeekday(saturday) },
     { date: addDays(today, 7), label: 'Next week' },
     { date: addDays(today, 14), label: 'In 2 weeks' },
@@ -40,13 +52,14 @@ export function datePresets(today: LocalDate): Array<DatePreset> {
       (preset, index, all) =>
         all.findIndex((other) => other.date === preset.date) === index,
     )
+    .sort((a, b) => a.date.localeCompare(b.date))
     .map((preset) => ({
       ...preset,
       // The day it means: a weekday for the near ones, a date for the rest,
       // and never the label over again.
       hint:
         addDays(today, 6) >= preset.date &&
-        preset.label !== formatWeekday(preset.date)
+        !preset.label.includes(formatWeekday(preset.date))
           ? formatWeekday(preset.date)
           : formatMonthDay(preset.date),
     }))

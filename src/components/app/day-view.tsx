@@ -285,14 +285,17 @@ function TodayLink({ onToday }: { onToday: () => void }) {
   )
 }
 
-/** Adds to this day, saying which. */
+/**
+ * Adds to this day, saying which. Only on a laptop: a phone already ends
+ * every screen with the add bar, which names the same day.
+ */
 function AddHere({ day, today }: { day: LocalDate; today: LocalDate }) {
   const add = useAdd()
   return (
     <Button
       variant="outline"
       size="lg"
-      className="justify-start border-dashed font-normal text-muted-foreground shadow-none"
+      className="hidden justify-start border-dashed font-normal lg:inline-flex text-muted-foreground shadow-none"
       onClick={() => add({ dueDate: day })}
     >
       <PlusIcon data-icon="inline-start" />
