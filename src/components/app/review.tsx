@@ -25,7 +25,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { formatDay, formatWeekday } from '@/lib/dates'
-import { leftFromLastWeek, nextPlanDay, thisWeekTodos } from '@/lib/plan-week'
+import { leftFromLastWeek, nextPlanDay } from '@/lib/plan-week'
 import {
   useAddItem,
   useBoard,
@@ -36,7 +36,7 @@ import {
 } from '@/lib/queries'
 import { EMPTY_FIELDS } from './capture'
 import { useIsDesktop } from './picker'
-import { TodoGroup } from './todo-row'
+import { Plates } from './plates'
 import { WhenFields } from './when-picker'
 import type { Todo } from '@/db/schema'
 
@@ -224,18 +224,15 @@ function Leftover({ todo, left }: { todo: Todo; left: number }) {
 }
 
 /**
- * The coming week: what is already due by the next planning day, and a box
- * that adds more. With a person picked, what is added is theirs.
+ * The coming week: each person's plate, and a box that adds to-dos due by
+ * the next planning day. With a person picked, what is added is theirs.
  */
 function PlanNext({ person }: { person: string | null }) {
-  const { items, today, planDay } = useBoard()
+  const { today, planDay } = useBoard()
   const add = useAddItem()
   const [title, setTitle] = useState('')
   if (planDay === null) return null
   const by = nextPlanDay(today, planDay)
-  const planned = thisWeekTodos(items, today, planDay).filter(
-    (todo) => person === null || todo.assignee === person,
-  )
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault()
@@ -253,12 +250,13 @@ function PlanNext({ person }: { person: string | null }) {
 
   return (
     <section className="flex flex-col gap-3" aria-label="Plan next week">
-      <div className="flex flex-col gap-0.5 px-1">
-        <h3 className="text-base font-semibold">Nothing left from last week</h3>
-        <p className="text-sm text-muted-foreground">
-          What should be done by {formatDay(by)}?
-        </p>
-      </div>
+      <h3 className="px-1 text-base font-semibold">
+        Nothing left from last week
+      </h3>
+      <Plates day={today} />
+      <p className="mt-2 px-1 text-sm text-muted-foreground">
+        What else should be done by {formatDay(by)}?
+      </p>
       <form onSubmit={submit} className="flex gap-2">
         <Input
           value={title}
@@ -278,7 +276,6 @@ function PlanNext({ person }: { person: string | null }) {
           <PlusIcon />
         </Button>
       </form>
-      {planned.length > 0 && <TodoGroup todos={planned} secondary="time" />}
     </section>
   )
 }

@@ -138,3 +138,24 @@ export function thisWeekTodos(
     .filter((todo) => todo.dueDate === by && byPlanDay(todo, planDay))
     .sort((a, b) => Number(!isOpen(a)) - Number(!isOpen(b)) || byDue(a, b))
 }
+
+/**
+ * Everything on the plan week that opens on `start`: due in it, or a "this
+ * week" to-do due by the planning day that ends it. Done ones too, so a
+ * plate can say "2 of 4 done". Open first, then soonest.
+ */
+export function planWeekTodos(
+  items: Array<Todo>,
+  start: LocalDate,
+  planDay: PlanDay,
+): Array<Todo> {
+  const end = addDays(start, 6)
+  return items
+    .filter(
+      (todo) =>
+        todo.dueDate !== null &&
+        ((todo.dueDate >= start && todo.dueDate <= end) ||
+          (todo.dueDate === addDays(end, 1) && byPlanDay(todo, planDay))),
+    )
+    .sort((a, b) => Number(!isOpen(a)) - Number(!isOpen(b)) || byDue(a, b))
+}

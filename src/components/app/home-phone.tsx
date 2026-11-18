@@ -39,6 +39,7 @@ import {
   usePlanWeekNote,
   weekSpan,
 } from './home-parts'
+import { PlatesButton } from './plates'
 import type { LensChange } from './lens'
 import type { Tag, Todo } from '@/db/schema'
 import type { CalendarEventView } from '@/lib/calendar-events'
@@ -110,6 +111,7 @@ export function HomePhone({
           today={today}
           onToday={() => onChange({ day: today })}
         />
+        <PlatesButton day={day} />
         <CalendarsButton />
         <AccountMenu />
       </header>
