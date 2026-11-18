@@ -9,7 +9,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { byDue, isOpen, upNext, weekStart } from '@/lib/board'
 import { addDays, diffDays, formatMonthDay, formatTime } from '@/lib/dates'
 import { openInPlace } from '@/lib/in-place'
-import { planWeekSpan, planWeekStart } from '@/lib/plan-week'
+import { byPlanDay, planWeekSpan, planWeekStart } from '@/lib/plan-week'
 import { useBoard, useSetDone } from '@/lib/queries'
 import { SwipeToMove, useMoves } from './row-moves'
 import { TagDot } from './tag'
@@ -27,7 +27,8 @@ export function fromToday(day: LocalDate, today: LocalDate): string {
 
 /**
  * "Plan week Tue 17 to Mon 23 · 5 left": the plan week the picked day is
- * in, and its open to-dos. Null when the household plans on no set day.
+ * in, and its open to-dos, with the "this week" ones due by the planning
+ * day that ends it. Null when the household plans on no set day.
  */
 export function usePlanWeekNote(day: LocalDate): string | null {
   const { planDay, items } = useBoard()
@@ -38,8 +39,8 @@ export function usePlanWeekNote(day: LocalDate): string | null {
     (todo) =>
       isOpen(todo) &&
       todo.dueDate !== null &&
-      todo.dueDate >= start &&
-      todo.dueDate <= end,
+      ((todo.dueDate >= start && todo.dueDate <= end) ||
+        (todo.dueDate === addDays(end, 1) && byPlanDay(todo, planDay))),
   ).length
   return `Plan week ${planWeekSpan(start)} · ${left === 0 ? 'nothing' : left} left`
 }

@@ -47,6 +47,7 @@ import {
   formatTime,
   localNow,
 } from '@/lib/dates'
+import { byPlanDay, nextPlanDay } from '@/lib/plan-week'
 import { useBoard } from '@/lib/queries'
 import { DayEvents } from './calendar-events'
 import { useAdd } from './capture'
@@ -81,7 +82,15 @@ function TodayView() {
   const { today } = board
   const alerts = useDayAlerts(today)
 
-  const groups = upNext(board.items, today)
+  const week = useThisWeek()
+  const inWeek = (todo: Todo) => week?.todos.includes(todo) ?? false
+  const upcoming = upNext(board.items, today)
+  // "This week" to-dos have their own group, so the look ahead skips them.
+  const groups = {
+    ...upcoming,
+    week: upcoming.week.filter((todo) => !inWeek(todo)),
+    later: upcoming.later.filter((todo) => !inWeek(todo)),
+  }
   const carried = groups.overdue
   const dueToday = groups.today
   // What was on today's plate and got ticked off today stays in sight.
@@ -114,13 +123,13 @@ function TodayView() {
           <Progress
             value={(doneToday.length / total) * 100}
             aria-label="Done today"
-            className="w-32 lg:w-40"
+            className="w-32 shrink lg:w-40"
           />
-          <span>
+          <span className="whitespace-nowrap">
             {doneToday.length} of {total} done
           </span>
           {nextAlert && (
-            <span className="ml-auto flex items-center gap-1.5">
+            <span className="ml-auto flex items-center gap-1.5 whitespace-nowrap">
               <BellIcon className="size-3.5" />
               <span className="hidden lg:inline">Next alert</span>
               {formatTime(nextAlert.at.slice(11))}
@@ -136,6 +145,9 @@ function TodayView() {
           <TodoGroup todos={[...dueToday, ...doneToday]} secondary="time" />
         </section>
       )}
+
+      {/* Under today's own lists, so the bar above counts only those. */}
+      {week && <ThisWeek {...week} />}
 
       {total === 0 && next?.dueDate && (
         <NothingDue
@@ -216,6 +228,36 @@ function TodayView() {
       )}
       <NoDate todos={groups.undated} />
     </>
+  )
+}
+
+/**
+ * The "this week" to-dos due by the coming planning day, open first, and
+ * how many are done. On a planning day that is next week's: today is when
+ * it gets planned, and what was due today is in today's list.
+ */
+function useThisWeek(): { by: LocalDate; todos: Array<Todo> } | null {
+  const { items, today, planDay } = useBoard()
+  if (planDay === null) return null
+  const by = nextPlanDay(today, planDay)
+  const todos = items
+    .filter((todo) => todo.dueDate === by && byPlanDay(todo, planDay))
+    .sort((a, b) => Number(!isOpen(a)) - Number(!isOpen(b)) || byDue(a, b))
+  return todos.length === 0 ? null : { by, todos }
+}
+
+function ThisWeek({ by, todos }: { by: LocalDate; todos: Array<Todo> }) {
+  const done = todos.filter((todo) => !isOpen(todo)).length
+  return (
+    <section className="flex flex-col gap-2.5" aria-label="This week">
+      <SectionHeading>
+        This week · by {formatDay(by)}
+        <Badge variant="secondary">
+          {done} of {todos.length}
+        </Badge>
+      </SectionHeading>
+      <TodoGroup todos={todos} secondary="time" />
+    </section>
   )
 }
 

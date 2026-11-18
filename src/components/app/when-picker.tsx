@@ -11,10 +11,13 @@ import {
   InputGroupInput,
 } from '@/components/ui/input-group'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
-import { fromPickerDate, toPickerDate } from '@/lib/dates'
+import { formatWeekday, fromPickerDate, toPickerDate } from '@/lib/dates'
+import { nextPlanDay } from '@/lib/plan-week'
 import { useBoard } from '@/lib/queries'
 import { QUICK_TIMES, datePresets, whenLabel } from '@/lib/when'
 import type { When } from '@/lib/when'
+
+const THIS_WEEK = 'this-week'
 
 export function WhenFields({
   value,
@@ -33,10 +36,21 @@ export function WhenFields({
 }) {
   const { today, planDay } = useBoard()
   const presets = datePresets(today, planDay)
+  const plan = planDay === null ? null : nextPlanDay(today, planDay)
   const [asked, setAsked] = useState(false)
   const month = calendar === 'shown' || asked
   const setDate = (dueDate: string | null) =>
-    onChange(dueDate ? { ...value, dueDate } : { dueDate: null, dueTime: null })
+    onChange(
+      dueDate
+        ? { ...value, dueDate, planWeek: false }
+        : { dueDate: null, dueTime: null, planWeek: false },
+    )
+  // "This week" has no day of its own before the planning day, so no time.
+  const pick = (picked: string | null) =>
+    picked === THIS_WEEK && plan
+      ? onChange({ dueDate: plan, dueTime: null, planWeek: true })
+      : setDate(picked)
+  const thisWeek = Boolean(value.planWeek && value.dueDate)
 
   return (
     <div className="flex flex-col gap-3">
@@ -58,11 +72,19 @@ export function WhenFields({
           size="touch"
           aria-label="Shortcuts"
           className="w-full flex-wrap lg:w-40 lg:flex-col lg:flex-nowrap lg:items-stretch"
-          value={value.dueDate ? [value.dueDate] : []}
+          value={thisWeek ? [THIS_WEEK] : value.dueDate ? [value.dueDate] : []}
           onValueChange={([picked]: Array<string | undefined>) =>
-            setDate(picked ?? null)
+            pick(picked ?? null)
           }
         >
+          {plan && (
+            <ToggleGroupItem value={THIS_WEEK} className="lg:justify-between">
+              This week
+              <span className="hidden text-xs font-normal opacity-60 lg:inline">
+                by {formatWeekday(plan)}
+              </span>
+            </ToggleGroupItem>
+          )}
           {presets.map((preset) => (
             <ToggleGroupItem
               key={preset.date}
@@ -111,7 +133,7 @@ export function WhenFields({
               <InputGroupInput
                 type="time"
                 aria-label="Time"
-                disabled={!value.dueDate}
+                disabled={!value.dueDate || thisWeek}
                 value={value.dueTime ?? ''}
                 onChange={(event) =>
                   onChange({ ...value, dueTime: event.target.value || null })
@@ -124,7 +146,7 @@ export function WhenFields({
               size="touch"
               aria-label="Quick times"
               className="flex-wrap lg:grid lg:w-full lg:grid-cols-4"
-              disabled={!value.dueDate}
+              disabled={!value.dueDate || thisWeek}
               value={value.dueTime ? [value.dueTime] : []}
               onValueChange={([picked]: Array<string | undefined>) =>
                 onChange({ ...value, dueTime: picked ?? null })

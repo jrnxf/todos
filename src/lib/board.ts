@@ -93,6 +93,13 @@ export function dueLabel(item: Todo, today: LocalDate): DueLabel | null {
     return { text: `${day} · ${late}`, tone: 'late', timed }
   }
   if (days === 0) return { text: `Today${time}`, tone: 'plain', timed }
+  // "This week": a whole week to do it in, so it only turns amber the day
+  // before.
+  if (item.planWeek) {
+    return days === 1
+      ? { text: `By ${day} · tomorrow`, tone: 'soon', timed }
+      : { text: `By ${day}`, tone: 'plain', timed }
+  }
   if (days <= SOON_DAYS) {
     const until = days === 1 ? 'tomorrow' : `in ${days} days`
     return { text: `${day}${time} · ${until}`, tone: 'soon', timed }

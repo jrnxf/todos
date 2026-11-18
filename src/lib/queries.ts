@@ -41,6 +41,7 @@ import type {
   ShownCalendar,
 } from './calendar-events'
 import { formatDay } from './dates'
+import { settlePlanWeek } from './plan-week'
 import type { LocalDate } from './dates'
 
 export const boardQ = queryOptions({
@@ -374,7 +375,7 @@ export function useUpdateItem() {
   return useBoardChange(
     (vars: { id: number; patch: Partial<ItemFields> }) =>
       updateItem({ data: vars }),
-    (board, { id, patch }) => patchItem(board, id, patch),
+    (board, { id, patch }) => patchItem(board, id, settlePlanWeek(patch)),
   )
 }
 
@@ -397,7 +398,7 @@ export function useMoveTo() {
             id: item.id,
             // A to-do with no date had no time either.
             patch: before
-              ? { dueDate: before }
+              ? { dueDate: before, planWeek: item.planWeek }
               : { dueDate: null, dueTime: null },
           }),
       },

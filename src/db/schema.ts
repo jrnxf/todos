@@ -54,6 +54,9 @@ export const items = sqliteTable('items', {
   mustNotMiss: integer('must_not_miss', { mode: 'boolean' })
     .notNull()
     .default(false),
+  // Due "this week": by the planning day its due date is on, with no set
+  // day before that (lib/plan-week.ts). Picking a day by hand clears it.
+  planWeek: integer('plan_week', { mode: 'boolean' }).notNull().default(false),
   // UTC instants from here down.
   doneAt: text('done_at'),
   doneBy: text('done_by'),

@@ -13,6 +13,7 @@ const todo: Todo = {
   dueTime: null,
   headsUpDays: [1],
   mustNotMiss: false,
+  planWeek: false,
   doneAt: null,
   doneBy: null,
   createdAt: '2026-10-01T00:00:00.000Z',

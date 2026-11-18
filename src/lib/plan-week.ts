@@ -70,3 +70,32 @@ export function planWeekSpan(start: LocalDate): string {
       : `${formatWeekday(date)}, ${formatMonthDay(date)}`
   return `${day(start)} to ${day(end)}`
 }
+
+/**
+ * A "this week" to-do: due by its planning day, with no set day before.
+ * Only while its date is a planning day, so a date changed elsewhere (a
+ * calendar, an old client) turns it back into a plain to-do.
+ */
+export function byPlanDay(
+  todo: { planWeek: boolean; dueDate: LocalDate | null },
+  planDay: PlanDay | null,
+): boolean {
+  return (
+    todo.planWeek &&
+    planDay !== null &&
+    todo.dueDate !== null &&
+    weekday(todo.dueDate) === planDay
+  )
+}
+
+/**
+ * A change to a to-do's date that does not say "this week" picks a day,
+ * so the to-do stops being a "this week" one.
+ */
+export function settlePlanWeek<
+  T extends { dueDate?: LocalDate | null; planWeek?: boolean },
+>(patch: T): T {
+  return 'dueDate' in patch && !('planWeek' in patch)
+    ? { ...patch, planWeek: false }
+    : patch
+}
