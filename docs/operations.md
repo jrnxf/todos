@@ -99,7 +99,7 @@ Three kinds and one switch, all through Pushover:
 
 | Kind     | When                                        | Who                                      |
 | -------- | ------------------------------------------- | ---------------------------------------- |
-| Digest   | 07:30, skipped when there is nothing to say | Yours, unassigned, anything 2+ days late |
+| Digest   | 08:00, skipped when there is nothing to say | Yours, unassigned, anything 2+ days late |
 | Heads-up | 19:00, N days before (per to-do, default 1) | The assignee, or everyone if unassigned  |
 | Nudge    | 1 hour before a to-do that has a clock time | The assignee, or everyone if unassigned  |
 
