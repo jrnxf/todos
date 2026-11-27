@@ -36,7 +36,7 @@
   // Worker, set with `wrangler secret put`, and in dev in .dev.vars. So this
   // file says nothing about who runs it. Every setting is described in src/server/env.ts.
   "vars": {
-    "DIGEST_TIME": "07:30",
+    "DIGEST_TIME": "08:00",
     "HEADS_UP_TIME": "19:00",
     "NUDGE_MINUTES_BEFORE": "60",
   },

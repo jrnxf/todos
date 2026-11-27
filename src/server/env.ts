@@ -80,7 +80,7 @@ const _env = createEnv({
         return undefined
       }),
 
-    DIGEST_TIME: clock.default('07:30'),
+    DIGEST_TIME: clock.default('08:00'),
     HEADS_UP_TIME: clock.default('19:00'),
     NUDGE_MINUTES_BEFORE: z.coerce.number().int().positive().default(60),
 
